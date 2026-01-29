@@ -19,51 +19,64 @@ from __future__ import annotations
 
 from typing import List
 
+import httpx
 import pytest
-from fastapi.testclient import TestClient
 
 from app.main import app
 from app.retrieval import RetrievedChunk
 
 
-def test_no_evidence_response(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = TestClient(app)
+@pytest.mark.anyio
+async def test_no_evidence_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        def _stub_retrieve(question: str) -> List[RetrievedChunk]:
+            return []
 
-    def _stub_retrieve(question: str) -> List[RetrievedChunk]:
-        return []
+        monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
 
-    monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
+        response = await client.post("/chat", json={"question": "What is Piotr's role?"})
+        assert response.status_code == 200
+        payload = response.json()
 
-    response = client.post("/chat", json={"question": "What is Piotr's role?"})
-    assert response.status_code == 200
-    payload = response.json()
+        assert (
+            payload["answer"]
+            == "I do not have enough evidence in the provided materials."
+        )
+        assert payload["confidence"] == "Low"
+        assert "Confidence" in payload["formatted_answer"]
+        assert payload["evidence"] == []
 
-    assert payload["answer"] == "I do not have enough evidence in the provided materials."
-    assert payload["confidence"] == "Low"
-    assert "Confidence" in payload["formatted_answer"]
-    assert payload["evidence"] == []
 
+@pytest.mark.anyio
+async def test_formatted_answer_contains_sections(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        def _stub_retrieve(question: str) -> List[RetrievedChunk]:
+            return [
+                RetrievedChunk(
+                    card_id="sample",
+                    category="project",
+                    section="Problem",
+                    source_url=None,
+                    content="This is a test chunk.",
+                )
+            ]
 
-def test_formatted_answer_contains_sections(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = TestClient(app)
+        monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
 
-    def _stub_retrieve(question: str) -> List[RetrievedChunk]:
-        return [
-            RetrievedChunk(
-                card_id="sample",
-                category="project",
-                section="Problem",
-                source_url=None,
-                content="This is a test chunk.",
-            )
-        ]
+        response = await client.post("/chat", json={"question": "What did you build?"})
+        assert response.status_code == 200
+        formatted = response.json()["formatted_answer"]
 
-    monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
-
-    response = client.post("/chat", json={"question": "What did you build?"})
-    assert response.status_code == 200
-    formatted = response.json()["formatted_answer"]
-
-    for header in ["Answer:", "Why this matters:", "Evidence:", "Sources:", "Confidence:"]:
-        assert header in formatted
+        for header in [
+            "Answer:",
+            "Why this matters:",
+            "Evidence:",
+            "Sources:",
+            "Confidence:",
+        ]:
+            assert header in formatted
 
