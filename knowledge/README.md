@@ -1,5 +1,10 @@
 # Knowledge Base
 
+This directory contains curated knowledge cards.
+Knowledge cards are the only source of truth used by the AI system.
+Source documents (CV, PDFs, certificates) stored in `assets/` are not
+ingested directly and serve only as reference material.
+
 ## Knowledge Card Schema (Required)
 Each card is a standalone Markdown file that MUST include the following sections
 in this exact order and with these exact headings.
@@ -17,8 +22,9 @@ in this exact order and with these exact headings.
 ## Authoring Guidelines
 - Use concise, factual statements; avoid opinions unless explicitly supported.
 - Do not invent metrics, timelines, or scope.
-- Each section should be 1–6 sentences max.
-- Links can include internal file references or external URLs.
+- Each section should be 1–6 sentences maximum.
+- Cards should describe a single, well-defined scope (one project, role, or credential).
+- Links SHOULD preferentially reference files in `assets/` or authoritative external URLs.
 
 ## Chunking and Metadata Model
 When cards are chunked, each chunk MUST include these metadata fields:
@@ -46,13 +52,13 @@ project
 <systems, features, or artifacts>
 
 # Scale and impact
-<user counts, throughput, business impact>
+<scope, usage context, or operational impact>
 
 # Tech stack
 <languages, frameworks, infra>
 
 # Key decisions and trade-offs
-<notable choices and rationale>
+<notable architectural or design choices>
 
 # Links
 <URL or file reference>
