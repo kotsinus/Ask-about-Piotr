@@ -25,20 +25,25 @@ services:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/ask_piotr
-      - EMBEDDINGS_PROVIDER=stub
+      - EMBEDDINGS_PROVIDER=openai
+      - EMBEDDINGS_MODEL=text-embedding-3-small
+      - ROUTER_MODEL=gpt-4.1-mini
+      - SYNTHESIS_MODEL=gpt-4o-mini
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
       - db
 
   db:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg18
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=ask_piotr
+      - PGDATA=/var/lib/postgresql/data/pgdata
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
       - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
 volumes:
