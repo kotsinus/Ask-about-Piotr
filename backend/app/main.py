@@ -33,6 +33,7 @@ from app.schemas import (
     EvidenceItem,
     SourceRef,
 )
+from app.llm import synthesize_answer
 
 app = FastAPI(title="Ask about Piotr API", version="0.1.0")
 
@@ -102,54 +103,21 @@ def chat(request: ChatRequest) -> ChatResponse:
     category = classify_question(request.question)
     chunks = retrieve(request.question)
 
-    if not chunks:
-        answer = "I do not have enough evidence in the provided materials."
-        why_this_matters = (
-            "The system must cite retrieved knowledge cards, and none were found."
-        )
-        confidence = Confidence.low
-        confidence_reason = "No relevant knowledge cards were retrieved for this question."
-        response = ChatResponse(
-            category=category,
-            answer=answer,
-            why_this_matters=why_this_matters,
-            evidence=[],
-            sources=[],
-            confidence=confidence,
-            confidence_reason=confidence_reason,
-            formatted_answer="",
-        )
-        response.formatted_answer = format_answer(
-            response.answer,
-            response.why_this_matters,
-            response.evidence,
-            response.sources,
-            response.confidence,
-            response.confidence_reason,
-        )
-        return response
-
     evidence = [
         EvidenceItem(snippet=chunk.content, card_id=chunk.card_id)
         for chunk in chunks
     ]
     sources = [SourceRef(card_id=chunk.card_id, section=chunk.section) for chunk in chunks]
-
-    answer = "I can only answer using retrieved knowledge cards; synthesis is pending."
-    why_this_matters = (
-        "This response demonstrates strict grounding in the provided evidence."
-    )
-    confidence = Confidence.medium
-    confidence_reason = None
+    synthesis = synthesize_answer(request.question, chunks)
 
     response = ChatResponse(
         category=category,
-        answer=answer,
-        why_this_matters=why_this_matters,
+        answer=synthesis.answer,
+        why_this_matters=synthesis.why_this_matters,
         evidence=evidence,
         sources=sources,
-        confidence=confidence,
-        confidence_reason=confidence_reason,
+        confidence=synthesis.confidence,
+        confidence_reason=synthesis.confidence_reason,
         formatted_answer="",
     )
     response.formatted_answer = format_answer(
