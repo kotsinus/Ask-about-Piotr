@@ -23,6 +23,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List
 
+from openai import OpenAI
+
+from app.config import get_settings
+
 
 @dataclass(frozen=True)
 class EmbeddingProvider:
@@ -43,5 +47,19 @@ class StubEmbeddingProvider(EmbeddingProvider):
 def get_embedding_provider(name: str, dimensions: int) -> EmbeddingProvider:
     if name == "stub":
         return StubEmbeddingProvider(name=name, dimensions=dimensions)
+    if name == "openai":
+        return OpenAIEmbeddingProvider(name=name, dimensions=dimensions)
     raise ValueError(f"Unsupported embeddings provider: {name}")
+
+
+class OpenAIEmbeddingProvider(EmbeddingProvider):
+    def embed(self, texts: List[str]) -> List[List[float]]:
+        settings = get_settings()
+        if not settings.openai_api_key:
+            raise RuntimeError("OPENAI_API_KEY is required for OpenAI embeddings.")
+
+        client = OpenAI(api_key=settings.openai_api_key)
+        model = settings.embeddings_model or "text-embedding-3-small"
+        response = client.embeddings.create(model=model, input=texts)
+        return [item.embedding for item in response.data]
 

@@ -33,7 +33,7 @@ from app.schemas import (
     EvidenceItem,
     SourceRef,
 )
-from app.llm import synthesize_answer
+from app.llm import route_category, synthesize_answer
 
 app = FastAPI(title="Ask about Piotr API", version="0.1.0")
 
@@ -100,7 +100,10 @@ def format_answer(
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest) -> ChatResponse:
-    category = classify_question(request.question)
+    try:
+        category = route_category(request.question)
+    except Exception:
+        category = classify_question(request.question)
     chunks = retrieve(request.question)
 
     evidence = [
