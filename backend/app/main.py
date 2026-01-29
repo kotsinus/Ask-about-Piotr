@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import List
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.retrieval import retrieve
 from app.schemas import (
@@ -36,6 +37,14 @@ from app.schemas import (
 from app.llm import route_category, synthesize_answer
 
 app = FastAPI(title="Ask about Piotr API", version="0.1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def classify_question(question: str) -> Category:

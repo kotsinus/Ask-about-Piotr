@@ -30,6 +30,19 @@ pip install -r backend/requirements.txt
 uvicorn app.main:app --reload
 ```
 
+## Ingestion Runbook
+1) Start Postgres + backend:
+```bash
+docker compose up --build
+```
+2) Load knowledge cards into pgvector:
+```bash
+python backend/scripts/ingest_cards.py
+```
+3) Ask a question via UI or API.
+
+Environment variables are defined in [`.env.example`](.env.example:1).
+
 ## API
 `POST /chat`
 
