@@ -58,8 +58,16 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         if not settings.openai_api_key:
             raise RuntimeError("OPENAI_API_KEY is required for OpenAI embeddings.")
 
+        cleaned = [str(text).strip() for text in texts if str(text).strip()]
+        if not cleaned:
+            raise RuntimeError("No valid text provided for embeddings.")
+
         client = OpenAI(api_key=settings.openai_api_key)
         model = settings.embeddings_model or "text-embedding-3-small"
-        response = client.embeddings.create(model=model, input=texts)
-        return [item.embedding for item in response.data]
+        embeddings: List[List[float]] = []
+        for batch_start in range(0, len(cleaned), 64):
+            batch = cleaned[batch_start : batch_start + 64]
+            response = client.embeddings.create(model=model, input=batch)
+            embeddings.extend([item.embedding for item in response.data])
+        return embeddings
 

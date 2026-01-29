@@ -69,21 +69,30 @@ def retrieve(question: str, limit: int = 5) -> List[RetrievedChunk]:
         dimensions=settings.embeddings_dimensions,
     )
     embedding = provider.embed([question])[0]
+    embedding_text = "[" + ",".join(str(value) for value in embedding) + "]"
 
     with psycopg.connect(settings.database_url) as conn:
         register_vector(conn)
         with conn.cursor() as cursor:
+            cursor.execute("SET LOCAL enable_indexscan = off;")
+            cursor.execute("SET LOCAL enable_bitmapscan = off;")
             cursor.execute(
                 """
-                SELECT card_id, category, section, source_url, content
+                SELECT card_id, category, section, source_url, content,
+                       embedding <=> %s::vector AS distance
                 FROM knowledge_chunks
-                ORDER BY embedding <=> %s
+                ORDER BY distance
                 LIMIT %s;
                 """,
-                (embedding, limit),
+                (embedding_text, max(limit * 3, 10)),
             )
             rows = cursor.fetchall()
 
+    if not rows:
+        return []
+
+    top_card_id = rows[0][0]
+    filtered = [row for row in rows if row[0] == top_card_id][:limit]
     return [
         RetrievedChunk(
             card_id=row[0],
@@ -92,6 +101,6 @@ def retrieve(question: str, limit: int = 5) -> List[RetrievedChunk]:
             source_url=row[3],
             content=row[4],
         )
-        for row in rows
+        for row in filtered
     ]
 

@@ -66,11 +66,22 @@ def load_cards(knowledge_dir: Path) -> List[KnowledgeCard]:
         raise FileNotFoundError(f"Knowledge directory not found: {knowledge_dir}")
 
     cards: List[KnowledgeCard] = []
-    for path in sorted(knowledge_dir.glob("*.md")):
-        if path.name.lower() == "readme.md":
-            continue
+    for path in _iter_card_files(knowledge_dir):
         cards.append(_parse_card(path))
     return cards
+
+
+def _iter_card_files(knowledge_dir: Path) -> List[Path]:
+    candidates = list(knowledge_dir.glob("*.md"))
+    cards_dir = knowledge_dir / "cards"
+    if cards_dir.exists():
+        candidates.extend(cards_dir.glob("*.md"))
+
+    return [
+        path
+        for path in sorted(candidates)
+        if path.name.lower() != "readme.md"
+    ]
 
 
 def chunk_cards(cards: Iterable[KnowledgeCard]) -> List[KnowledgeChunk]:
@@ -144,7 +155,12 @@ def _split_sections(text: str, filename: str) -> Dict[str, str]:
 def _parse_heading(line: str) -> str | None:
     stripped = line.strip()
     if stripped.startswith("# "):
-        return stripped[2:].strip()
+        heading = stripped[2:].strip()
+        if heading.startswith("Category"):
+            return "Category"
+        if heading.startswith("Links"):
+            return "Links"
+        return heading
     return None
 
 

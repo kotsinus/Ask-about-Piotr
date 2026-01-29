@@ -23,6 +23,8 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
+    volumes:
+      - ./knowledge:/knowledge:ro
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/ask_piotr
       - EMBEDDINGS_PROVIDER=openai
