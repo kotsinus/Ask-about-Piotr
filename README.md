@@ -1,0 +1,52 @@
+# Ask about Piotr
+
+AI-powered application that answers questions about Piotr's professional experience
+using only a curated knowledge base. The system is strictly grounded in evidence
+from Markdown knowledge cards and refuses to answer when evidence is missing.
+
+## Repository Structure
+- `backend/` — FastAPI RAG backend (current focus)
+- `frontend/` — placeholder for future UI
+- `knowledge/` — Markdown knowledge cards
+- `plans/` — architecture notes and decisions
+
+## Core Guarantees
+- No answers beyond provided sources
+- Every answer includes citations
+- If evidence is insufficient, the system explicitly refuses
+- The pipeline is retrieval → synthesis with strict boundaries
+
+## Quick Start (Backend)
+### Run with Docker
+```bash
+docker compose up --build
+```
+
+### Run locally (Python 3.12)
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+uvicorn app.main:app --reload
+```
+
+## API
+`POST /chat`
+
+Request body:
+```json
+{
+  "question": "What did you build for X project?"
+}
+```
+
+Response contains the mandatory answer format in `formatted_answer`, plus
+structured fields for evidence and sources.
+
+## Knowledge Cards
+See [`knowledge/README.md`](knowledge/README.md:1) for the required card schema
+and metadata model.
+
+## License
+Apache License 2.0. See [`LICENSE`](LICENSE:1).
+
