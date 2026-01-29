@@ -19,7 +19,7 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type EvidenceItem = {
   snippet: string;
@@ -54,10 +54,25 @@ export default function HomePage() {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const apiUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_URL,
     []
   );
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      return;
+    }
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, [question]);
 
   const submitQuestion = async () => {
     if (!question.trim()) {
@@ -109,55 +124,57 @@ export default function HomePage() {
     }
   };
 
+  const hasMessages = messages.length > 0;
+
   return (
-    <main>
-      <div className="stack">
-        <header className="stack">
-          <h1>Ask about Piotr</h1>
-          <p className="muted">
-            Ask a question about Piotr&apos;s experience. Responses are grounded in
-            curated knowledge cards with citations.
-          </p>
-        </header>
+    <main className={`app-shell ${hasMessages ? "has-messages" : "empty"}`}>
+      <header className="stack">
+        <h1>Ask about Piotr</h1>
+        <p className="muted">
+          Ask a question about Piotr&apos;s experience. Responses are grounded in
+          curated knowledge cards with citations.
+        </p>
+      </header>
 
-        <section className="panel stack">
-          <div className="input-row">
-            <label className="label" htmlFor="question">
-              Your question
-            </label>
-            <textarea
-              id="question"
-              placeholder="e.g. What did you build for Decreen?"
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              onKeyDown={handleKeyDown}
-            />
-            <button onClick={submitQuestion} disabled={loading}>
-              {loading ? "Asking..." : "Ask"}
-            </button>
-          </div>
-        </section>
-
-        <section className="stack">
-          {messages.map((message, index) => (
-            <div
-              key={`${message.role}-${index}`}
-              className={`chat-bubble ${message.role}`}
-            >
-              <div className="label">
-                {message.role === "user" ? "You" : "Assistant"}
-              </div>
-              {message.payload ? (
-                <div className="answer-block">
-                  <pre>{message.payload.formatted_answer}</pre>
-                </div>
-              ) : (
-                <div>{message.content}</div>
-              )}
+      <section className={`chat-scroll stack ${hasMessages ? "" : "hidden"}`}>
+        {messages.map((message, index) => (
+          <div
+            key={`${message.role}-${index}`}
+            className={`chat-bubble ${message.role}`}
+          >
+            <div className="label">
+              {message.role === "user" ? "You" : "Assistant"}
             </div>
-          ))}
-        </section>
-      </div>
+            {message.payload ? (
+              <div className="answer-block">
+                <pre>{message.payload.formatted_answer}</pre>
+              </div>
+            ) : (
+              <div>{message.content}</div>
+            )}
+          </div>
+        ))}
+        <div ref={messagesEndRef} />
+      </section>
+
+      <section className={`panel composer ${hasMessages ? "" : "composer-empty"}`}>
+        <div className="input-row">
+          <label className="label" htmlFor="question">
+            Your question
+          </label>
+          <textarea
+            id="question"
+            placeholder="e.g. What did you build for Decreen?"
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            onKeyDown={handleKeyDown}
+            ref={textareaRef}
+          />
+          <button onClick={submitQuestion} disabled={loading}>
+            {loading ? "Asking..." : "Ask"}
+          </button>
+        </div>
+      </section>
     </main>
   );
 }
