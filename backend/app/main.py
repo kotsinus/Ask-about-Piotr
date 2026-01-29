@@ -22,8 +22,10 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
 
 from app.retrieval import retrieve
 from app.schemas import (
@@ -45,6 +47,58 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(RateLimitError)
+async def openai_rate_limit_handler(
+    request: Request, exc: RateLimitError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content={
+            "detail": "OpenAI rate limit exceeded. Please try again later.",
+            "type": "rate_limit",
+        },
+    )
+
+
+@app.exception_handler(AuthenticationError)
+async def openai_auth_handler(
+    request: Request, exc: AuthenticationError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=401,
+        content={
+            "detail": "OpenAI authentication failed. Check OPENAI_API_KEY.",
+            "type": "auth_error",
+        },
+    )
+
+
+@app.exception_handler(APIConnectionError)
+async def openai_connection_handler(
+    request: Request, exc: APIConnectionError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "OpenAI service is unavailable. Please try again later.",
+            "type": "openai_unavailable",
+        },
+    )
+
+
+@app.exception_handler(APIError)
+async def openai_api_handler(
+    request: Request, exc: APIError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "OpenAI service is unavailable. Please try again later.",
+            "type": "openai_unavailable",
+        },
+    )
 
 
 def classify_question(question: str) -> Category:
