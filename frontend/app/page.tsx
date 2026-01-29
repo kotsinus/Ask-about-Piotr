@@ -99,6 +99,16 @@ export default function HomePage() {
     }
   };
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || event.shiftKey) {
+      return;
+    }
+    event.preventDefault();
+    if (!loading) {
+      void submitQuestion();
+    }
+  };
+
   return (
     <main>
       <div className="stack">
@@ -120,6 +130,7 @@ export default function HomePage() {
               placeholder="e.g. What did you build for Decreen?"
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
+              onKeyDown={handleKeyDown}
             />
             <button onClick={submitQuestion} disabled={loading}>
               {loading ? "Asking..." : "Ask"}
