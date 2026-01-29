@@ -30,6 +30,10 @@ class Settings:
     embeddings_provider: str
     embeddings_model: str | None
     embeddings_dimensions: int
+    openai_api_key: str | None
+    router_model: str
+    synthesis_model: str
+    prompt_cache_enabled: bool
 
 
 def get_settings() -> Settings:
@@ -40,11 +44,23 @@ def get_settings() -> Settings:
     embeddings_provider = os.getenv("EMBEDDINGS_PROVIDER", "stub")
     embeddings_model = os.getenv("EMBEDDINGS_MODEL")
     embeddings_dimensions = int(os.getenv("EMBEDDINGS_DIMENSIONS", "1536"))
+    openai_api_key = os.getenv("OPENAI_API_KEY")
+    router_model = os.getenv("ROUTER_MODEL", "gpt-4.1-mini")
+    synthesis_model = os.getenv("SYNTHESIS_MODEL", "gpt-4o-mini")
+    prompt_cache_enabled = os.getenv("PROMPT_CACHE_ENABLED", "true").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
     return Settings(
         database_url=database_url,
         embeddings_provider=embeddings_provider,
         embeddings_model=embeddings_model,
         embeddings_dimensions=embeddings_dimensions,
+        openai_api_key=openai_api_key,
+        router_model=router_model,
+        synthesis_model=synthesis_model,
+        prompt_cache_enabled=prompt_cache_enabled,
     )
 

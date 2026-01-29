@@ -1,0 +1,124 @@
+/*
+ * Copyright 2026 Piotr Synak
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+:root {
+  color-scheme: light;
+  --bg: #f7f7fb;
+  --panel: #ffffff;
+  --text: #0e0f13;
+  --muted: #5b6170;
+  --border: #e2e5ec;
+  --accent: #3b82f6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.05);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.chat-bubble {
+  border: 1px solid var(--border);
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fdfdff;
+}
+
+.chat-bubble.user {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+}
+
+.chat-bubble.assistant {
+  border-color: #d1fae5;
+  background: #ecfdf5;
+}
+
+.label {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 6px;
+  color: var(--muted);
+}
+
+.answer-block pre {
+  white-space: pre-wrap;
+  font-family: inherit;
+  margin: 0;
+}
+
+.input-row {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  font-size: 15px;
+  resize: vertical;
+}
+
+button {
+  align-self: flex-start;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
