@@ -51,8 +51,21 @@ class SourceRef(BaseModel):
     section: str = Field(..., description="Section name inside the card.")
 
 
+class ConversationContext(BaseModel):
+    conversation_id: Optional[str] = Field(
+        None, description="Client-provided conversation identifier."
+    )
+    last_topic: Optional[str] = Field(
+        None, description="Last resolved topic used for follow-up questions."
+    )
+
+
 class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1, description="User question.")
+    context: Optional[ConversationContext] = Field(
+        None,
+        description="Optional conversation context for follow-up questions.",
+    )
 
 
 class ChatResponse(BaseModel):
@@ -63,6 +76,7 @@ class ChatResponse(BaseModel):
     sources: List[SourceRef]
     confidence: Confidence
     confidence_reason: Optional[str] = None
+    context: Optional[ConversationContext] = None
     formatted_answer: str = Field(
         ...,
         description="User-facing answer formatted per the mandatory template.",

@@ -72,10 +72,11 @@ def load_cards(knowledge_dir: Path) -> List[KnowledgeCard]:
 
 
 def _iter_card_files(knowledge_dir: Path) -> List[Path]:
-    candidates = list(knowledge_dir.glob("*.md"))
     cards_dir = knowledge_dir / "cards"
-    if cards_dir.exists():
-        candidates.extend(cards_dir.glob("*.md"))
+    if not cards_dir.exists():
+        raise FileNotFoundError(f"Cards directory not found: {cards_dir}")
+
+    candidates = list(cards_dir.glob("*.md"))
 
     return [
         path

@@ -42,7 +42,7 @@
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 import psycopg
 from pgvector.psycopg import register_vector
@@ -60,15 +60,22 @@ class RetrievedChunk(BaseModel):
     content: str
 
 
-def retrieve(question: str, limit: int = 5) -> List[RetrievedChunk]:
+def retrieve(
+    question: str, limit: int = 5, conversation_topic: Optional[str] = None
+) -> List[RetrievedChunk]:
     """Retrieve relevant chunks for a question using pgvector."""
 
     settings = get_settings()
+    retrieval_query = (
+        f"{question}\n\nConversation topic: {conversation_topic}"
+        if conversation_topic
+        else question
+    )
     provider = get_embedding_provider(
         name=settings.embeddings_provider,
         dimensions=settings.embeddings_dimensions,
     )
-    embedding = provider.embed([question])[0]
+    embedding = provider.embed([retrieval_query])[0]
     embedding_text = "[" + ",".join(str(value) for value in embedding) + "]"
 
     with psycopg.connect(settings.database_url) as conn:

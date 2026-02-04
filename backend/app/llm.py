@@ -23,7 +23,7 @@ from __future__ import annotations
 import re
 import json
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 from openai import OpenAI
 
@@ -70,7 +70,11 @@ def route_category(question: str) -> Category:
     return _parse_category(payload.get("category", ""))
 
 
-def synthesize_answer(question: str, chunks: List[RetrievedChunk]) -> SynthesisResult:
+def synthesize_answer(
+    question: str,
+    chunks: List[RetrievedChunk],
+    conversation_topic: Optional[str] = None,
+) -> SynthesisResult:
     """Generate a strict, grounded answer from retrieved chunks."""
 
     if not chunks:
@@ -97,10 +101,16 @@ def synthesize_answer(question: str, chunks: List[RetrievedChunk]) -> SynthesisR
         "Return JSON: {\"answer\", \"why_this_matters\", \"confidence\", "
         "\"confidence_reason\"}. Use confidence High/Medium/Low."
     )
+    topic_line = (
+        f"Conversation topic: {conversation_topic}\n\n"
+        if conversation_topic
+        else ""
+    )
     user_prompt = (
         "Question:\n"
         f"{question}\n\n"
-        "Evidence:\n"
+        + topic_line
+        + "Evidence:\n"
         + "\n".join(evidence_lines)
     )
 

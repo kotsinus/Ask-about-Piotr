@@ -33,6 +33,7 @@ from app.schemas import (
     ChatRequest,
     ChatResponse,
     Confidence,
+    ConversationContext,
     EvidenceItem,
     SourceRef,
 )
@@ -167,14 +168,19 @@ def chat(request: ChatRequest) -> ChatResponse:
         category = route_category(request.question)
     except Exception:
         category = classify_question(request.question)
-    chunks = retrieve(request.question)
+    conversation_topic = request.context.last_topic if request.context else None
+    chunks = retrieve(request.question, conversation_topic=conversation_topic)
 
     evidence = [
         EvidenceItem(snippet=chunk.content, card_id=chunk.card_id)
         for chunk in chunks
     ]
     sources = [SourceRef(card_id=chunk.card_id, section=chunk.section) for chunk in chunks]
-    synthesis = synthesize_answer(request.question, chunks)
+    synthesis = synthesize_answer(
+        request.question, chunks, conversation_topic=conversation_topic
+    )
+
+    resolved_topic = chunks[0].card_id if chunks else conversation_topic
 
     response = ChatResponse(
         category=category,
@@ -184,6 +190,10 @@ def chat(request: ChatRequest) -> ChatResponse:
         sources=sources,
         confidence=synthesis.confidence,
         confidence_reason=synthesis.confidence_reason,
+        context=ConversationContext(
+            conversation_id=request.context.conversation_id if request.context else None,
+            last_topic=resolved_topic,
+        ),
         formatted_answer="",
     )
     response.formatted_answer = format_answer(
