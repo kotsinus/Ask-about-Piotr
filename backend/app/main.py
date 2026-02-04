@@ -37,7 +37,7 @@ from app.schemas import (
     EvidenceItem,
     SourceRef,
 )
-from app.llm import route_category, synthesize_answer
+from app.llm import rewrite_question, route_category, synthesize_answer
 
 app = FastAPI(title="Ask about Piotr API", version="0.1.0")
 
@@ -164,12 +164,18 @@ def format_answer(
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(request: ChatRequest) -> ChatResponse:
+    standalone_question = rewrite_question(
+        request.question,
+        [message.model_dump() for message in request.messages]
+        if request.messages
+        else None,
+    )
     try:
-        category = route_category(request.question)
+        category = route_category(standalone_question)
     except Exception:
-        category = classify_question(request.question)
+        category = classify_question(standalone_question)
     conversation_topic = request.context.last_topic if request.context else None
-    chunks = retrieve(request.question, conversation_topic=conversation_topic)
+    chunks = retrieve(standalone_question, conversation_topic=conversation_topic)
 
     evidence = [
         EvidenceItem(snippet=chunk.content, card_id=chunk.card_id)
@@ -177,7 +183,12 @@ def chat(request: ChatRequest) -> ChatResponse:
     ]
     sources = [SourceRef(card_id=chunk.card_id, section=chunk.section) for chunk in chunks]
     synthesis = synthesize_answer(
-        request.question, chunks, conversation_topic=conversation_topic
+        standalone_question,
+        chunks,
+        conversation_topic=conversation_topic,
+        conversation_messages=[message.model_dump() for message in request.messages]
+        if request.messages
+        else None,
     )
 
     resolved_topic = chunks[0].card_id if chunks else conversation_topic

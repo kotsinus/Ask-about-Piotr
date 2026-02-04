@@ -21,7 +21,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -60,8 +60,23 @@ class ConversationContext(BaseModel):
     )
 
 
+class ChatMessage(BaseModel):
+    role: Literal["user", "assistant"] = Field(
+        ..., description="Message author role."
+    )
+    content: str = Field(..., min_length=1, description="Message content.")
+
+
 class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1, description="User question.")
+    messages: Optional[List[ChatMessage]] = Field(
+        None,
+        description=(
+            "Optional conversation history (typically last N turns). "
+            "When provided, the backend may rewrite follow-up questions into a "
+            "standalone question before retrieval."
+        ),
+    )
     context: Optional[ConversationContext] = Field(
         None,
         description="Optional conversation context for follow-up questions.",

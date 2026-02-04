@@ -30,7 +30,9 @@ from app.retrieval import RetrievedChunk
 async def test_no_evidence_response(monkeypatch: pytest.MonkeyPatch) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        def _stub_retrieve(question: str) -> List[RetrievedChunk]:
+        def _stub_retrieve(
+            question: str, limit: int = 5, conversation_topic: str | None = None
+        ) -> List[RetrievedChunk]:
             return []
 
         monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
@@ -54,7 +56,9 @@ async def test_formatted_answer_contains_sections(
 ) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        def _stub_retrieve(question: str) -> List[RetrievedChunk]:
+        def _stub_retrieve(
+            question: str, limit: int = 5, conversation_topic: str | None = None
+        ) -> List[RetrievedChunk]:
             return [
                 RetrievedChunk(
                     card_id="sample",
@@ -79,4 +83,61 @@ async def test_formatted_answer_contains_sections(
             "Confidence:",
         ]:
             assert header in formatted
+
+
+@pytest.mark.anyio
+async def test_followup_question_uses_history_rewrite(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Ambiguous follow-up should be rewritten into a standalone question before retrieval."""
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        def _stub_rewrite(question: str, messages: List[dict] | None = None) -> str:
+            # Simulate an LLM rewrite resolving the follow-up "In what languages?"
+            # using prior context about programming.
+            if question.strip().lower() == "in what languages?":
+                return "In what programming languages can Piotr program?"
+            return question
+
+        def _stub_retrieve(
+            question: str, limit: int = 5, conversation_topic: str | None = None
+        ) -> List[RetrievedChunk]:
+            if "program" in question.lower():
+                return [
+                    RetrievedChunk(
+                        card_id="skills-programming-languages",
+                        category="skills",
+                        section="Overview",
+                        source_url=None,
+                        content="Piotr programs primarily in Python and TypeScript.",
+                    )
+                ]
+            return [
+                RetrievedChunk(
+                    card_id="skills-spoken-languages",
+                    category="skills",
+                    section="Overview",
+                    source_url=None,
+                    content="Piotr speaks Polish and English.",
+                )
+            ]
+
+        monkeypatch.setattr("app.main.rewrite_question", _stub_rewrite)
+        monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
+
+        response = await client.post(
+            "/chat",
+            json={
+                "question": "In what languages?",
+                "messages": [
+                    {"role": "user", "content": "Can you program?"},
+                    {"role": "assistant", "content": "Yes."},
+                ],
+            },
+        )
+        assert response.status_code == 200
+        payload = response.json()
+
+        assert "Python" in payload["answer"]
+        assert "TypeScript" in payload["answer"]
+        assert "Polish" not in payload["answer"]
 

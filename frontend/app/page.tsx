@@ -96,13 +96,21 @@ export default function HomePage() {
     setMessages((prev) => [...prev, { role: "user", content: currentQuestion }]);
     setLoading(true);
 
+    const history = messages.slice(-6).map((message) => ({
+      role: message.role,
+      content:
+        message.role === "assistant" && message.payload
+          ? message.payload.answer
+          : message.content
+    }));
+
     try {
       const response = await fetch(`${apiUrl}/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ question: currentQuestion })
+        body: JSON.stringify({ question: currentQuestion, messages: history })
       });
 
       if (!response.ok) {

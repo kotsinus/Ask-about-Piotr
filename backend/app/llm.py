@@ -32,6 +32,62 @@ from app.retrieval import RetrievedChunk
 from app.schemas import Category, Confidence
 
 
+def rewrite_question(question: str, messages: Optional[List[dict]] = None) -> str:
+    """Rewrite a potentially ambiguous follow-up question into a standalone question.
+
+    - Preserves user intent and meaning.
+    - Resolves pronouns/ellipses using provided history.
+    - Avoids adding new facts.
+    - Keeps the result concise.
+
+    If no OpenAI API key is configured, returns the original question.
+    """
+
+    if not messages:
+        return question
+
+    settings = get_settings()
+    if not settings.openai_api_key:
+        return question
+
+    # Keep last few turns to limit token use.
+    trimmed = messages[-6:]
+
+    client = OpenAI(api_key=settings.openai_api_key)
+    system_prompt = (
+        "You rewrite the user's latest question into a standalone question. "
+        "Use the conversation history only to resolve references (pronouns, "
+        "ellipsis, omitted subject). Do NOT add facts or assumptions not present "
+        "in the history. Keep it concise. Return JSON: {\"standalone_question\": \"...\"}."
+    )
+    user_prompt = (
+        "Conversation history (chronological):\n"
+        + "\n".join(
+            f"{m.get('role', '')}: {m.get('content', '')}" for m in trimmed
+        )
+        + "\n\nLatest user question:\n"
+        + question
+    )
+
+    response = client.chat.completions.create(
+        model=settings.synthesis_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        response_format={"type": "json_object"},
+        temperature=0,
+    )
+    content = response.choices[0].message.content or "{}"
+    try:
+        payload = json.loads(content)
+    except Exception:
+        return question
+
+    rewritten = str(payload.get("standalone_question", "")).strip()
+    return rewritten or question
+
+
 @dataclass(frozen=True)
 class SynthesisResult:
     answer: str
@@ -74,6 +130,7 @@ def synthesize_answer(
     question: str,
     chunks: List[RetrievedChunk],
     conversation_topic: Optional[str] = None,
+    conversation_messages: Optional[List[dict]] = None,
 ) -> SynthesisResult:
     """Generate a strict, grounded answer from retrieved chunks."""
 
@@ -97,10 +154,23 @@ def synthesize_answer(
     ]
     system_prompt = (
         "You answer only using the provided evidence. "
+        "Conversation context may be provided only to help interpret the question; "
+        "it is NOT evidence and must not override or add to the evidence. "
         "If evidence is insufficient, respond with the exact refusal message. "
         "Return JSON: {\"answer\", \"why_this_matters\", \"confidence\", "
         "\"confidence_reason\"}. Use confidence High/Medium/Low."
     )
+    context_block = ""
+    if conversation_messages:
+        trimmed = conversation_messages[-6:]
+        context_lines = [
+            f"{m.get('role', '')}: {m.get('content', '')}" for m in trimmed
+        ]
+        context_block = (
+            "Conversation context (for interpretation only; not evidence):\n"
+            + "\n".join(context_lines)
+            + "\n\n"
+        )
     topic_line = (
         f"Conversation topic: {conversation_topic}\n\n"
         if conversation_topic
@@ -109,6 +179,7 @@ def synthesize_answer(
     user_prompt = (
         "Question:\n"
         f"{question}\n\n"
+        + context_block
         + topic_line
         + "Evidence:\n"
         + "\n".join(evidence_lines)

@@ -78,6 +78,10 @@ def retrieve(
     embedding = provider.embed([retrieval_query])[0]
     embedding_text = "[" + ",".join(str(value) for value in embedding) + "]"
 
+    # We may skip many highly-similar chunks from a single card to allow evidence
+    # to come from multiple cards. Fetch a larger candidate set to keep recall.
+    candidate_limit = max(limit * 8, 30)
+
     with psycopg.connect(settings.database_url) as conn:
         register_vector(conn)
         with conn.cursor() as cursor:
@@ -91,15 +95,40 @@ def retrieve(
                 ORDER BY distance
                 LIMIT %s;
                 """,
-                (embedding_text, max(limit * 3, 10)),
+                (embedding_text, candidate_limit),
             )
             rows = cursor.fetchall()
 
     if not rows:
         return []
 
-    top_card_id = rows[0][0]
-    filtered = [row for row in rows if row[0] == top_card_id][:limit]
+    # Diversify lightly across cards: keep similarity ordering, but avoid returning
+    # too many chunks from a single card when other relevant cards are present.
+    per_card_cap = 2
+    selected: list[tuple] = []
+    per_card_counts: dict[str, int] = {}
+
+    for row in rows:
+        card_id = row[0]
+        if per_card_counts.get(card_id, 0) >= per_card_cap:
+            continue
+        selected.append(row)
+        per_card_counts[card_id] = per_card_counts.get(card_id, 0) + 1
+        if len(selected) >= limit:
+            break
+
+    # If diversification was too strict (e.g., only one card exists), fill the
+    # remaining slots without the per-card cap.
+    if len(selected) < limit:
+        selected_set = {id(row) for row in selected}
+        for row in rows:
+            if id(row) in selected_set:
+                continue
+            selected.append(row)
+            if len(selected) >= limit:
+                break
+
+    filtered = selected[:limit]
     return [
         RetrievedChunk(
             card_id=row[0],
