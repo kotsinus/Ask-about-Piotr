@@ -11,7 +11,7 @@ Users may ask about hobbies and personal interests; the system should answer onl
 Provide a factual list of interests as documented, without extrapolating personality traits.
 
 # What I built
-Interests listed include: mastering sushi, ferroequinology, Japanese model trains, butoh, judo, hiking, and photography.
+Interests listed include: mastering sushi, ferroequinology, Japanese model trains, butoh, judo, football, hiking, and photography.
 
 # Scale and impact
 These interests may be discussed as personal context, but the system avoids making professional inferences unless separately documented.

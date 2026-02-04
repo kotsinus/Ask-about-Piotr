@@ -24,4 +24,4 @@ Keeps the description factual; avoids adding institutions, dates, or honors not 
 
 # Links
 - CV: assets/cv/CV_Piotr_Synak.pdf
-- xMBA certificate: assets/certifications/xMBA_SAQ_25ABSS1591478.pdf
+- xMBA certificate: assets/certifications/xMBA_SAQ_Piotr_Synak.pdf

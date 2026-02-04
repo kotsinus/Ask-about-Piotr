@@ -11,7 +11,7 @@ Hiring teams often need an explicit skills map rather than scattered mentions ac
 Define and communicate a factual set of core competencies based on documented work and responsibilities.
 
 # What I built
-AI/ML system design and deployment; software architecture and engineering; AI-based anomaly detection; agile and project management; CI/CD and QA automation; cybersecurity applications; grant writing and R&D strategy.
+AI/ML system design and deployment; software architecture and engineering; AI-based anomaly detection; agile and project management; cross-functional team leadership; CI/CD and QA automation; innovation and creativity; cybersecurity applications; grant writing and R&D strategy.
 
 # Scale and impact
 Skills span hands-on engineering and leadership responsibilities in international, cross-functional environments.
