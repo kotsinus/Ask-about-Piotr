@@ -61,7 +61,7 @@ class RetrievedChunk(BaseModel):
 
 
 def retrieve(
-    question: str, limit: int = 5, conversation_topic: Optional[str] = None
+    question: str, limit: int = 25, conversation_topic: Optional[str] = None
 ) -> List[RetrievedChunk]:
     """Retrieve relevant chunks for a question using pgvector."""
 
@@ -92,6 +92,7 @@ def retrieve(
                 SELECT card_id, category, section, source_url, content,
                        embedding <=> %s::vector AS distance
                 FROM knowledge_chunks
+                WHERE section <> 'Links'
                 ORDER BY distance
                 LIMIT %s;
                 """,
