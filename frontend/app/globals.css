@@ -135,8 +135,10 @@ textarea {
   border-radius: 10px;
   border: 1px solid var(--border);
   font-size: 15px;
+  line-height: 1.4;
   resize: none;
   overflow: hidden;
+  transition: height 120ms ease;
 }
 
 button {

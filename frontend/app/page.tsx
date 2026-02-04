@@ -61,17 +61,30 @@ export default function HomePage() {
     []
   );
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  useEffect(() => {
+  const resizeTextarea = () => {
     const textarea = textareaRef.current;
     if (!textarea) {
       return;
     }
     textarea.style.height = "auto";
-    textarea.style.height = `${textarea.scrollHeight}px`;
+    const computed = window.getComputedStyle(textarea);
+    const maxHeight = Number.parseFloat(computed.maxHeight || "0");
+    const nextHeight = textarea.scrollHeight;
+    if (Number.isFinite(maxHeight) && maxHeight > 0) {
+      textarea.style.height = `${Math.min(nextHeight, maxHeight)}px`;
+      textarea.style.overflowY = nextHeight > maxHeight ? "auto" : "hidden";
+      return;
+    }
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = "hidden";
+  };
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    resizeTextarea();
   }, [question]);
 
   const submitQuestion = async () => {
