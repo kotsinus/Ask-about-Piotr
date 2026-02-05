@@ -86,6 +86,8 @@ async def test_chat_triggers_db_write_and_persists_only_anonymized_ip(
     assert request_id
 
     assert row.request_id == request_id
+    assert row.session_id
+    assert row.conversation_id is None
     assert row.question == "What did you build?"
     assert row.answer == payload["answer"]
     assert isinstance(row.request_at, datetime)
@@ -101,6 +103,32 @@ async def test_chat_triggers_db_write_and_persists_only_anonymized_ip(
     # Raw IP must not be persisted in any column.
     values = [v for v in asdict(row).values() if isinstance(v, str)]
     assert peer_ip not in values
+
+
+@pytest.mark.anyio
+async def test_session_cookie_is_set_and_reused_across_requests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
+    monkeypatch.setattr("app.main.synthesize_answer", _stub_synthesize_answer)
+    monkeypatch.setenv("IP_HASH_SALT", "salt-a")
+
+    captured: list[Any] = []
+    monkeypatch.setattr("app.main.write_interaction_log", lambda row: captured.append(row))
+
+    transport = httpx.ASGITransport(app=app, client=("198.51.100.77", 1234))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        first = await client.post("/chat", json={"question": "Q1"})
+        second = await client.post("/chat", json={"question": "Q2"})
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert len(captured) == 2
+
+    # Cookie should be set on first response and reused by the client on second.
+    assert captured[0].session_id
+    assert captured[1].session_id
+    assert captured[0].session_id == captured[1].session_id
 
 
 def test_privacy_ip_hash_depends_on_salt_and_prefix_is_correct() -> None:

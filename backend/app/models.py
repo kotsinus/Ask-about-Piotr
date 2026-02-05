@@ -33,6 +33,8 @@ class InteractionLogModel(Base):
     __table_args__ = (
         Index("interaction_logs_logged_at_idx", "logged_at"),
         Index("interaction_logs_request_id_idx", "request_id"),
+        Index("interaction_logs_session_id_idx", "session_id"),
+        Index("interaction_logs_conversation_id_idx", "conversation_id"),
         Index("interaction_logs_ip_prefix_idx", "ip_prefix"),
         Index("interaction_logs_ip_hash_idx", "ip_hash"),
     )
@@ -40,6 +42,8 @@ class InteractionLogModel(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 
     request_id: Mapped[str] = mapped_column(Text, nullable=False)
+    session_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    conversation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     request_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

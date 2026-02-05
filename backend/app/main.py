@@ -60,6 +60,8 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Ask about Piotr API", version="0.1.0")
 
+SESSION_COOKIE_NAME = "ask_piotr_session_id"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -73,6 +75,14 @@ app.add_middleware(
 async def request_logging_middleware(request: Request, call_next):
     request_id = request.headers.get(REQUEST_ID_HEADER) or str(uuid.uuid4())
     token = set_request_id(request_id)
+
+    # Privacy-friendly anonymous session id.
+    # - Stored as an HttpOnly cookie so the browser can keep a stable session.
+    # - Not derived from IP.
+    existing_session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    session_id = existing_session_id or str(uuid.uuid4())
+    request.state.session_id = session_id
+
     start = time.perf_counter()
     try:
         response = await call_next(request)
@@ -89,6 +99,17 @@ async def request_logging_middleware(request: Request, call_next):
         )
         raise
     else:
+        if not existing_session_id:
+            # `secure=True` should be used in production (HTTPS), but `False` is
+            # convenient for local development.
+            response.set_cookie(
+                key=SESSION_COOKIE_NAME,
+                value=session_id,
+                httponly=True,
+                samesite="lax",
+                secure=False,
+                max_age=60 * 60 * 24 * 365,
+            )
         response.headers[REQUEST_ID_HEADER] = request_id
         duration_ms = round((time.perf_counter() - start) * 1000, 2)
         logger.info(
@@ -311,9 +332,15 @@ def chat(
         country = lookup_country(client_ip, settings) if client_ip else None
 
         request_id = get_request_id() or ""
+        session_id = getattr(http_request.state, "session_id", None)
+        conversation_id = (
+            request.context.conversation_id if request.context else None
+        )
         write_interaction_log(
             InteractionLog(
                 request_id=request_id,
+                session_id=session_id,
+                conversation_id=conversation_id,
                 request_at=request_at,
                 response_at=response_at,
                 latency_ms=latency_ms,

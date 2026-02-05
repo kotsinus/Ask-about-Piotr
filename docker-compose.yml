@@ -32,6 +32,15 @@ services:
       - ROUTER_MODEL=gpt-4.1-mini
       - SYNTHESIS_MODEL=gpt-4o-mini
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      # Privacy-first interaction logging / client metadata
+      - IP_HASH_SALT=${IP_HASH_SALT}
+      - TRUSTED_PROXY_CIDRS=${TRUSTED_PROXY_CIDRS}
+
+      # Optional GeoIP (default OFF unless enabled in host .env)
+      - GEOIP_ENABLED=${GEOIP_ENABLED}
+      - GEOIP_PROVIDER=${GEOIP_PROVIDER}
+      - GEOIP_URL=${GEOIP_URL}
     depends_on:
       - db
 

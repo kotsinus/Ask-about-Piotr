@@ -37,6 +37,8 @@ _INTERACTION_LOGGING_DISABLED_REASON: str | None = None
 @dataclass(frozen=True)
 class InteractionLog:
     request_id: str
+    session_id: str | None
+    conversation_id: str | None
     request_at: datetime
     response_at: datetime
     latency_ms: float | None
@@ -91,6 +93,8 @@ def _write_interaction_log_once(row: InteractionLog) -> None:
         session.add(
             InteractionLogModel(
                 request_id=row.request_id,
+                session_id=row.session_id,
+                conversation_id=row.conversation_id,
                 request_at=row.request_at,
                 response_at=row.response_at,
                 latency_ms=row.latency_ms,

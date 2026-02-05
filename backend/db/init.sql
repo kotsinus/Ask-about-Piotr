@@ -33,6 +33,8 @@ CREATE INDEX IF NOT EXISTS knowledge_chunks_embedding_idx
 CREATE TABLE IF NOT EXISTS interaction_logs (
     id BIGSERIAL PRIMARY KEY,
     request_id TEXT NOT NULL,
+    session_id TEXT,
+    conversation_id TEXT,
     request_at TIMESTAMPTZ NOT NULL,
     response_at TIMESTAMPTZ NOT NULL,
     latency_ms DOUBLE PRECISION,
@@ -49,11 +51,25 @@ CREATE TABLE IF NOT EXISTS interaction_logs (
     logged_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Backward-compatible schema evolution (for existing DB volumes).
+-- CREATE TABLE IF NOT EXISTS does NOT add new columns.
+ALTER TABLE interaction_logs
+    ADD COLUMN IF NOT EXISTS session_id TEXT;
+
+ALTER TABLE interaction_logs
+    ADD COLUMN IF NOT EXISTS conversation_id TEXT;
+
 CREATE INDEX IF NOT EXISTS interaction_logs_logged_at_idx
     ON interaction_logs (logged_at);
 
 CREATE INDEX IF NOT EXISTS interaction_logs_request_id_idx
     ON interaction_logs (request_id);
+
+CREATE INDEX IF NOT EXISTS interaction_logs_session_id_idx
+    ON interaction_logs (session_id);
+
+CREATE INDEX IF NOT EXISTS interaction_logs_conversation_id_idx
+    ON interaction_logs (conversation_id);
 
 CREATE INDEX IF NOT EXISTS interaction_logs_ip_prefix_idx
     ON interaction_logs (ip_prefix);
