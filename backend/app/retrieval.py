@@ -51,7 +51,6 @@ from pydantic import BaseModel
 from app.config import get_settings
 from app.embeddings import get_embedding_provider
 
-
 logger = logging.getLogger(__name__)
 
 

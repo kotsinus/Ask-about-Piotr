@@ -87,20 +87,25 @@ async def test_education_query_returns_sources_and_evidence_with_fallback(
             return _Cursor()
 
     monkeypatch.setattr("app.retrieval.register_vector", lambda conn: None)
-    monkeypatch.setattr("app.retrieval.psycopg.connect", lambda *args, **kwargs: _Conn())
+    monkeypatch.setattr(
+        "app.retrieval.psycopg.connect", lambda *args, **kwargs: _Conn()
+    )
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post("/chat", json={"question": "What is your education?"})
+        response = await client.post(
+            "/chat", json={"question": "What is your education?"}
+        )
         assert response.status_code == 200
         payload = response.json()
 
         assert payload["sources"], "Expected non-empty sources for an education query."
-        assert payload["evidence"], "Expected non-empty evidence for an education query."
+        assert payload["evidence"], (
+            "Expected non-empty evidence for an education query."
+        )
 
         source_card_ids = {item["card_id"] for item in payload["sources"]}
         evidence_card_ids = {item["card_id"] for item in payload["evidence"]}
 
         assert any(card_id.startswith("education-") for card_id in source_card_ids)
         assert any(card_id.startswith("education-") for card_id in evidence_card_ids)
-
