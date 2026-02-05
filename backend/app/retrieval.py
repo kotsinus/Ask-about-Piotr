@@ -42,12 +42,17 @@
 
 from __future__ import annotations
 
+import logging
+
 import psycopg
 from pgvector.psycopg import register_vector
 from pydantic import BaseModel
 
 from app.config import get_settings
 from app.embeddings import get_embedding_provider
+
+
+logger = logging.getLogger(__name__)
 
 
 class RetrievedChunk(BaseModel):
@@ -102,6 +107,8 @@ def retrieve(
     if not rows:
         return []
 
+    candidate_rows = rows
+
     # Hard cutoffs: allow fewer than `limit` chunks when retrieval is weak.
     #
     # pgvector distance interpretation depends on the chosen operator; this code
@@ -120,7 +127,23 @@ def retrieve(
 
     rows = [row for row in rows if _keep(row)]
     if not rows:
-        return []
+        # Safe fallback: some deployments override cutoffs too aggressively
+        # (e.g., via env), causing the hard filtering to drop all candidates.
+        # In that case, return a small number of top candidates (by distance)
+        # rather than returning zero sources.
+        fallback_n = min(limit, 3)
+        logger.warning(
+            "retrieval_cutoff_filtered_to_zero_fallback",
+            extra={
+                "question": question,
+                "candidate_count": len(candidate_rows),
+                "best_distance": best_distance,
+                "retrieval_max_distance": max_distance,
+                "retrieval_distance_delta": delta,
+                "fallback_n": fallback_n,
+            },
+        )
+        rows = candidate_rows[:fallback_n]
 
     # Generic post-processing to prefer substantive sections when the per-card cap
     # forces tradeoffs.
