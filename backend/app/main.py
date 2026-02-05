@@ -20,12 +20,18 @@
 
 from __future__ import annotations
 
+import logging
+import time
+import uuid
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
 
 from app.llm import rewrite_question, route_category, synthesize_answer
+from app.logging_setup import configure_logging
+from app.observability import REQUEST_ID_HEADER, reset_request_id, set_request_id
 from app.retrieval import retrieve
 from app.schemas import (
     Category,
@@ -38,6 +44,10 @@ from app.schemas import (
     SourceRef,
 )
 
+configure_logging()
+
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Ask about Piotr API", version="0.1.0")
 
 app.add_middleware(
@@ -47,6 +57,47 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    request_id = request.headers.get(REQUEST_ID_HEADER) or str(uuid.uuid4())
+    token = set_request_id(request_id)
+    start = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = round((time.perf_counter() - start) * 1000, 2)
+        logger.exception(
+            "request_failed",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": 500,
+                "duration_ms": duration_ms,
+            },
+        )
+        raise
+    else:
+        response.headers[REQUEST_ID_HEADER] = request_id
+        duration_ms = round((time.perf_counter() - start) * 1000, 2)
+        logger.info(
+            "request",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms,
+            },
+        )
+        return response
+    finally:
+        reset_request_id(token)
+
+
+@app.get("/healthz")
+def healthz() -> dict[str, str]:
+    return {"status": "ok"}
 
 
 @app.exception_handler(RateLimitError)

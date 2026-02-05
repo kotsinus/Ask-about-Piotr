@@ -154,7 +154,6 @@ async def test_evidence_and_sources_include_only_used_chunks(
 ) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-
         chunks = [
             RetrievedChunk(
                 card_id="c1",

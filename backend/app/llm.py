@@ -160,7 +160,7 @@ def synthesize_answer(
         "If you use evidence, you MUST list which evidence items were used via their indices. "
         'Return JSON: {"answer", "why_this_matters", "confidence", '
         '"confidence_reason", "used_chunk_indices"}. '
-        'Use confidence High/Medium/Low. '
+        "Use confidence High/Medium/Low. "
         'The refusal message is: "I do not have enough evidence in the provided materials."'
     )
     context_block = ""

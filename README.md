@@ -26,9 +26,23 @@ docker compose up --build
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r backend/requirements.txt
-uvicorn app.main:app --reload
+ pip install -r backend/requirements.txt
+ uvicorn app.main:app --reload
 ```
+
+### Logging
+
+The backend uses stdlib logging with consistent formatting for app + uvicorn.
+
+Env vars:
+- `LOG_LEVEL` (default: `INFO`)
+- `LOG_FORMAT` (default: `json`, allowed: `json` or `text`)
+- `UVICORN_ACCESS_LOG_LEVEL` (default: `WARNING`) — uvicorn access logs are
+  suppressed by default to avoid duplicate per-request logs (the app emits its
+  own request log line).
+
+Each request gets an `X-Request-ID` response header. If the client sends
+`X-Request-ID`, it is propagated.
 
 ## Ingestion Runbook
 1) Start Postgres + backend:
