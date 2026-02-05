@@ -36,35 +36,27 @@ body {
 }
 
 main {
-  max-width: 960px;
   margin: 0 auto;
-  padding: 32px 24px 64px;
+  padding: 0;
 }
 
 .app-main {
   width: 100%;
+  --layout-gap: 20px;
+  --details-panel-width: 380px;
+  --details-rail-width: 40px;
+  --page-padding-left: 24px;
+  --page-padding-top: 32px;
+  --page-padding-bottom: 64px;
+  /* Flush to viewport edge on the right (no right padding). */
+  padding: var(--page-padding-top) 0 var(--page-padding-bottom) var(--page-padding-left);
 }
 
-.app-main.details-pinned {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--details-panel-width, 420px);
-  align-items: start;
-  column-gap: 20px;
-  max-width: calc(960px + var(--details-panel-width, 420px) + 20px);
-  margin: 0 auto;
-  padding: 32px 24px 64px;
-}
-
-.app-main.details-pinned .app-shell {
-  min-height: 100vh;
-}
-
-@media (max-width: 900px) {
-  .app-main.details-pinned {
-    display: block;
-    max-width: 960px;
-    padding: 32px 24px 64px;
-  }
+.app-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--layout-gap);
+  width: 100%;
 }
 
 .app-shell {
@@ -72,6 +64,8 @@ main {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  flex: 1;
+  min-width: 0;
 }
 
 .app-shell.empty {
@@ -352,53 +346,110 @@ button:disabled {
 
 /* Variant C: right-hand-side (RHS) details panel */
 
-body.details-overlay-open {
-  overflow: hidden;
+.rhs-details {
+  position: sticky;
+  top: var(--page-padding-top);
+  height: calc(100vh - (var(--page-padding-top) * 2));
+  align-self: start;
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  margin-right: 0;
+  /* Collapse/expand is driven by width transitions on the container. */
+  transition: width 180ms ease;
 }
 
-.details-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.35);
-  z-index: 40;
+.rhs-details.is-collapsed {
+  width: var(--details-rail-width);
 }
 
-.answer-details-panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
-  border-radius: 12px;
-  width: min(var(--details-panel-width, 420px), calc(100vw - 24px));
-  max-width: 520px;
+.rhs-details.is-expanded {
+  width: calc(var(--details-rail-width) + var(--details-panel-width));
+}
+
+.rhs-details .details-rail {
+  width: var(--details-rail-width);
+  height: 100%;
+  /* Subtle 3D/shaded rail look */
+  background: linear-gradient(180deg, #fbfbff 0%, #f1f3f8 55%, #e9ecf4 100%);
+  border-left: 1px solid #d7dbe6;
+  box-shadow:
+    -12px 0 26px rgba(0, 0, 0, 0.08),
+    inset 1px 0 0 rgba(255, 255, 255, 0.75),
+    inset -1px 0 0 rgba(15, 23, 42, 0.08);
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 10px 6px;
 }
 
-.answer-details-panel.drawer {
-  position: fixed;
-  top: 12px;
-  bottom: 12px;
-  right: 12px;
-  z-index: 50;
-  transform: translateX(0);
+.rhs-details .rail-toggle {
+  background: transparent;
+  color: #111827;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7),
+    0 8px 20px rgba(15, 23, 42, 0.08);
 }
 
-.answer-details-panel.pinned {
-  position: sticky;
-  top: 32px;
-  height: calc(100vh - 64px);
-  align-self: start;
+.rhs-details .rail-toggle:hover {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.8),
+    0 10px 26px rgba(15, 23, 42, 0.12);
 }
 
-@media (max-width: 600px) {
-  .answer-details-panel.drawer {
-    top: 0;
-    bottom: 0;
-    right: 0;
-    left: auto;
-    width: min(92vw, 520px);
-    border-radius: 0;
-  }
+.rhs-details .rail-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.rhs-details .rail-label {
+  /* Vertical label; kept separate from arrow so the icon stays unrotated. */
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  user-select: none;
+}
+
+.rhs-details .details-panel {
+  width: var(--details-panel-width);
+  height: 100%;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: opacity 120ms ease;
+}
+
+.rhs-details.is-collapsed .details-panel {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.rhs-details.is-expanded .details-panel {
+  width: var(--details-panel-width);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .details-panel-header {
@@ -421,24 +472,27 @@ body.details-overlay-open {
   gap: 8px;
 }
 
-.panel-control {
+.icon-button {
   background: transparent;
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 8px 10px;
-  font-weight: 700;
-  font-size: 12px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
 }
 
-.panel-control-primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
+.icon-button.is-active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1e3a8a;
 }
 
-.panel-control:focus-visible {
+.icon-button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -446,6 +500,12 @@ body.details-overlay-open {
 .details-panel-body {
   padding: 12px 14px 14px;
   overflow: auto;
+  flex: 1;
+}
+
+.chat-bubble.is-selected {
+  outline: 2px solid rgba(59, 130, 246, 0.35);
+  outline-offset: 2px;
 }
 
 .details-section {
@@ -463,5 +523,23 @@ body.details-overlay-open {
 
 .details-section-body {
   margin: 0;
+}
+
+@media (max-width: 980px) {
+  .app-main {
+    --page-padding-left: 16px;
+    --page-padding-top: 24px;
+    --page-padding-bottom: 48px;
+    padding: var(--page-padding-top) 0 var(--page-padding-bottom) var(--page-padding-left);
+    --layout-gap: 14px;
+    --details-panel-width: 360px;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-main {
+    --details-panel-width: 320px;
+    --details-rail-width: 36px;
+  }
 }
 

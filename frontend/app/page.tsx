@@ -160,75 +160,82 @@ function AnswerDetailsAccordion({
 
 function AnswerDetailsPanel({
   response,
-  open,
+  expanded,
   pinned,
-  onClose,
+  onToggleExpanded,
   onTogglePinned
 }: {
   response: ChatResponse | null;
-  open: boolean;
+  expanded: boolean;
   pinned: boolean;
-  onClose: () => void;
+  onToggleExpanded: () => void;
   onTogglePinned: () => void;
 }) {
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const panels = response ? buildDetailsPanels(response) : [];
 
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    closeButtonRef.current?.focus();
-  }, [open, response]);
-
-  if (!open || panels.length === 0) {
-    return null;
-  }
-
-  const panelRole = pinned ? "complementary" : "dialog";
-  const panelClassName = `answer-details-panel ${pinned ? "pinned" : "drawer"}`;
+  const panelClassName = `rhs-details ${expanded ? "is-expanded" : "is-collapsed"}`;
+  const pinLabel = pinned ? "Unpin details sidebar" : "Pin details sidebar";
+  const toggleLabel = expanded ? "Collapse details sidebar" : "Expand details sidebar";
 
   return (
-    <>
-      {!pinned ? <div className="details-backdrop" onClick={onClose} /> : null}
-      <aside
-        className={panelClassName}
-        role={panelRole}
-        aria-label="Answer details"
-        aria-modal={!pinned ? "true" : undefined}
-      >
+    <aside className={panelClassName} aria-label="Answer details">
+      <div className="details-rail" aria-label="Details sidebar rail">
+        <button
+          type="button"
+          className="rail-toggle"
+          onClick={onToggleExpanded}
+          aria-label={toggleLabel}
+          title={toggleLabel}
+        >
+          {expanded ? ">" : "<"}
+        </button>
+        <div className="rail-label" aria-hidden="true">
+          Details
+        </div>
+      </div>
+
+      <div className="details-panel" hidden={!expanded}>
         <div className="details-panel-header">
           <div className="details-panel-title">Answer details</div>
-          <div className="details-panel-controls" role="group" aria-label="Panel controls">
+          <div className="details-panel-controls" role="group" aria-label="Sidebar controls">
             <button
               type="button"
-              className="panel-control"
+              className={`icon-button ${pinned ? "is-active" : ""}`}
               onClick={onTogglePinned}
               aria-pressed={pinned}
+              aria-label={pinLabel}
+              title={pinLabel}
             >
-              {pinned ? "Unpin" : "Pin"}
-            </button>
-            <button
-              type="button"
-              className="panel-control panel-control-primary"
-              onClick={onClose}
-              ref={closeButtonRef}
-            >
-              Close
+              <svg
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path
+                  d="M14 2c.6 0 1 .4 1 1v3.2l4.2 4.2c.3.3.4.8.2 1.2-.2.4-.6.6-1 .6H14v7c0 .4-.3.8-.7.9-.4.1-.9 0-1.1-.4l-3-4.5H5.6c-.4 0-.8-.2-1-.6-.2-.4-.1-.9.2-1.2L9 6.2V3c0-.6.4-1 1-1h4z"
+                  fill="currentColor"
+                />
+              </svg>
             </button>
           </div>
         </div>
 
         <div className="details-panel-body stack">
-          {panels.map((panel) => (
-            <section key={panel.key} className="details-section">
-              <h3 className="details-section-title">{panel.title}</h3>
-              <div className="details-section-body">{panel.body}</div>
-            </section>
-          ))}
+          {panels.length > 0 ? (
+            panels.map((panel) => (
+              <section key={panel.key} className="details-section">
+                <h3 className="details-section-title">{panel.title}</h3>
+                <div className="details-section-body">{panel.body}</div>
+              </section>
+            ))
+          ) : (
+            <div className="muted">Select an assistant answer and click Details to view metadata.</div>
+          )}
         </div>
-      </aside>
-    </>
+      </div>
+    </aside>
   );
 }
 
@@ -244,15 +251,16 @@ export default function HomePage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeDetailsIndex, setActiveDetailsIndex] = useState<number | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [detailsPinned, setDetailsPinned] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const detailsTriggerRef = useRef<HTMLElement | null>(null);
   const apiUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_URL,
     []
   );
+
+  const DETAILS_PINNED_STORAGE_KEY = "ask-about-piotr.detailsPinned";
 
   const activeDetailsResponse = useMemo(() => {
     if (activeDetailsIndex === null) {
@@ -261,15 +269,21 @@ export default function HomePage() {
     return messages[activeDetailsIndex]?.payload ?? null;
   }, [activeDetailsIndex, messages]);
 
-  const closeDetails = useCallback(() => {
-    setDetailsOpen(false);
-    window.requestAnimationFrame(() => {
-      detailsTriggerRef.current?.focus();
+  const togglePinned = useCallback(() => {
+    setDetailsPinned((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(DETAILS_PINNED_STORAGE_KEY, next ? "1" : "0");
+      } catch {
+        // Ignore persistence errors (e.g. private mode)
+      }
+      setDetailsExpanded(next);
+      return next;
     });
   }, []);
 
-  const togglePinned = useCallback(() => {
-    setDetailsPinned((prev) => !prev);
+  const toggleExpanded = useCallback(() => {
+    setDetailsExpanded((prev) => !prev);
   }, []);
 
   const resizeTextarea = () => {
@@ -295,35 +309,55 @@ export default function HomePage() {
   }, [messages]);
 
   useEffect(() => {
+    if (!detailsPinned) {
+      return;
+    }
+    const lastIndex = messages.length - 1;
+    if (lastIndex < 0) {
+      return;
+    }
+    const lastMessage = messages[lastIndex];
+    if (lastMessage?.role !== "assistant" || !lastMessage.payload) {
+      return;
+    }
+    setActiveDetailsIndex(lastIndex);
+    setDetailsExpanded(true);
+  }, [detailsPinned, messages]);
+
+  useEffect(() => {
     resizeTextarea();
   }, [question]);
 
   useEffect(() => {
-    if (!detailsOpen || detailsPinned) {
+    try {
+      const storedPinned = window.localStorage.getItem(DETAILS_PINNED_STORAGE_KEY);
+      const nextPinned = storedPinned === "1" || storedPinned === "true";
+      setDetailsPinned(nextPinned);
+      setDetailsExpanded(nextPinned);
+    } catch {
+      // Ignore persistence errors
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!detailsExpanded) {
       return;
     }
 
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") {
         return;
       }
       event.preventDefault();
-      closeDetails();
+      setDetailsExpanded(false);
     };
 
-    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", onKeyDown);
     return () => {
-      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keydown", onKeyDown);
     };
-  }, [closeDetails, detailsOpen, detailsPinned]);
-
-  useEffect(() => {
-    const shouldLockScroll = detailsOpen && !detailsPinned;
-    document.body.classList.toggle("details-overlay-open", shouldLockScroll);
-    return () => {
-      document.body.classList.remove("details-overlay-open");
-    };
-  }, [detailsOpen, detailsPinned]);
+  }, [detailsExpanded]);
 
   const submitQuestion = async () => {
     if (!question.trim()) {
@@ -384,97 +418,105 @@ export default function HomePage() {
   };
 
   const hasMessages = messages.length > 0;
-  const isPinnedLayout = detailsOpen && detailsPinned;
 
   return (
-    <main className={`app-main ${isPinnedLayout ? "details-pinned" : ""}`}>
-      <div className={`app-shell ${hasMessages ? "has-messages" : "empty"}`}>
-        <header className="stack">
-          <h1>Ask about Piotr</h1>
-          <p className="muted">
-            Ask a question about Piotr&apos;s experience. Responses are grounded in
-            curated knowledge cards with citations.
-          </p>
-        </header>
+    <main className="app-main">
+      <div className="app-layout">
+        <div className={`app-shell ${hasMessages ? "has-messages" : "empty"}`}>
+          <header className="stack">
+            <h1>Ask about Piotr</h1>
+            <p className="muted">
+              Ask a question about Piotr&apos;s experience. Responses are grounded in
+              curated knowledge cards with citations.
+            </p>
+          </header>
 
-        <section className={`chat-scroll stack ${hasMessages ? "" : "hidden"}`}>
-          {messages.map((message, index) => (
-            <div
-              key={`${message.role}-${index}`}
-              className={`chat-bubble ${message.role}`}
-            >
-              <div className="label">
-                {message.role === "user" ? "You" : "Assistant"}
-              </div>
-              {message.payload ? (
-                <div className="answer-view">
-                  <div className="answer-main">
-                    <div className="answer-prose">{message.payload.answer}</div>
-                  </div>
-
-                  <div className="answer-meta" role="group" aria-label="Answer metadata">
-                    <span
-                      className="pill pill-confidence"
-                      title={message.payload.confidence_reason ?? undefined}
-                    >
-                      Confidence: {message.payload.confidence}
-                    </span>
-                    {Array.isArray(message.payload.sources) &&
-                    message.payload.sources.length > 0 ? (
-                      <span className="meta-item">
-                        Sources: {message.payload.sources.length}
-                      </span>
-                    ) : null}
-                    {hasAnyDetails(message.payload) ? (
-                      <button
-                        type="button"
-                        className="meta-link"
-                        onClick={(event) => {
-                          detailsTriggerRef.current = event.currentTarget;
-                          setActiveDetailsIndex(index);
-                          setDetailsOpen(true);
-                        }}
-                      >
-                        Details
-                      </button>
-                    ) : null}
-                  </div>
+          <section className={`chat-scroll stack ${hasMessages ? "" : "hidden"}`}>
+            {messages.map((message, index) => (
+              <div
+                key={`${message.role}-${index}`}
+                className={`chat-bubble ${message.role} ${
+                  index === activeDetailsIndex ? "is-selected" : ""
+                }`}
+              >
+                <div className="label">
+                  {message.role === "user" ? "You" : "Assistant"}
                 </div>
-              ) : (
-                <div>{message.content}</div>
-              )}
+                {message.payload ? (
+                  <div className="answer-view">
+                    <div className="answer-main">
+                      <div className="answer-prose">{message.payload.answer}</div>
+                    </div>
+
+                    <div
+                      className="answer-meta"
+                      role="group"
+                      aria-label="Answer metadata"
+                    >
+                      <span
+                        className="pill pill-confidence"
+                        title={message.payload.confidence_reason ?? undefined}
+                      >
+                        Confidence: {message.payload.confidence}
+                      </span>
+                      {Array.isArray(message.payload.sources) &&
+                      message.payload.sources.length > 0 ? (
+                        <span className="meta-item">
+                          Sources: {message.payload.sources.length}
+                        </span>
+                      ) : null}
+                      {hasAnyDetails(message.payload) ? (
+                        <button
+                          type="button"
+                          className="meta-link"
+                          onClick={() => {
+                            setActiveDetailsIndex(index);
+                            setDetailsExpanded(true);
+                          }}
+                        >
+                          Details
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : (
+                  <div>{message.content}</div>
+                )}
+              </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </section>
+
+          <section
+            className={`panel composer ${hasMessages ? "" : "composer-empty"}`}
+          >
+            <div className="input-row">
+              <label className="label" htmlFor="question">
+                Your question
+              </label>
+              <textarea
+                id="question"
+                placeholder="e.g. What did you build for Decreen?"
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                onKeyDown={handleKeyDown}
+                ref={textareaRef}
+              />
+              <button onClick={submitQuestion} disabled={loading}>
+                {loading ? "Asking..." : "Ask"}
+              </button>
             </div>
-          ))}
-          <div ref={messagesEndRef} />
-        </section>
+          </section>
+        </div>
 
-        <section className={`panel composer ${hasMessages ? "" : "composer-empty"}`}>
-          <div className="input-row">
-            <label className="label" htmlFor="question">
-              Your question
-            </label>
-            <textarea
-              id="question"
-              placeholder="e.g. What did you build for Decreen?"
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              onKeyDown={handleKeyDown}
-              ref={textareaRef}
-            />
-            <button onClick={submitQuestion} disabled={loading}>
-              {loading ? "Asking..." : "Ask"}
-            </button>
-          </div>
-        </section>
+        <AnswerDetailsPanel
+          response={activeDetailsResponse}
+          expanded={detailsExpanded}
+          pinned={detailsPinned}
+          onToggleExpanded={toggleExpanded}
+          onTogglePinned={togglePinned}
+        />
       </div>
-
-      <AnswerDetailsPanel
-        response={activeDetailsResponse}
-        open={detailsOpen}
-        pinned={detailsPinned}
-        onClose={closeDetails}
-        onTogglePinned={togglePinned}
-      />
     </main>
   );
 }
