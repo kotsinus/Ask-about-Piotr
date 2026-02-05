@@ -50,6 +50,132 @@ type Message = {
 
 const DEFAULT_API_URL = "http://localhost:8000";
 
+const normalizePreviewText = (value: string, maxChars = 120) => {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+  if (normalized.length <= maxChars) {
+    return normalized;
+  }
+  return `${normalized.slice(0, maxChars).trimEnd()}…`;
+};
+
+const scrollToId = (id: string) => {
+  const element = document.getElementById(id);
+  element?.scrollIntoView({ behavior: "smooth", block: "start" });
+};
+
+function AnswerDetailsAccordion({
+  response,
+  detailsId
+}: {
+  response: ChatResponse;
+  detailsId: string;
+}) {
+  const why = response.why_this_matters?.trim();
+  const evidence = response.evidence?.filter((item) => item.snippet?.trim()) ?? [];
+  const sources = response.sources?.filter((item) => item.card_id?.trim()) ?? [];
+
+  const panels: Array<
+    | {
+        key: "why";
+        title: string;
+        preview: string;
+        body: React.ReactNode;
+      }
+    | {
+        key: "evidence";
+        title: string;
+        preview: string;
+        body: React.ReactNode;
+      }
+    | {
+        key: "sources";
+        title: string;
+        preview: string;
+        body: React.ReactNode;
+      }
+  > = [];
+
+  if (why) {
+    panels.push({
+      key: "why",
+      title: "Why this matters",
+      preview: normalizePreviewText(why),
+      body: <div className="rich-text">{why}</div>
+    });
+  }
+
+  if (evidence.length > 0) {
+    panels.push({
+      key: "evidence",
+      title: "Evidence",
+      preview: normalizePreviewText(evidence[0]?.snippet ?? ""),
+      body: (
+        <ol className="evidence-list">
+          {evidence.map((item, index) => (
+            <li key={`${item.card_id}-${index}`}>
+              <div className="rich-text">{item.snippet}</div>
+              <div className="item-meta muted">Card: {item.card_id}</div>
+            </li>
+          ))}
+        </ol>
+      )
+    });
+  }
+
+  if (sources.length > 0) {
+    panels.push({
+      key: "sources",
+      title: "Sources",
+      preview: normalizePreviewText(
+        `${sources[0]?.card_id ?? ""}${sources[0]?.section ? ` — ${sources[0].section}` : ""}`
+      ),
+      body: (
+        <ol className="sources-list">
+          {sources.map((item, index) => (
+            <li key={`${item.card_id}-${item.section}-${index}`}>
+              <code>{item.card_id}</code>
+              {item.section ? <span className="muted"> — {item.section}</span> : null}
+            </li>
+          ))}
+        </ol>
+      )
+    });
+  }
+
+  if (panels.length === 0) {
+    return null;
+  }
+
+  return (
+    <div id={detailsId} className="answer-details stack">
+      <div className="details-heading">Answer details</div>
+      {panels.map((panel) => (
+        <details key={panel.key} className="accordion-panel">
+          <summary>
+            <span className="summary-title">{panel.title}</span>
+            {panel.preview ? (
+              <span className="summary-preview" title={panel.preview}>
+                {panel.preview}
+              </span>
+            ) : null}
+          </summary>
+          <div className="panel-body">{panel.body}</div>
+        </details>
+      ))}
+    </div>
+  );
+}
+
+const hasAnyDetails = (response: ChatResponse) => {
+  const hasWhy = Boolean(response.why_this_matters?.trim());
+  const hasEvidence = (response.evidence?.length ?? 0) > 0;
+  const hasSources = (response.sources?.length ?? 0) > 0;
+  return hasWhy || hasEvidence || hasSources;
+};
+
 export default function HomePage() {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -167,8 +293,40 @@ export default function HomePage() {
               {message.role === "user" ? "You" : "Assistant"}
             </div>
             {message.payload ? (
-              <div className="answer-block">
-                <pre>{message.payload.formatted_answer}</pre>
+              <div className="answer-view">
+                <div className="answer-main">
+                  <div className="answer-prose">{message.payload.answer}</div>
+                </div>
+
+                <div className="answer-meta" role="group" aria-label="Answer metadata">
+                  <span
+                    className="pill pill-confidence"
+                    title={message.payload.confidence_reason ?? undefined}
+                  >
+                    Confidence: {message.payload.confidence}
+                  </span>
+                  {Array.isArray(message.payload.sources) &&
+                  message.payload.sources.length > 0 ? (
+                    <span className="meta-item">Sources: {message.payload.sources.length}</span>
+                  ) : null}
+                  {hasAnyDetails(message.payload) ? (
+                    <a
+                      className="meta-link"
+                      href={`#details-${index}`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        scrollToId(`details-${index}`);
+                      }}
+                    >
+                      Details
+                    </a>
+                  ) : null}
+                </div>
+
+                <AnswerDetailsAccordion
+                  response={message.payload}
+                  detailsId={`details-${index}`}
+                />
               </div>
             ) : (
               <div>{message.content}</div>
