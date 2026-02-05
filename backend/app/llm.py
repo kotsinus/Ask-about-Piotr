@@ -156,6 +156,10 @@ def synthesize_answer(
         "You answer only using the provided evidence. "
         "Conversation context may be provided only to help interpret the question; "
         "it is NOT evidence and must not override or add to the evidence. "
+        "Be more verbose than a one-liner: explain the direct answer and add grounded "
+        "supporting details from the evidence. "
+        "If the question is yes/no, start with 'Yes' or 'No' and then elaborate using evidence. "
+        "Prefer 2-5 sentences; bullet lists are allowed when helpful (max 4 bullets). "
         "If evidence is insufficient, respond with the exact refusal message. "
         "If you use evidence, you MUST list which evidence items were used via their indices. "
         'Return JSON: {"answer", "why_this_matters", "confidence", '
@@ -241,17 +245,32 @@ def _split_sentences(text: str) -> list[str]:
 
 
 def _fallback_synthesis(chunks: list[RetrievedChunk]) -> SynthesisResult:
+    # Deterministic synthesis used when no LLM is configured.
+    #
+    # Goal: be reasonably verbose while staying strictly grounded.
     sentences: list[str] = []
     used_chunk_indices: list[int] = []
+    max_sentences = 10
+    max_sentences_per_chunk = 2
+
     for idx, chunk in enumerate(chunks):
+        chunk_sentences = []
         for sentence in _split_sentences(chunk.content):
             cleaned = sentence.strip()
             if cleaned:
-                sentences.append(cleaned)
-                used_chunk_indices.append(idx)
+                chunk_sentences.append(cleaned)
+            if len(chunk_sentences) >= max_sentences_per_chunk:
                 break
-        if len(sentences) >= 6:
+
+        if chunk_sentences:
+            sentences.extend(chunk_sentences)
+            if idx not in used_chunk_indices:
+                used_chunk_indices.append(idx)
+
+        if len(sentences) >= max_sentences:
             break
+
+    sentences = sentences[:max_sentences]
 
     answer = " ".join(sentences) if sentences else chunks[0].content.strip()
     if not used_chunk_indices and chunks:
