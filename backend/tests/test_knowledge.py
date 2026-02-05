@@ -22,8 +22,8 @@ from pathlib import Path
 import pytest
 
 from app.knowledge import (
-    KnowledgeCard,
     REQUIRED_SECTIONS,
+    KnowledgeCard,
     chunk_cards,
     load_cards,
 )
@@ -109,7 +109,9 @@ def test_load_cards_extracts_source_url_from_links_section(
     cards_dir = knowledge_dir / "cards"
     cards_dir.mkdir(parents=True)
 
-    (cards_dir / "card.md").write_text(_card_text(links_line=links_line), encoding="utf-8")
+    (cards_dir / "card.md").write_text(
+        _card_text(links_line=links_line), encoding="utf-8"
+    )
     cards = load_cards(knowledge_dir)
     assert cards[0].source_url == expected
 
@@ -139,4 +141,3 @@ def test_chunk_cards_emits_only_non_empty_required_sections() -> None:
     assert all(chunk.card_id == "c1" for chunk in chunks)
     assert all(chunk.category == "project" for chunk in chunks)
     assert all(chunk.source_url == "https://example.com" for chunk in chunks)
-

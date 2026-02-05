@@ -1,0 +1,191 @@
+# Copyright 2026 Piotr Synak
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Purpose:
+# Unit tests for LLM helpers focused on parsing and fallbacks (no network).
+
+from __future__ import annotations
+
+import json
+from types import SimpleNamespace
+
+import pytest
+
+from app import llm
+from app.retrieval import RetrievedChunk
+from app.schemas import Confidence
+
+
+class _FakeOpenAI:
+    def __init__(self, *, content: str, capture: dict | None = None) -> None:
+        self._content = content
+        self._capture = capture
+
+        class _Completions:
+            def __init__(self, outer: _FakeOpenAI) -> None:
+                self._outer = outer
+
+            def create(self, **kwargs):
+                if self._outer._capture is not None:
+                    self._outer._capture["kwargs"] = kwargs
+
+                class _Msg:
+                    def __init__(self, content: str) -> None:
+                        self.content = content
+
+                class _Choice:
+                    def __init__(self, content: str) -> None:
+                        self.message = _Msg(content)
+
+                class _Resp:
+                    def __init__(self, content: str) -> None:
+                        self.choices = [_Choice(content)]
+
+                return _Resp(self._outer._content)
+
+        class _Chat:
+            def __init__(self, outer: _FakeOpenAI) -> None:
+                self.completions = _Completions(outer)
+
+        self.chat = _Chat(self)
+
+
+def _settings(**overrides):
+    base = SimpleNamespace(
+        openai_api_key="test-key",
+        router_model="router",
+        synthesis_model="synth",
+        embeddings_model=None,
+    )
+    for k, v in overrides.items():
+        setattr(base, k, v)
+    return base
+
+
+def test_synthesize_answer_includes_context_and_topic_in_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    capture: dict[str, object] = {}
+    payload = {
+        "answer": "Some sufficiently long answer that is not a refusal.",
+        "why_this_matters": "Because.",
+        "confidence": "Low",
+        "confidence_reason": "Limited evidence.",
+        "used_chunk_indices": ["0"],
+    }
+    monkeypatch.setattr(llm, "get_settings", lambda: _settings())
+    monkeypatch.setattr(
+        llm,
+        "OpenAI",
+        lambda api_key: _FakeOpenAI(content=json.dumps(payload), capture=capture),
+    )
+
+    chunks = [
+        RetrievedChunk(
+            card_id="c1",
+            category="cat",
+            section="Overview",
+            source_url=None,
+            content="Evidence sentence one. Evidence sentence two.",
+            distance=0.1,
+        )
+    ]
+
+    result = llm.synthesize_answer(
+        "q",
+        chunks,
+        conversation_topic="topic",
+        conversation_messages=[{"role": "user", "content": "hi"}],
+    )
+    assert result.confidence == Confidence.low
+    assert result.confidence_reason == "Limited evidence."
+
+    user_msg = capture["kwargs"]["messages"][1]["content"]  # type: ignore[index]
+    assert "Conversation context" in user_msg
+    assert "Conversation topic: topic" in user_msg
+
+
+def test_synthesize_answer_falls_back_when_answer_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {
+        "answer": " ",
+        "why_this_matters": "",
+        "confidence": "High",
+        "confidence_reason": None,
+        "used_chunk_indices": [],
+    }
+    monkeypatch.setattr(llm, "get_settings", lambda: _settings())
+    monkeypatch.setattr(
+        llm, "OpenAI", lambda api_key: _FakeOpenAI(content=json.dumps(payload))
+    )
+
+    chunks = [
+        RetrievedChunk(
+            card_id="c1",
+            category="cat",
+            section="Overview",
+            source_url=None,
+            content="One. Two.",
+            distance=0.1,
+        )
+    ]
+    result = llm.synthesize_answer("q", chunks)
+    assert result.answer
+    assert result.used_chunk_indices == [0]
+
+
+def test_synthesize_answer_indices_non_list_falls_back_to_all(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {
+        "answer": "Some sufficiently long answer that is not a refusal.",
+        "why_this_matters": "",
+        "confidence": "Medium",
+        "confidence_reason": "ignored",
+        "used_chunk_indices": "not-a-list",
+    }
+    monkeypatch.setattr(llm, "get_settings", lambda: _settings())
+    monkeypatch.setattr(
+        llm, "OpenAI", lambda api_key: _FakeOpenAI(content=json.dumps(payload))
+    )
+
+    chunks = [
+        RetrievedChunk(
+            card_id="c1",
+            category="cat",
+            section="Overview",
+            source_url=None,
+            content="One. Two.",
+            distance=0.1,
+        ),
+        RetrievedChunk(
+            card_id="c2",
+            category="cat",
+            section="Details",
+            source_url=None,
+            content="Three. Four.",
+            distance=0.2,
+        ),
+    ]
+    result = llm.synthesize_answer("q", chunks)
+    assert result.used_chunk_indices == [0, 1]
+
+
+def test_rewrite_question_returns_original_on_bad_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(llm, "get_settings", lambda: _settings())
+    monkeypatch.setattr(llm, "OpenAI", lambda api_key: _FakeOpenAI(content="{bad json"))
+    assert llm.rewrite_question("q", messages=[{"role": "user", "content": "x"}]) == "q"

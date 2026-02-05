@@ -18,7 +18,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from types import SimpleNamespace
 
 import psycopg
 import pytest
@@ -132,4 +131,3 @@ def test_ensure_interaction_logs_table_exists_calls_create_all(
 
     tables = called["kwargs"]["tables"]
     assert tables == [InteractionLogModel.__table__]
-

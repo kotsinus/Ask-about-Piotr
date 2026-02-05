@@ -29,7 +29,9 @@ def test_get_settings_requires_database_url(monkeypatch: pytest.MonkeyPatch) -> 
         get_settings()
 
 
-def test_get_settings_parses_prompt_cache_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_settings_parses_prompt_cache_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://x")
 
     monkeypatch.setenv("PROMPT_CACHE_ENABLED", "yes")
@@ -43,7 +45,9 @@ def test_get_settings_parses_prompt_cache_enabled(monkeypatch: pytest.MonkeyPatc
     assert get_settings().prompt_cache_enabled is False
 
 
-def test_get_settings_parses_csv_and_geoip_bool(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_settings_parses_csv_and_geoip_bool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql://x")
     monkeypatch.setenv("TRUSTED_PROXY_CIDRS", " 203.0.113.0/24, ,198.51.100.0/24 ")
     monkeypatch.setenv("GEOIP_ENABLED", "yes")
@@ -83,4 +87,3 @@ def test_to_sqlalchemy_url_normalizes_psycopg_driver() -> None:
         == "postgresql+psycopg://user:pass@localhost:5432/db"
     )
     assert _to_sqlalchemy_url("sqlite:///file.db") == "sqlite:///file.db"
-

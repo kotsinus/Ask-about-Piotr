@@ -80,11 +80,12 @@ async def test_openai_exception_handlers(
 ) -> None:
     # /chat calls rewrite_question() before any try/except, so raising here should
     # be handled by the FastAPI exception handlers.
-    monkeypatch.setattr("app.main.rewrite_question", lambda *a, **k: (_ for _ in ()).throw(exc))
+    monkeypatch.setattr(
+        "app.main.rewrite_question", lambda *a, **k: (_ for _ in ()).throw(exc)
+    )
 
     response = await asgi_client.post("/chat", json={"question": "Q"})
     assert response.status_code == expected_status
     payload = response.json()
     assert payload.get("type") == expected_type
     assert payload.get("detail")
-

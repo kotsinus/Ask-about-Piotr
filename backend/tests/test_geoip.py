@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from types import SimpleNamespace
 from typing import Any
 
 import httpx
@@ -99,7 +98,9 @@ def test_lookup_country_cache_hit_and_ttl(monkeypatch: pytest.MonkeyPatch) -> No
     assert calls["get"] == 2
 
 
-def test_lookup_country_parses_application_json(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_lookup_country_parses_application_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = _settings(geoip_enabled=True)
     monkeypatch.setattr("app.geoip.time.monotonic", lambda: 1.0)
 
@@ -114,7 +115,9 @@ def test_lookup_country_parses_application_json(monkeypatch: pytest.MonkeyPatch)
     assert lookup_country("203.0.113.77", settings) == "DE"
 
 
-def test_lookup_country_accepts_country_code_fallback_field(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_lookup_country_accepts_country_code_fallback_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = _settings(geoip_enabled=True)
     monkeypatch.setattr("app.geoip.time.monotonic", lambda: 1.0)
 
@@ -129,7 +132,9 @@ def test_lookup_country_accepts_country_code_fallback_field(monkeypatch: pytest.
     assert lookup_country("203.0.113.88", settings) == "FR"
 
 
-def test_lookup_country_negative_caches_invalid_values(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_lookup_country_negative_caches_invalid_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = _settings(geoip_enabled=True)
 
     now = {"t": 10.0}
@@ -154,7 +159,9 @@ def test_lookup_country_negative_caches_invalid_values(monkeypatch: pytest.Monke
     assert calls["get"] == 2
 
 
-def test_lookup_country_handles_timeout_and_json_decode(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_lookup_country_handles_timeout_and_json_decode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     settings = _settings(geoip_enabled=True)
     monkeypatch.setattr("app.geoip.time.monotonic", lambda: 1.0)
 
@@ -185,3 +192,23 @@ def test_lookup_country_handles_http_errors(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setattr("app.geoip.httpx.Client.get", _http_error)
     assert lookup_country("192.0.2.3", settings) is None
 
+
+def test_lookup_country_uses_custom_url_template_and_provider_fallback_and_handles_unexpected_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings(
+        geoip_enabled=True,
+        geoip_provider="unknown-provider",
+        geoip_url="https://example.test/geo/{ip}",
+    )
+    monkeypatch.setattr("app.geoip.time.monotonic", lambda: 1.0)
+
+    captured = {"url": None}
+
+    def _boom(self, url: str, **kwargs):
+        captured["url"] = url
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr("app.geoip.httpx.Client.get", _boom)
+    assert lookup_country("203.0.113.1", settings) is None
+    assert captured["url"] == "https://example.test/geo/203.0.113.1"

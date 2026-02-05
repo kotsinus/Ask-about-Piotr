@@ -59,12 +59,16 @@ def _chat_response(content: str):
     )
 
 
-def test_rewrite_question_returns_original_when_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rewrite_question_returns_original_when_no_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     assert rewrite_question("Q", messages=[{"role": "user", "content": "x"}]) == "Q"
 
 
-def test_rewrite_question_uses_openai_when_key_present(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rewrite_question_uses_openai_when_key_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     def _create_impl(*, kind: str, **kwargs):
@@ -83,7 +87,9 @@ def test_rewrite_question_uses_openai_when_key_present(monkeypatch: pytest.Monke
     assert out == "Standalone?"
 
 
-def test_rewrite_question_handles_non_json_response(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_rewrite_question_handles_non_json_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     monkeypatch.setattr(
@@ -94,10 +100,7 @@ def test_rewrite_question_handles_non_json_response(monkeypatch: pytest.MonkeyPa
         ),
     )
 
-    assert (
-        rewrite_question("Q", messages=[{"role": "user", "content": "x"}])
-        == "Q"
-    )
+    assert rewrite_question("Q", messages=[{"role": "user", "content": "x"}]) == "Q"
 
 
 def test_route_category_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -172,7 +175,10 @@ def test_synthesize_answer_falls_back_to_all_indices_when_missing(
 
     result = synthesize_answer("Q", chunks)
     assert result.answer == "An answer grounded in evidence."
-    assert result.why_this_matters == "This answer is grounded in retrieved knowledge cards."
+    assert (
+        result.why_this_matters
+        == "This answer is grounded in retrieved knowledge cards."
+    )
     assert result.confidence == Confidence.low
     assert result.confidence_reason == "Because reasons."
     assert result.used_chunk_indices == [0, 1]
@@ -245,4 +251,3 @@ def test_openai_embedding_provider_batches_and_filters_empty_texts(
 
     with pytest.raises(RuntimeError, match="No valid text provided"):
         provider.embed([" ", "\n\n"])
-

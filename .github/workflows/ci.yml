@@ -51,7 +51,7 @@ jobs:
           python -m pytest \
             --cov=app \
             --cov-report=term-missing:skip-covered \
-            --cov-fail-under=85
+            --cov-fail-under=95
 
   frontend:
     runs-on: ubuntu-latest
