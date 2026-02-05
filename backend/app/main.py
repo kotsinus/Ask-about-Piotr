@@ -61,6 +61,17 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Ask about Piotr API", version="0.1.0")
 
 SESSION_COOKIE_NAME = "ask_piotr_session_id"
+SESSION_ID_HEADER = "x-session-id"
+
+
+def _is_uuid(value: str | None) -> bool:
+    if not value:
+        return False
+    try:
+        uuid.UUID(value)
+        return True
+    except ValueError:
+        return False
 
 app.add_middleware(
     CORSMiddleware,
@@ -80,7 +91,15 @@ async def request_logging_middleware(request: Request, call_next):
     # - Stored as an HttpOnly cookie so the browser can keep a stable session.
     # - Not derived from IP.
     existing_session_id = request.cookies.get(SESSION_COOKIE_NAME)
-    session_id = existing_session_id or str(uuid.uuid4())
+    header_session_id = request.headers.get(SESSION_ID_HEADER)
+
+    session_id = (
+        existing_session_id
+        if _is_uuid(existing_session_id)
+        else header_session_id
+        if _is_uuid(header_session_id)
+        else str(uuid.uuid4())
+    )
     request.state.session_id = session_id
 
     start = time.perf_counter()
@@ -244,6 +263,14 @@ def chat(
     request_at = datetime.now(UTC)
     start = time.perf_counter()
 
+    # If the client doesn't provide a conversation id, create one and return it
+    # in the response context so the client can persist and reuse it.
+    conversation_id = (
+        request.context.conversation_id
+        if request.context and request.context.conversation_id
+        else str(uuid.uuid4())
+    )
+
     standalone_question = rewrite_question(
         request.question,
         [message.model_dump() for message in request.messages]
@@ -302,9 +329,7 @@ def chat(
         confidence=synthesis.confidence,
         confidence_reason=synthesis.confidence_reason,
         context=ConversationContext(
-            conversation_id=request.context.conversation_id
-            if request.context
-            else None,
+            conversation_id=conversation_id,
             last_topic=resolved_topic,
         ),
         formatted_answer="",
@@ -333,9 +358,6 @@ def chat(
 
         request_id = get_request_id() or ""
         session_id = getattr(http_request.state, "session_id", None)
-        conversation_id = (
-            request.context.conversation_id if request.context else None
-        )
         write_interaction_log(
             InteractionLog(
                 request_id=request_id,

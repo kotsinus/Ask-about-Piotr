@@ -40,6 +40,10 @@ type ChatResponse = {
   confidence: string;
   confidence_reason?: string | null;
   formatted_answer: string;
+  context?: {
+    conversation_id?: string | null;
+    last_topic?: string | null;
+  };
 };
 
 type Message = {
@@ -244,6 +248,8 @@ export default function HomePage() {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [lastTopic, setLastTopic] = useState<string | null>(null);
   const [activeDetailsIndex, setActiveDetailsIndex] = useState<number | null>(null);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -349,7 +355,15 @@ export default function HomePage() {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ question: currentQuestion, messages: history })
+        credentials: "include",
+        body: JSON.stringify({
+          question: currentQuestion,
+          messages: history,
+          context: {
+            conversation_id: conversationId,
+            last_topic: lastTopic
+          }
+        })
       });
 
       if (!response.ok) {
@@ -358,6 +372,12 @@ export default function HomePage() {
       }
 
       const data = (await response.json()) as ChatResponse;
+      if (data.context?.conversation_id) {
+        setConversationId(data.context.conversation_id);
+      }
+      if (data.context?.last_topic) {
+        setLastTopic(data.context.last_topic);
+      }
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: data.formatted_answer, payload: data }

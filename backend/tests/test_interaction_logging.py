@@ -87,9 +87,14 @@ async def test_chat_triggers_db_write_and_persists_only_anonymized_ip(
 
     assert row.request_id == request_id
     assert row.session_id
-    assert row.conversation_id is None
+    assert row.conversation_id
     assert row.question == "What did you build?"
     assert row.answer == payload["answer"]
+
+    # Backend generates conversation_id if not provided; it should be returned
+    # to the client and persisted in the log row.
+    assert payload.get("context", {}).get("conversation_id")
+    assert row.conversation_id == payload["context"]["conversation_id"]
     assert isinstance(row.request_at, datetime)
     assert isinstance(row.response_at, datetime)
     assert row.response_at >= row.request_at
