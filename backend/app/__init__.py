@@ -19,4 +19,3 @@
 # Keep this file minimal to avoid side effects during imports.
 
 """Backend application package."""
-

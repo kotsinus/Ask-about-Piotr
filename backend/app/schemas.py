@@ -20,13 +20,13 @@
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import List, Literal, Optional
+from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 
-class Category(str, Enum):
+class Category(StrEnum):
     hands_on_engineering = "Hands-on engineering"
     architecture_and_system_design = "Architecture and system design"
     ai_and_ml_practice = "AI and ML practice"
@@ -35,7 +35,7 @@ class Category(str, Enum):
     career_fit_and_role_alignment = "Career fit and role alignment"
 
 
-class Confidence(str, Enum):
+class Confidence(StrEnum):
     high = "High"
     medium = "Medium"
     low = "Low"
@@ -52,24 +52,22 @@ class SourceRef(BaseModel):
 
 
 class ConversationContext(BaseModel):
-    conversation_id: Optional[str] = Field(
+    conversation_id: str | None = Field(
         None, description="Client-provided conversation identifier."
     )
-    last_topic: Optional[str] = Field(
+    last_topic: str | None = Field(
         None, description="Last resolved topic used for follow-up questions."
     )
 
 
 class ChatMessage(BaseModel):
-    role: Literal["user", "assistant"] = Field(
-        ..., description="Message author role."
-    )
+    role: Literal["user", "assistant"] = Field(..., description="Message author role.")
     content: str = Field(..., min_length=1, description="Message content.")
 
 
 class ChatRequest(BaseModel):
     question: str = Field(..., min_length=1, description="User question.")
-    messages: Optional[List[ChatMessage]] = Field(
+    messages: list[ChatMessage] | None = Field(
         None,
         description=(
             "Optional conversation history (typically last N turns). "
@@ -77,7 +75,7 @@ class ChatRequest(BaseModel):
             "standalone question before retrieval."
         ),
     )
-    context: Optional[ConversationContext] = Field(
+    context: ConversationContext | None = Field(
         None,
         description="Optional conversation context for follow-up questions.",
     )
@@ -87,13 +85,12 @@ class ChatResponse(BaseModel):
     category: Category
     answer: str
     why_this_matters: str
-    evidence: List[EvidenceItem]
-    sources: List[SourceRef]
+    evidence: list[EvidenceItem]
+    sources: list[SourceRef]
     confidence: Confidence
-    confidence_reason: Optional[str] = None
-    context: Optional[ConversationContext] = None
+    confidence_reason: str | None = None
+    context: ConversationContext | None = None
     formatted_answer: str = Field(
         ...,
         description="User-facing answer formatted per the mandatory template.",
     )
-

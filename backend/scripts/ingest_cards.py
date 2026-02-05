@@ -20,9 +20,9 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-import sys
 import os
+import sys
+from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
 import psycopg
@@ -43,6 +43,7 @@ def _load_env_file(path: Path) -> None:
             continue
         key, value = stripped.split("=", 1)
         os.environ.setdefault(key.strip(), value.strip())
+
 
 def _normalize_database_url(database_url: str) -> str:
     parsed = urlparse(database_url)
@@ -136,4 +137,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

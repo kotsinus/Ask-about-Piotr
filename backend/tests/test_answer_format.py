@@ -17,8 +17,6 @@
 
 from __future__ import annotations
 
-from typing import List
-
 import httpx
 import pytest
 
@@ -30,14 +28,17 @@ from app.retrieval import RetrievedChunk
 async def test_no_evidence_response(monkeypatch: pytest.MonkeyPatch) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+
         def _stub_retrieve(
             question: str, limit: int = 5, conversation_topic: str | None = None
-        ) -> List[RetrievedChunk]:
+        ) -> list[RetrievedChunk]:
             return []
 
         monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
 
-        response = await client.post("/chat", json={"question": "What is Piotr's role?"})
+        response = await client.post(
+            "/chat", json={"question": "What is Piotr's role?"}
+        )
         assert response.status_code == 200
         payload = response.json()
 
@@ -56,9 +57,10 @@ async def test_formatted_answer_contains_sections(
 ) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+
         def _stub_retrieve(
             question: str, limit: int = 5, conversation_topic: str | None = None
-        ) -> List[RetrievedChunk]:
+        ) -> list[RetrievedChunk]:
             return [
                 RetrievedChunk(
                     card_id="sample",
@@ -86,12 +88,15 @@ async def test_formatted_answer_contains_sections(
 
 
 @pytest.mark.anyio
-async def test_followup_question_uses_history_rewrite(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_followup_question_uses_history_rewrite(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Ambiguous follow-up should be rewritten into a standalone question before retrieval."""
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        def _stub_rewrite(question: str, messages: List[dict] | None = None) -> str:
+
+        def _stub_rewrite(question: str, messages: list[dict] | None = None) -> str:
             # Simulate an LLM rewrite resolving the follow-up "In what languages?"
             # using prior context about programming.
             if question.strip().lower() == "in what languages?":
@@ -100,7 +105,7 @@ async def test_followup_question_uses_history_rewrite(monkeypatch: pytest.Monkey
 
         def _stub_retrieve(
             question: str, limit: int = 5, conversation_topic: str | None = None
-        ) -> List[RetrievedChunk]:
+        ) -> list[RetrievedChunk]:
             if "program" in question.lower():
                 return [
                     RetrievedChunk(
@@ -140,4 +145,3 @@ async def test_followup_question_uses_history_rewrite(monkeypatch: pytest.Monkey
         assert "Python" in payload["answer"]
         assert "TypeScript" in payload["answer"]
         assert "Polish" not in payload["answer"]
-

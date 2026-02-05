@@ -42,8 +42,6 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
-
 import psycopg
 from pgvector.psycopg import register_vector
 from pydantic import BaseModel
@@ -61,8 +59,8 @@ class RetrievedChunk(BaseModel):
 
 
 def retrieve(
-    question: str, limit: int = 25, conversation_topic: Optional[str] = None
-) -> List[RetrievedChunk]:
+    question: str, limit: int = 25, conversation_topic: str | None = None
+) -> list[RetrievedChunk]:
     """Retrieve relevant chunks for a question using pgvector."""
 
     settings = get_settings()
@@ -199,7 +197,10 @@ def retrieve(
             continue
 
         section_norm = _norm_section(row[2])
-        if card_has_substantive.get(card_id, False) and section_norm in low_signal_sections:
+        if (
+            card_has_substantive.get(card_id, False)
+            and section_norm in low_signal_sections
+        ):
             deferred_low_signal.append(row)
             continue
 
@@ -243,4 +244,3 @@ def retrieve(
         )
         for row in filtered
     ]
-

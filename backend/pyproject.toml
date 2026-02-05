@@ -1,0 +1,23 @@
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+extend-exclude = [
+  ".venv",
+  ".pytest_cache",
+]
+
+[tool.ruff.lint]
+select = [
+  "E",  # pycodestyle errors
+  "F",  # pyflakes
+  "I",  # isort
+  "UP", # pyupgrade
+]
+ignore = [
+  "E501", # line length (handled pragmatically; enable later if desired)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/ingest_cards.py" = ["E402"]
+

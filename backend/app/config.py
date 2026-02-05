@@ -63,4 +63,3 @@ def get_settings() -> Settings:
         synthesis_model=synthesis_model,
         prompt_cache_enabled=prompt_cache_enabled,
     )
-

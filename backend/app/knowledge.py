@@ -20,10 +20,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List
-
 
 REQUIRED_SECTIONS = [
     "Title",
@@ -43,7 +42,7 @@ class KnowledgeCard:
     card_id: str
     title: str
     category: str
-    sections: Dict[str, str]
+    sections: dict[str, str]
     source_url: str | None
 
 
@@ -56,7 +55,7 @@ class KnowledgeChunk:
     content: str
 
 
-def load_cards(knowledge_dir: Path) -> List[KnowledgeCard]:
+def load_cards(knowledge_dir: Path) -> list[KnowledgeCard]:
     """Load knowledge cards from a directory.
 
     Only Markdown files are processed. README.md is ignored.
@@ -65,30 +64,26 @@ def load_cards(knowledge_dir: Path) -> List[KnowledgeCard]:
     if not knowledge_dir.exists():
         raise FileNotFoundError(f"Knowledge directory not found: {knowledge_dir}")
 
-    cards: List[KnowledgeCard] = []
+    cards: list[KnowledgeCard] = []
     for path in _iter_card_files(knowledge_dir):
         cards.append(_parse_card(path))
     return cards
 
 
-def _iter_card_files(knowledge_dir: Path) -> List[Path]:
+def _iter_card_files(knowledge_dir: Path) -> list[Path]:
     cards_dir = knowledge_dir / "cards"
     if not cards_dir.exists():
         raise FileNotFoundError(f"Cards directory not found: {cards_dir}")
 
     candidates = list(cards_dir.glob("*.md"))
 
-    return [
-        path
-        for path in sorted(candidates)
-        if path.name.lower() != "readme.md"
-    ]
+    return [path for path in sorted(candidates) if path.name.lower() != "readme.md"]
 
 
-def chunk_cards(cards: Iterable[KnowledgeCard]) -> List[KnowledgeChunk]:
+def chunk_cards(cards: Iterable[KnowledgeCard]) -> list[KnowledgeChunk]:
     """Convert cards into section-level chunks with required metadata."""
 
-    chunks: List[KnowledgeChunk] = []
+    chunks: list[KnowledgeChunk] = []
     for card in cards:
         for section in REQUIRED_SECTIONS:
             content = card.sections.get(section, "").strip()
@@ -127,10 +122,10 @@ def _parse_card(path: Path) -> KnowledgeCard:
     )
 
 
-def _split_sections(text: str, filename: str) -> Dict[str, str]:
-    sections: Dict[str, str] = {}
+def _split_sections(text: str, filename: str) -> dict[str, str]:
+    sections: dict[str, str] = {}
     current_heading: str | None = None
-    buffer: List[str] = []
+    buffer: list[str] = []
 
     for line in text.splitlines():
         heading = _parse_heading(line)
@@ -174,4 +169,3 @@ def _extract_source_url(links_section: str) -> str | None:
             candidate = candidate[1:].strip()
         return candidate
     return None
-

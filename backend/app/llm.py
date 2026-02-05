@@ -20,10 +20,9 @@
 
 from __future__ import annotations
 
-import re
 import json
+import re
 from dataclasses import dataclass
-from typing import List, Optional
 
 from openai import OpenAI
 
@@ -32,7 +31,7 @@ from app.retrieval import RetrievedChunk
 from app.schemas import Category, Confidence
 
 
-def rewrite_question(question: str, messages: Optional[List[dict]] = None) -> str:
+def rewrite_question(question: str, messages: list[dict] | None = None) -> str:
     """Rewrite a potentially ambiguous follow-up question into a standalone question.
 
     - Preserves user intent and meaning.
@@ -58,13 +57,11 @@ def rewrite_question(question: str, messages: Optional[List[dict]] = None) -> st
         "You rewrite the user's latest question into a standalone question. "
         "Use the conversation history only to resolve references (pronouns, "
         "ellipsis, omitted subject). Do NOT add facts or assumptions not present "
-        "in the history. Keep it concise. Return JSON: {\"standalone_question\": \"...\"}."
+        'in the history. Keep it concise. Return JSON: {"standalone_question": "..."}.'
     )
     user_prompt = (
         "Conversation history (chronological):\n"
-        + "\n".join(
-            f"{m.get('role', '')}: {m.get('content', '')}" for m in trimmed
-        )
+        + "\n".join(f"{m.get('role', '')}: {m.get('content', '')}" for m in trimmed)
         + "\n\nLatest user question:\n"
         + question
     )
@@ -108,7 +105,7 @@ def route_category(question: str) -> Category:
         "Classify the question into exactly one category from this list: "
         "Hands-on engineering, Architecture and system design, AI and ML practice, "
         "Leadership and product strategy, Research and academic credibility, "
-        "Career fit and role alignment. Return JSON: {\"category\": \"...\"}."
+        'Career fit and role alignment. Return JSON: {"category": "..."}.'
     )
 
     response = client.chat.completions.create(
@@ -128,9 +125,9 @@ def route_category(question: str) -> Category:
 
 def synthesize_answer(
     question: str,
-    chunks: List[RetrievedChunk],
-    conversation_topic: Optional[str] = None,
-    conversation_messages: Optional[List[dict]] = None,
+    chunks: list[RetrievedChunk],
+    conversation_topic: str | None = None,
+    conversation_messages: list[dict] | None = None,
 ) -> SynthesisResult:
     """Generate a strict, grounded answer from retrieved chunks."""
 
@@ -157,8 +154,8 @@ def synthesize_answer(
         "Conversation context may be provided only to help interpret the question; "
         "it is NOT evidence and must not override or add to the evidence. "
         "If evidence is insufficient, respond with the exact refusal message. "
-        "Return JSON: {\"answer\", \"why_this_matters\", \"confidence\", "
-        "\"confidence_reason\"}. Use confidence High/Medium/Low."
+        'Return JSON: {"answer", "why_this_matters", "confidence", '
+        '"confidence_reason"}. Use confidence High/Medium/Low.'
     )
     context_block = ""
     if conversation_messages:
@@ -172,9 +169,7 @@ def synthesize_answer(
             + "\n\n"
         )
     topic_line = (
-        f"Conversation topic: {conversation_topic}\n\n"
-        if conversation_topic
-        else ""
+        f"Conversation topic: {conversation_topic}\n\n" if conversation_topic else ""
     )
     user_prompt = (
         "Question:\n"
@@ -216,12 +211,12 @@ def synthesize_answer(
     )
 
 
-def _split_sentences(text: str) -> List[str]:
+def _split_sentences(text: str) -> list[str]:
     return [segment for segment in re.split(r"(?<=[.!?])\s+", text) if segment]
 
 
-def _fallback_synthesis(chunks: List[RetrievedChunk]) -> SynthesisResult:
-    sentences: List[str] = []
+def _fallback_synthesis(chunks: list[RetrievedChunk]) -> SynthesisResult:
+    sentences: list[str] = []
     for chunk in chunks:
         for sentence in _split_sentences(chunk.content):
             cleaned = sentence.strip()
@@ -259,4 +254,3 @@ def _parse_confidence(value: str) -> Confidence:
     if lowered == "low":
         return Confidence.low
     return Confidence.medium
-

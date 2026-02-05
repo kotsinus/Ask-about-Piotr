@@ -21,7 +21,6 @@ import sys
 from pathlib import Path
 
 import pytest
-import os
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
@@ -39,4 +38,3 @@ def _test_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("EMBEDDINGS_PROVIDER", "stub")
     monkeypatch.setenv("PROMPT_CACHE_ENABLED", "false")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-

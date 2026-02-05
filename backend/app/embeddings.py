@@ -21,7 +21,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List
 
 from openai import OpenAI
 
@@ -33,15 +32,13 @@ class EmbeddingProvider:
     name: str
     dimensions: int
 
-    def embed(self, texts: List[str]) -> List[List[float]]:
+    def embed(self, texts: list[str]) -> list[list[float]]:
         raise NotImplementedError
 
 
 class StubEmbeddingProvider(EmbeddingProvider):
-    def embed(self, texts: List[str]) -> List[List[float]]:
-        raise RuntimeError(
-            "Embeddings provider is stubbed. Configure a real provider."
-        )
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("Embeddings provider is stubbed. Configure a real provider.")
 
 
 def get_embedding_provider(name: str, dimensions: int) -> EmbeddingProvider:
@@ -53,7 +50,7 @@ def get_embedding_provider(name: str, dimensions: int) -> EmbeddingProvider:
 
 
 class OpenAIEmbeddingProvider(EmbeddingProvider):
-    def embed(self, texts: List[str]) -> List[List[float]]:
+    def embed(self, texts: list[str]) -> list[list[float]]:
         settings = get_settings()
         if not settings.openai_api_key:
             raise RuntimeError("OPENAI_API_KEY is required for OpenAI embeddings.")
@@ -64,10 +61,9 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
 
         client = OpenAI(api_key=settings.openai_api_key)
         model = settings.embeddings_model or "text-embedding-3-small"
-        embeddings: List[List[float]] = []
+        embeddings: list[list[float]] = []
         for batch_start in range(0, len(cleaned), 64):
             batch = cleaned[batch_start : batch_start + 64]
             response = client.embeddings.create(model=model, input=batch)
             embeddings.extend([item.embedding for item in response.data])
         return embeddings
-
