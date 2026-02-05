@@ -290,9 +290,28 @@ button.meta-link {
   padding-left: 20px;
 }
 
+/* RHS panel: Evidence/Sources list content should be more compact than the main answer body. */
+.rhs-details .evidence-list,
+.rhs-details .sources-list {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+/* RHS panel: keep list text size, but reduce ordered-list marker size (1., 2., 3., ...). */
+.rhs-details .evidence-list > li::marker,
+.rhs-details .sources-list > li::marker {
+  font-size: 0.75em;
+}
+
 .evidence-list li,
 .sources-list li {
   margin: 8px 0;
+}
+
+/* RHS panel: slightly tighter vertical rhythm for compact list text. */
+.rhs-details .evidence-list li,
+.rhs-details .sources-list li {
+  margin: 6px 0;
 }
 
 .item-meta {
