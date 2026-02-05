@@ -19,7 +19,12 @@
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true
+  reactStrictMode: true,
+  // Silence “inferred workspace root” warnings when multiple lockfiles exist
+  // outside this repo (e.g. a global `package-lock.json`).
+  turbopack: {
+    root: __dirname
+  }
 };
 
 module.exports = nextConfig;
