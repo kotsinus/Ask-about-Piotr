@@ -56,6 +56,7 @@ class RetrievedChunk(BaseModel):
     section: str
     source_url: str | None = None
     content: str
+    distance: float | None = None
 
 
 def retrieve(
@@ -98,6 +99,26 @@ def retrieve(
             )
             rows = cursor.fetchall()
 
+    if not rows:
+        return []
+
+    # Hard cutoffs: allow fewer than `limit` chunks when retrieval is weak.
+    #
+    # pgvector distance interpretation depends on the chosen operator; this code
+    # assumes cosine distance (lower = more similar).
+    best_distance = min(float(row[5]) for row in rows)
+    max_distance = settings.retrieval_max_distance
+    delta = settings.retrieval_distance_delta
+
+    def _keep(row: tuple) -> bool:
+        distance = float(row[5])
+        if max_distance is not None and distance > max_distance:
+            return False
+        if delta is not None and distance > best_distance + delta:
+            return False
+        return True
+
+    rows = [row for row in rows if _keep(row)]
     if not rows:
         return []
 
@@ -241,6 +262,7 @@ def retrieve(
             section=row[2],
             source_url=row[3],
             content=row[4],
+            distance=float(row[5]),
         )
         for row in filtered
     ]

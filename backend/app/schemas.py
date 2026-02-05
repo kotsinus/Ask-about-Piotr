@@ -51,6 +51,12 @@ class SourceRef(BaseModel):
     section: str = Field(..., description="Section name inside the card.")
 
 
+class DebugRetrievalItem(BaseModel):
+    card_id: str
+    section: str
+    distance: float
+
+
 class ConversationContext(BaseModel):
     conversation_id: str | None = Field(
         None, description="Client-provided conversation identifier."
@@ -87,6 +93,7 @@ class ChatResponse(BaseModel):
     why_this_matters: str
     evidence: list[EvidenceItem]
     sources: list[SourceRef]
+    debug_retrieval: list[DebugRetrievalItem] | None = None
     confidence: Confidence
     confidence_reason: str | None = None
     context: ConversationContext | None = None

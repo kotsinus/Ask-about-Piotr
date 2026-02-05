@@ -91,6 +91,7 @@ class SynthesisResult:
     why_this_matters: str
     confidence: Confidence
     confidence_reason: str | None
+    used_chunk_indices: list[int]
 
 
 def route_category(question: str) -> Category:
@@ -139,6 +140,7 @@ def synthesize_answer(
             ),
             confidence=Confidence.low,
             confidence_reason="No relevant knowledge cards were retrieved for this question.",
+            used_chunk_indices=[],
         )
 
     settings = get_settings()
@@ -147,15 +149,19 @@ def synthesize_answer(
 
     client = OpenAI(api_key=settings.openai_api_key)
     evidence_lines = [
-        f"[{chunk.card_id}.{chunk.section}] {chunk.content}" for chunk in chunks
+        f"[{idx}] [{chunk.card_id}.{chunk.section}] {chunk.content}"
+        for idx, chunk in enumerate(chunks)
     ]
     system_prompt = (
         "You answer only using the provided evidence. "
         "Conversation context may be provided only to help interpret the question; "
         "it is NOT evidence and must not override or add to the evidence. "
         "If evidence is insufficient, respond with the exact refusal message. "
+        "If you use evidence, you MUST list which evidence items were used via their indices. "
         'Return JSON: {"answer", "why_this_matters", "confidence", '
-        '"confidence_reason"}. Use confidence High/Medium/Low.'
+        '"confidence_reason", "used_chunk_indices"}. '
+        'Use confidence High/Medium/Low. '
+        'The refusal message is: "I do not have enough evidence in the provided materials."'
     )
     context_block = ""
     if conversation_messages:
@@ -197,6 +203,24 @@ def synthesize_answer(
     if not answer:
         return _fallback_synthesis(chunks)
 
+    refusal = "I do not have enough evidence in the provided materials."
+    used_chunk_indices: list[int] = []
+    if answer != refusal:
+        raw_indices = payload.get("used_chunk_indices", [])
+        if not isinstance(raw_indices, list):
+            raw_indices = []
+        for value in raw_indices:
+            try:
+                idx = int(value)
+            except Exception:
+                continue
+            if 0 <= idx < len(chunks) and idx not in used_chunk_indices:
+                used_chunk_indices.append(idx)
+        if not used_chunk_indices:
+            # Safety: if the model didn't provide indices, fall back to "all" to
+            # avoid returning an answer with no traceable evidence.
+            used_chunk_indices = list(range(len(chunks)))
+
     confidence = _parse_confidence(str(payload.get("confidence", "")))
     confidence_reason = payload.get("confidence_reason")
 
@@ -208,6 +232,7 @@ def synthesize_answer(
         confidence_reason=str(confidence_reason).strip()
         if confidence == Confidence.low and confidence_reason
         else None,
+        used_chunk_indices=used_chunk_indices,
     )
 
 
@@ -217,21 +242,26 @@ def _split_sentences(text: str) -> list[str]:
 
 def _fallback_synthesis(chunks: list[RetrievedChunk]) -> SynthesisResult:
     sentences: list[str] = []
-    for chunk in chunks:
+    used_chunk_indices: list[int] = []
+    for idx, chunk in enumerate(chunks):
         for sentence in _split_sentences(chunk.content):
             cleaned = sentence.strip()
             if cleaned:
                 sentences.append(cleaned)
+                used_chunk_indices.append(idx)
                 break
         if len(sentences) >= 6:
             break
 
     answer = " ".join(sentences) if sentences else chunks[0].content.strip()
+    if not used_chunk_indices and chunks:
+        used_chunk_indices = [0]
     return SynthesisResult(
         answer=answer,
         why_this_matters="This answer is grounded in retrieved knowledge cards.",
         confidence=Confidence.medium,
         confidence_reason=None,
+        used_chunk_indices=used_chunk_indices,
     )
 
 

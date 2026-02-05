@@ -34,6 +34,17 @@ class Settings:
     router_model: str
     synthesis_model: str
     prompt_cache_enabled: bool
+    retrieval_max_distance: float | None
+    retrieval_distance_delta: float | None
+
+
+def _parse_optional_float(value: str | None) -> float | None:
+    if value is None:
+        return None
+    lowered = value.strip().lower()
+    if lowered in {"", "none", "null", "off", "false"}:
+        return None
+    return float(lowered)
 
 
 def get_settings() -> Settings:
@@ -53,6 +64,16 @@ def get_settings() -> Settings:
         "yes",
     )
 
+    # Retrieval cutoffs (cosine distance): conservative defaults.
+    # - Lower distance = more similar.
+    # - You can disable each cutoff by setting the env var to "off".
+    retrieval_max_distance = _parse_optional_float(
+        os.getenv("RETRIEVAL_MAX_DISTANCE", "0.90")
+    )
+    retrieval_distance_delta = _parse_optional_float(
+        os.getenv("RETRIEVAL_DISTANCE_DELTA", "0.25")
+    )
+
     return Settings(
         database_url=database_url,
         embeddings_provider=embeddings_provider,
@@ -62,4 +83,6 @@ def get_settings() -> Settings:
         router_model=router_model,
         synthesis_model=synthesis_model,
         prompt_cache_enabled=prompt_cache_enabled,
+        retrieval_max_distance=retrieval_max_distance,
+        retrieval_distance_delta=retrieval_distance_delta,
     )

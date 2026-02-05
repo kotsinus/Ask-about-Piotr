@@ -33,6 +33,7 @@ from app.schemas import (
     ChatResponse,
     Confidence,
     ConversationContext,
+    DebugRetrievalItem,
     EvidenceItem,
     SourceRef,
 )
@@ -154,7 +155,7 @@ def format_answer(
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest) -> ChatResponse:
+def chat(request: ChatRequest, debug_retrieval: bool = False) -> ChatResponse:
     standalone_question = rewrite_question(
         request.question,
         [message.model_dump() for message in request.messages]
@@ -167,13 +168,6 @@ def chat(request: ChatRequest) -> ChatResponse:
         category = classify_question(standalone_question)
     conversation_topic = request.context.last_topic if request.context else None
     chunks = retrieve(standalone_question, conversation_topic=conversation_topic)
-
-    evidence = [
-        EvidenceItem(snippet=chunk.content, card_id=chunk.card_id) for chunk in chunks
-    ]
-    sources = [
-        SourceRef(card_id=chunk.card_id, section=chunk.section) for chunk in chunks
-    ]
     synthesis = synthesize_answer(
         standalone_question,
         chunks,
@@ -183,6 +177,22 @@ def chat(request: ChatRequest) -> ChatResponse:
         else None,
     )
 
+    # Return evidence/sources only for chunks actually used in the answer.
+    used_indices = [
+        idx
+        for idx in synthesis.used_chunk_indices
+        if isinstance(idx, int) and 0 <= idx < len(chunks)
+    ]
+    used_chunks = [chunks[idx] for idx in used_indices]
+
+    evidence = [
+        EvidenceItem(snippet=chunk.content, card_id=chunk.card_id)
+        for chunk in used_chunks
+    ]
+    sources = [
+        SourceRef(card_id=chunk.card_id, section=chunk.section) for chunk in used_chunks
+    ]
+
     resolved_topic = chunks[0].card_id if chunks else conversation_topic
 
     response = ChatResponse(
@@ -191,6 +201,16 @@ def chat(request: ChatRequest) -> ChatResponse:
         why_this_matters=synthesis.why_this_matters,
         evidence=evidence,
         sources=sources,
+        debug_retrieval=[
+            DebugRetrievalItem(
+                card_id=chunk.card_id,
+                section=chunk.section,
+                distance=float(chunk.distance),
+            )
+            for chunk in chunks
+            if debug_retrieval and chunk.distance is not None
+        ]
+        or None,
         confidence=synthesis.confidence,
         confidence_reason=synthesis.confidence_reason,
         context=ConversationContext(

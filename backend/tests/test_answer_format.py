@@ -22,6 +22,7 @@ import pytest
 
 from app.main import app
 from app.retrieval import RetrievedChunk
+from app.schemas import Confidence
 
 
 @pytest.mark.anyio
@@ -145,3 +146,68 @@ async def test_followup_question_uses_history_rewrite(
         assert "Python" in payload["answer"]
         assert "TypeScript" in payload["answer"]
         assert "Polish" not in payload["answer"]
+
+
+@pytest.mark.anyio
+async def test_evidence_and_sources_include_only_used_chunks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+
+        chunks = [
+            RetrievedChunk(
+                card_id="c1",
+                category="skills",
+                section="Overview",
+                source_url=None,
+                content="Chunk 0",
+                distance=0.10,
+            ),
+            RetrievedChunk(
+                card_id="c2",
+                category="skills",
+                section="Details",
+                source_url=None,
+                content="Chunk 1 (used)",
+                distance=0.11,
+            ),
+            RetrievedChunk(
+                card_id="c3",
+                category="skills",
+                section="More",
+                source_url=None,
+                content="Chunk 2",
+                distance=0.12,
+            ),
+        ]
+
+        def _stub_retrieve(
+            question: str, limit: int = 5, conversation_topic: str | None = None
+        ) -> list[RetrievedChunk]:
+            return chunks
+
+        class _StubSynthesis:
+            answer = "Uses only chunk 1"
+            why_this_matters = "Test"
+            confidence = Confidence.medium
+            confidence_reason = None
+            used_chunk_indices = [1]
+
+        def _stub_synthesize_answer(*args, **kwargs):
+            return _StubSynthesis()
+
+        monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
+        monkeypatch.setattr("app.main.synthesize_answer", _stub_synthesize_answer)
+
+        response = await client.post("/chat?debug_retrieval=1", json={"question": "Q"})
+        assert response.status_code == 200
+        payload = response.json()
+
+        assert payload["evidence"] == [{"snippet": "Chunk 1 (used)", "card_id": "c2"}]
+        assert payload["sources"] == [{"card_id": "c2", "section": "Details"}]
+        assert payload["debug_retrieval"] == [
+            {"card_id": "c1", "section": "Overview", "distance": 0.10},
+            {"card_id": "c2", "section": "Details", "distance": 0.11},
+            {"card_id": "c3", "section": "More", "distance": 0.12},
+        ]
