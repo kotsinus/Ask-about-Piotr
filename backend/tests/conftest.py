@@ -22,6 +22,8 @@ from pathlib import Path
 
 import pytest
 
+import httpx
+
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
@@ -38,3 +40,34 @@ def _test_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("EMBEDDINGS_PROVIDER", "stub")
     monkeypatch.setenv("PROMPT_CACHE_ENABLED", "false")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _reset_module_state() -> None:
+    """Reset in-memory module state that could leak across tests."""
+
+    # GeoIP has an in-memory cache.
+    from app import geoip
+
+    geoip._CACHE.clear()
+
+    # Interaction logging can disable itself after repeated failures.
+    from app import interaction_logging
+
+    interaction_logging._INTERACTION_LOGGING_DISABLED_REASON = None
+
+
+@pytest.fixture
+def asgi_transport():
+    from app.main import app
+
+    return httpx.ASGITransport(app=app)
+
+
+@pytest.fixture
+async def asgi_client(asgi_transport: httpx.ASGITransport):
+    async with httpx.AsyncClient(
+        transport=asgi_transport,
+        base_url="http://test",
+    ) as client:
+        yield client

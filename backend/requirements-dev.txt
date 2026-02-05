@@ -3,3 +3,6 @@
 # Linting / formatting
 ruff>=0.6.0,<1.0.0
 
+# Testing
+pytest-cov>=5.0.0,<6.0.0
+

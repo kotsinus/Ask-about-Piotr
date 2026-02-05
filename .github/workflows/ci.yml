@@ -39,7 +39,19 @@ jobs:
           python -m ruff format --check .
 
       - name: Run tests
-        run: pytest
+        env:
+          # Keep tests offline & deterministic (align with backend/tests/conftest.py).
+          DATABASE_URL: postgresql://test:test@localhost:5432/test
+          EMBEDDINGS_PROVIDER: stub
+          PROMPT_CACHE_ENABLED: "false"
+          # Additional determinism (stable hashing, stable tz).
+          PYTHONHASHSEED: "0"
+          TZ: UTC
+        run: |
+          python -m pytest \
+            --cov=app \
+            --cov-report=term-missing:skip-covered \
+            --cov-fail-under=85
 
   frontend:
     runs-on: ubuntu-latest
