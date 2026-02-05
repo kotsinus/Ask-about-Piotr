@@ -167,10 +167,6 @@ function AnswerDetailsPanel({
       </button>
 
       <div className="details-panel" hidden={!expanded}>
-        <div className="details-panel-header">
-          <div className="details-panel-title">Answer details</div>
-        </div>
-
         <div className="details-panel-body stack">
           {panels.length > 0 ? (
             panels.map((panel) => (

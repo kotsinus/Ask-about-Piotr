@@ -389,7 +389,8 @@ button:disabled {
   -webkit-appearance: none;
   text-align: center;
   text-decoration: none;
-  color: inherit;
+  /* Slightly lower-contrast rail foreground (label + chevron). */
+  color: rgba(112, 119, 138, 0.767);
   cursor: pointer;
   border-top: none;
   border-right: none;
@@ -409,40 +410,36 @@ button:disabled {
 }
 
 .rhs-details .rail-toggle {
+  /* Chevron: no background or circular container; match label color. */
   background: transparent;
-  color: #6b7280;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  width: 28px;
-  height: 28px;
+  color: inherit;
+  border: none;
+  border-radius: 0;
+  width: auto;
+  height: auto;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.7),
-    0 8px 20px rgba(15, 23, 42, 0.08);
+  font-size: 16px;
+  line-height: 1;
+  box-shadow: none;
 }
 
 .rhs-details .details-rail:hover .rail-toggle {
-  border-color: #c7d2fe;
-  background: #eef2ff;
-  color: #111827;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.8),
-    0 10px 26px rgba(15, 23, 42, 0.12);
+  color: rgba(91, 97, 112, 1);
 }
 
 .rhs-details .rail-label {
   /* Vertical label; kept separate from arrow so the icon stays unrotated. */
   writing-mode: vertical-rl;
   transform: rotate(180deg);
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #6b7280;
+  color: inherit;
   user-select: none;
 }
 
@@ -506,7 +503,8 @@ button:disabled {
 .details-section-title {
   margin: 0 0 10px;
   font-size: 13px;
-  font-weight: 900;
+  font-weight: 800;
+  color: #374151;
 }
 
 .details-section-title:has(.details-section-toggle) {
@@ -529,7 +527,8 @@ button:disabled {
 
 .details-section-toggle-label {
   font-size: 13px;
-  font-weight: 900;
+  font-weight: 800;
+  color: #374151;
 }
 
 .details-section-chevron {
