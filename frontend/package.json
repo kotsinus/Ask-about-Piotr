@@ -2,6 +2,10 @@
   "name": "ask-about-piotr-frontend",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "npm@11.9.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -19,7 +23,7 @@
     "@types/node": "20.14.10",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
-    "typescript": "5.5.3"
+    "typescript": "5.9.3"
   }
 }
 

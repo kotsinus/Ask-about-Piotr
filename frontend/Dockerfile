@@ -15,7 +15,7 @@
 # Purpose:
 # Frontend container image for the Next.js UI.
 
-FROM node:20-alpine
+FROM node:22.22.0-alpine
 
 WORKDIR /app
 

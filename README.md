@@ -43,6 +43,18 @@ python backend/scripts/ingest_cards.py
 
 Environment variables are defined in [`.env.example`](.env.example:1).
 
+## Frontend Toolchain (Node / npm / Next.js / TypeScript)
+
+Current frontend versions are pinned in [`frontend/package.json`](frontend/package.json:1).
+
+- Node.js: **22 LTS** (Docker uses `node:22.22.0-alpine` in [`frontend/Dockerfile`](frontend/Dockerfile:1))
+- npm: pinned via `packageManager` in [`frontend/package.json`](frontend/package.json:1)
+- Next.js: pinned in [`frontend/package.json`](frontend/package.json:1)
+- TypeScript: pinned in [`frontend/package.json`](frontend/package.json:1)
+
+Local dev alignment:
+- Use [`frontend/.nvmrc`](frontend/.nvmrc:1) to select a compatible Node 22 version.
+
 ## API
 `POST /chat`
 
