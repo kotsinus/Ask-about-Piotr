@@ -125,7 +125,9 @@ async def test_x_forwarded_for_is_ignored_when_no_trusted_proxies(
     monkeypatch.delenv("TRUSTED_PROXY_CIDRS", raising=False)
 
     captured: list[Any] = []
-    monkeypatch.setattr("app.main.write_interaction_log", lambda row: captured.append(row))
+    monkeypatch.setattr(
+        "app.main.write_interaction_log", lambda row: captured.append(row)
+    )
 
     peer_ip = "203.0.113.5"
     xff_ip = "198.51.100.99"
@@ -156,7 +158,9 @@ async def test_x_forwarded_for_is_honored_when_peer_is_trusted_proxy(
     monkeypatch.setenv("TRUSTED_PROXY_CIDRS", "203.0.113.0/24")
 
     captured: list[Any] = []
-    monkeypatch.setattr("app.main.write_interaction_log", lambda row: captured.append(row))
+    monkeypatch.setattr(
+        "app.main.write_interaction_log", lambda row: captured.append(row)
+    )
 
     peer_ip = "203.0.113.5"  # immediate peer
     xff_ip = "198.51.100.99"  # original client
@@ -201,7 +205,9 @@ async def test_geoip_does_not_make_http_call_when_disabled(
 
     # And /chat should remain stable, with country left unset.
     captured: list[Any] = []
-    monkeypatch.setattr("app.main.write_interaction_log", lambda row: captured.append(row))
+    monkeypatch.setattr(
+        "app.main.write_interaction_log", lambda row: captured.append(row)
+    )
 
     transport = httpx.ASGITransport(app=app, client=("198.51.100.77", 1234))
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -209,4 +215,3 @@ async def test_geoip_does_not_make_http_call_when_disabled(
     assert response.status_code == 200
     assert len(captured) == 1
     assert captured[0].country is None
-

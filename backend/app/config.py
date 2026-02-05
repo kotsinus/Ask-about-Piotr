@@ -120,7 +120,6 @@ def get_settings() -> Settings:
         prompt_cache_enabled=prompt_cache_enabled,
         retrieval_max_distance=retrieval_max_distance,
         retrieval_distance_delta=retrieval_distance_delta,
-
         ip_hash_salt=ip_hash_salt,
         trusted_proxy_cidrs=trusted_proxy_cidrs,
         geoip_enabled=geoip_enabled,

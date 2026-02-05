@@ -83,7 +83,9 @@ def lookup_country(ip: str, settings: Settings) -> str | None:
     timeout = httpx.Timeout(0.8, connect=0.3)
     try:
         with httpx.Client(timeout=timeout) as client:
-            response = client.get(url, headers={"accept": "application/json, text/plain"})
+            response = client.get(
+                url, headers={"accept": "application/json, text/plain"}
+            )
             response.raise_for_status()
 
             content_type = response.headers.get("content-type", "").lower()

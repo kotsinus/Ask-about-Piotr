@@ -85,4 +85,3 @@ def session_scope(settings: Settings | None = None) -> Iterator[Session]:
         raise
     finally:
         session.close()
-

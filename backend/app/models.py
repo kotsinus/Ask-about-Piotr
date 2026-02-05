@@ -33,7 +33,9 @@ class InteractionLogModel(Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
     request_id: Mapped[str] = mapped_column(Text, nullable=False)
-    request_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    request_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     response_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -57,4 +59,3 @@ class InteractionLogModel(Base):
         nullable=False,
         server_default=func.now(),
     )
-
