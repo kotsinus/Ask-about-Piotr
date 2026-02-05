@@ -8,6 +8,11 @@ experience
 Threat-hunting queries over large security log datasets can be too slow for operational response if executed exactly.
 
 # My role
+Context:
+- Organization: Security On-Demand
+- Role: Chief Architect and R&D Lead
+- Timeframe: 2017–2022
+
 Chief architect and R&D lead for the approximate query database and anomaly-detection engine.
 
 # What I built

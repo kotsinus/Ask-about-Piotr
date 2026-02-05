@@ -6,6 +6,7 @@ Below is a practical mapping from the 100 demo questions to the cards that provi
 ## 1-10 General Professional Profile
 - `profile-professional-summary`
 - `experience-professional-profile`
+- `experience-timeline-cv-facts`
 - `experience-leadership-and-ways-of-working`
 - `skills-core`
 - `experience-programming-languages-and-choices`
@@ -35,7 +36,9 @@ Below is a practical mapping from the 100 demo questions to the cards that provi
 
 ## 41-50 Languages/skills
 - `experience-programming-languages-and-choices`
+- `skills-and-tooling-facts`
 - `skills-programming-languages`
+- `skills-spoken-languages`
 - `skills-core`
 - `tools-platforms`
 - `experience-infobright-columnar-database`
@@ -51,6 +54,7 @@ Below is a practical mapping from the 100 demo questions to the cards that provi
 
 ## 61-70 Certifications
 - `certification-xmba-agile-business-startup-skills`
+- `certifications-facts`
 - `education-overview`
 - `experience-leadership-and-ways-of-working`
 
@@ -62,6 +66,7 @@ Below is a practical mapping from the 100 demo questions to the cards that provi
 
 ## 81-90 Education & development
 - `education-overview`
+- `education-facts`
 - `experience-academic-teaching`
 - `research-publications-and-topics`
 - `certification-xmba-agile-business-startup-skills`
@@ -71,4 +76,3 @@ Below is a practical mapping from the 100 demo questions to the cards that provi
 - `personal-location-citizenship`
 - `experience-personal-interests-and-location`
 - `project-ask-about-piotr-demo-scope`
-

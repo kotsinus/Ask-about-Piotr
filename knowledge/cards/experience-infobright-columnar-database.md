@@ -8,6 +8,11 @@ experience
 Analytical workloads need high-speed processing over large datasets with predictable performance. Traditional row-stores struggle with ad-hoc analytics and complex queries at scale, motivating specialized columnar storage and execution strategies.
 
 # My role
+Context:
+- Organization: Infobright
+- Role: Co-founder, Chief Architect and Lead Designer
+- Timeframe: 2005–2017
+
 I co-founded Infobright and served as chief architect, lead designer, and developer of the core C++ database engine. I also acted as Scrum Master for a database design group and supported customer-facing issue resolution with sales engineers.
 
 # What I built

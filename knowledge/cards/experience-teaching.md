@@ -8,6 +8,11 @@ experience
 Teams and organizations value the ability to teach, mentor, and communicate complex topics clearly.
 
 # My role
+Context:
+- Organization: Polish-Japanese Academy of Information Technology
+- Role: Assistant / Adjunct Professor
+- Timeframe: 1996–2009
+
 Assistant/Adjunct Professor conducting lectures and labs.
 
 # What I built

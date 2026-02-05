@@ -8,6 +8,11 @@ experience
 Cybersecurity monitoring requires detecting volumetric anomalies and supporting threat-hunting queries across extremely high-volume log streams. Systems must be fast, resilient, and cost-effective because latency and false alarms directly impact response workflows.
 
 # My role
+Context:
+- Organization: Security On-Demand (acquired and rebranded as DeepSeas in 2022)
+- Role: Chief Architect and R&D Lead (Director / Managing Director of R&D)
+- Timeframe: 2017–2024
+
 I served as chief architect and R&D lead, owning architecture, roadmap, and delivery across an international team. I led development of AI/ML-driven anomaly detection and associated analytics capabilities for managed security operations.
 
 # What I built
