@@ -128,73 +128,104 @@ const buildDetailsPanels = (response: ChatResponse): DetailsPanel[] => {
 function AnswerDetailsPanel({
   response,
   expanded,
-  pinned,
-  onToggleExpanded,
-  onTogglePinned
+  onToggleExpanded
 }: {
   response: ChatResponse | null;
   expanded: boolean;
-  pinned: boolean;
   onToggleExpanded: () => void;
-  onTogglePinned: () => void;
 }) {
   const panels = response ? buildDetailsPanels(response) : [];
 
+  const [collapsedSections, setCollapsedSections] = useState({
+    evidence: true,
+    sources: true
+  });
+
+  const toggleCollapsibleSection = useCallback((key: "evidence" | "sources") => {
+    setCollapsedSections((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
   const panelClassName = `rhs-details ${expanded ? "is-expanded" : "is-collapsed"}`;
-  const pinLabel = pinned ? "Unpin details sidebar" : "Pin details sidebar";
   const toggleLabel = expanded ? "Collapse details sidebar" : "Expand details sidebar";
 
   return (
     <aside className={panelClassName} aria-label="Answer details">
-      <div className="details-rail" aria-label="Details sidebar rail">
-        <button
-          type="button"
-          className="rail-toggle"
-          onClick={onToggleExpanded}
-          aria-label={toggleLabel}
-          title={toggleLabel}
-        >
+      <button
+        type="button"
+        className="details-rail"
+        onClick={onToggleExpanded}
+        aria-label={toggleLabel}
+        aria-expanded={expanded}
+        title={toggleLabel}
+      >
+        <span className="rail-toggle" aria-hidden="true">
           {expanded ? ">" : "<"}
-        </button>
-        <div className="rail-label" aria-hidden="true">
+        </span>
+        <span className="rail-label" aria-hidden="true">
           Details
-        </div>
-      </div>
+        </span>
+      </button>
 
       <div className="details-panel" hidden={!expanded}>
         <div className="details-panel-header">
           <div className="details-panel-title">Answer details</div>
-          <div className="details-panel-controls" role="group" aria-label="Sidebar controls">
-            <button
-              type="button"
-              className={`icon-button ${pinned ? "is-active" : ""}`}
-              onClick={onTogglePinned}
-              aria-pressed={pinned}
-              aria-label={pinLabel}
-              title={pinLabel}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="16"
-                height="16"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <path
-                  d="M14 2c.6 0 1 .4 1 1v3.2l4.2 4.2c.3.3.4.8.2 1.2-.2.4-.6.6-1 .6H14v7c0 .4-.3.8-.7.9-.4.1-.9 0-1.1-.4l-3-4.5H5.6c-.4 0-.8-.2-1-.6-.2-.4-.1-.9.2-1.2L9 6.2V3c0-.6.4-1 1-1h4z"
-                  fill="currentColor"
-                />
-              </svg>
-            </button>
-          </div>
         </div>
 
         <div className="details-panel-body stack">
           {panels.length > 0 ? (
             panels.map((panel) => (
               <section key={panel.key} className="details-section">
-                <h3 className="details-section-title">{panel.title}</h3>
-                <div className="details-section-body">{panel.body}</div>
+                {panel.key === "why" ? (
+                  <>
+                    <h3 className="details-section-title">{panel.title}</h3>
+                    <div className="details-section-body">{panel.body}</div>
+                  </>
+                ) : panel.key === "evidence" || panel.key === "sources" ? (
+                  <>
+                    <h3 className="details-section-title">
+                      <button
+                        type="button"
+                        className="details-section-toggle"
+                        onClick={() => {
+                          if (panel.key === "evidence") {
+                            toggleCollapsibleSection("evidence");
+                          }
+                          if (panel.key === "sources") {
+                            toggleCollapsibleSection("sources");
+                          }
+                        }}
+                        aria-expanded={
+                          panel.key === "evidence"
+                            ? !collapsedSections.evidence
+                            : !collapsedSections.sources
+                        }
+                        aria-controls={`details-section-${panel.key}`}
+                      >
+                        <span className="details-section-toggle-label">{panel.title}</span>
+                        <span className="details-section-chevron" aria-hidden="true">
+                          {panel.key === "evidence"
+                            ? collapsedSections.evidence
+                              ? "˅"
+                              : "˄"
+                            : collapsedSections.sources
+                              ? "˅"
+                              : "˄"}
+                        </span>
+                      </button>
+                    </h3>
+                    <div
+                      id={`details-section-${panel.key}`}
+                      className="details-section-body"
+                      hidden={
+                        panel.key === "evidence"
+                          ? collapsedSections.evidence
+                          : collapsedSections.sources
+                      }
+                    >
+                      {panel.body}
+                    </div>
+                  </>
+                ) : null}
               </section>
             ))
           ) : (
@@ -219,7 +250,6 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [activeDetailsIndex, setActiveDetailsIndex] = useState<number | null>(null);
   const [detailsExpanded, setDetailsExpanded] = useState(false);
-  const [detailsPinned, setDetailsPinned] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const apiUrl = useMemo(
@@ -227,7 +257,15 @@ export default function HomePage() {
     []
   );
 
-  const DETAILS_PINNED_STORAGE_KEY = "ask-about-piotr.detailsPinned";
+  const latestAssistantAnswerIndex = useMemo(() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index];
+      if (message?.role === "assistant" && message.payload) {
+        return index;
+      }
+    }
+    return null;
+  }, [messages]);
 
   const activeDetailsResponse = useMemo(() => {
     if (activeDetailsIndex === null) {
@@ -235,19 +273,6 @@ export default function HomePage() {
     }
     return messages[activeDetailsIndex]?.payload ?? null;
   }, [activeDetailsIndex, messages]);
-
-  const togglePinned = useCallback(() => {
-    setDetailsPinned((prev) => {
-      const next = !prev;
-      try {
-        window.localStorage.setItem(DETAILS_PINNED_STORAGE_KEY, next ? "1" : "0");
-      } catch {
-        // Ignore persistence errors (e.g. private mode)
-      }
-      setDetailsExpanded(next);
-      return next;
-    });
-  }, []);
 
   const toggleExpanded = useCallback(() => {
     setDetailsExpanded((prev) => !prev);
@@ -276,35 +301,15 @@ export default function HomePage() {
   }, [messages]);
 
   useEffect(() => {
-    if (!detailsPinned) {
+    if (latestAssistantAnswerIndex === null) {
       return;
     }
-    const lastIndex = messages.length - 1;
-    if (lastIndex < 0) {
-      return;
-    }
-    const lastMessage = messages[lastIndex];
-    if (lastMessage?.role !== "assistant" || !lastMessage.payload) {
-      return;
-    }
-    setActiveDetailsIndex(lastIndex);
-    setDetailsExpanded(true);
-  }, [detailsPinned, messages]);
+    setActiveDetailsIndex(latestAssistantAnswerIndex);
+  }, [latestAssistantAnswerIndex]);
 
   useEffect(() => {
     resizeTextarea();
   }, [question]);
-
-  useEffect(() => {
-    try {
-      const storedPinned = window.localStorage.getItem(DETAILS_PINNED_STORAGE_KEY);
-      const nextPinned = storedPinned === "1" || storedPinned === "true";
-      setDetailsPinned(nextPinned);
-      setDetailsExpanded(nextPinned);
-    } catch {
-      // Ignore persistence errors
-    }
-  }, []);
 
   useEffect(() => {
     if (!detailsExpanded) {
@@ -437,7 +442,7 @@ export default function HomePage() {
                           className="meta-link"
                           onClick={() => {
                             setActiveDetailsIndex(index);
-                            setDetailsExpanded(true);
+                            setDetailsExpanded((prev) => !prev);
                           }}
                         >
                           Details
@@ -476,11 +481,10 @@ export default function HomePage() {
         </div>
 
         <AnswerDetailsPanel
+          key={activeDetailsIndex ?? "no-active-details"}
           response={activeDetailsResponse}
           expanded={detailsExpanded}
-          pinned={detailsPinned}
           onToggleExpanded={toggleExpanded}
-          onTogglePinned={togglePinned}
         />
       </div>
     </main>
