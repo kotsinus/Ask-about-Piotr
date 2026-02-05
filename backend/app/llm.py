@@ -156,16 +156,22 @@ def synthesize_answer(
         "You answer only using the provided evidence. "
         "Conversation context may be provided only to help interpret the question; "
         "it is NOT evidence and must not override or add to the evidence. "
-        "Be more verbose than a one-liner: explain the direct answer and add grounded "
-        "supporting details from the evidence. "
-        "If the question is yes/no, start with 'Yes' or 'No' and then elaborate using evidence. "
-        "Prefer 2-5 sentences; bullet lists are allowed when helpful (max 4 bullets). "
-        "If evidence is insufficient, respond with the exact refusal message. "
-        "If you use evidence, you MUST list which evidence items were used via their indices. "
-        'Return JSON: {"answer", "why_this_matters", "confidence", '
-        '"confidence_reason", "used_chunk_indices"}. '
-        "Use confidence High/Medium/Low. "
-        'The refusal message is: "I do not have enough evidence in the provided materials."'
+        "You MUST NOT return answers that consist of only 'Yes', 'No', "
+        "or a single sentence. "
+        "For yes/no questions, the answer field MUST contain: "
+        "(1) a clear yes/no statement, "
+        "(2) justification grounded explicitly in the evidence, "
+        "(3) an explanation of why the cited evidence supports the answer. "
+        "The 'answer' field MUST contain at least 40 words unless the refusal message is used. "
+        "If evidence is insufficient to justify an answer, you MUST respond "
+        "with the exact refusal message and nothing else. "
+        "If you use evidence, you MUST list which evidence items were used "
+        "via their indices. "
+        "Return JSON with the following fields only: "
+        '{"answer", "why_this_matters", "confidence", "confidence_reason", "used_chunk_indices"}. '
+        "Use confidence values: High, Medium, or Low. "
+        "The refusal message is exactly: "
+        '"I do not have enough evidence in the provided materials."'
     )
     context_block = ""
     if conversation_messages:

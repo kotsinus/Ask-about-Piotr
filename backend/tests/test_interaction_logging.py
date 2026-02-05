@@ -119,7 +119,9 @@ async def test_session_cookie_is_set_and_reused_across_requests(
     monkeypatch.setenv("IP_HASH_SALT", "salt-a")
 
     captured: list[Any] = []
-    monkeypatch.setattr("app.main.write_interaction_log", lambda row: captured.append(row))
+    monkeypatch.setattr(
+        "app.main.write_interaction_log", lambda row: captured.append(row)
+    )
 
     transport = httpx.ASGITransport(app=app, client=("198.51.100.77", 1234))
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:

@@ -73,6 +73,7 @@ def _is_uuid(value: str | None) -> bool:
     except ValueError:
         return False
 
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
