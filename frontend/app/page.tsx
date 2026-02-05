@@ -125,39 +125,6 @@ const buildDetailsPanels = (response: ChatResponse): DetailsPanel[] => {
   return panels;
 };
 
-function AnswerDetailsAccordion({
-  response,
-  detailsId
-}: {
-  response: ChatResponse;
-  detailsId: string;
-}) {
-  const panels = buildDetailsPanels(response);
-
-  if (panels.length === 0) {
-    return null;
-  }
-
-  return (
-    <div id={detailsId} className="answer-details stack">
-      <div className="details-heading">Answer details</div>
-      {panels.map((panel) => (
-        <details key={panel.key} className="accordion-panel">
-          <summary>
-            <span className="summary-title">{panel.title}</span>
-            {panel.preview ? (
-              <span className="summary-preview" title={panel.preview}>
-                {panel.preview}
-              </span>
-            ) : null}
-          </summary>
-          <div className="panel-body">{panel.body}</div>
-        </details>
-      ))}
-    </div>
-  );
-}
-
 function AnswerDetailsPanel({
   response,
   expanded,
@@ -337,7 +304,6 @@ export default function HomePage() {
     } catch {
       // Ignore persistence errors
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
