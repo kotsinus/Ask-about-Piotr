@@ -137,8 +137,8 @@ function AnswerDetailsPanel({
   const panels = response ? buildDetailsPanels(response) : [];
 
   const [collapsedSections, setCollapsedSections] = useState({
-    evidence: true,
-    sources: true
+    evidence: false,
+    sources: false
   });
 
   const toggleCollapsibleSection = useCallback((key: "evidence" | "sources") => {
