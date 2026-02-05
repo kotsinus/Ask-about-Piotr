@@ -24,6 +24,24 @@ import os
 from dataclasses import dataclass
 
 
+def _parse_bool(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    lowered = value.strip().lower()
+    if lowered in {"1", "true", "yes", "on"}:
+        return True
+    if lowered in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _parse_csv(value: str | None) -> list[str]:
+    if not value:
+        return []
+    parts = [item.strip() for item in value.split(",")]
+    return [item for item in parts if item]
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str
@@ -36,6 +54,15 @@ class Settings:
     prompt_cache_enabled: bool
     retrieval_max_distance: float | None
     retrieval_distance_delta: float | None
+
+    # Privacy-first logging / metadata
+    ip_hash_salt: str
+    trusted_proxy_cidrs: list[str]
+
+    # Optional GEO-IP lookup (default OFF)
+    geoip_enabled: bool
+    geoip_provider: str
+    geoip_url: str | None
 
 
 def _parse_optional_float(value: str | None) -> float | None:
@@ -74,6 +101,14 @@ def get_settings() -> Settings:
         os.getenv("RETRIEVAL_DISTANCE_DELTA", "0.25")
     )
 
+    # Logging metadata
+    ip_hash_salt = os.getenv("IP_HASH_SALT", "")
+    trusted_proxy_cidrs = _parse_csv(os.getenv("TRUSTED_PROXY_CIDRS"))
+
+    geoip_enabled = _parse_bool(os.getenv("GEOIP_ENABLED"), default=False)
+    geoip_provider = (os.getenv("GEOIP_PROVIDER", "ipapi_co") or "ipapi_co").strip()
+    geoip_url = os.getenv("GEOIP_URL")
+
     return Settings(
         database_url=database_url,
         embeddings_provider=embeddings_provider,
@@ -85,4 +120,10 @@ def get_settings() -> Settings:
         prompt_cache_enabled=prompt_cache_enabled,
         retrieval_max_distance=retrieval_max_distance,
         retrieval_distance_delta=retrieval_distance_delta,
+
+        ip_hash_salt=ip_hash_salt,
+        trusted_proxy_cidrs=trusted_proxy_cidrs,
+        geoip_enabled=geoip_enabled,
+        geoip_provider=geoip_provider,
+        geoip_url=geoip_url,
     )

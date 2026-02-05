@@ -26,3 +26,38 @@ CREATE INDEX IF NOT EXISTS knowledge_chunks_embedding_idx
     USING ivfflat (embedding vector_cosine_ops)
     WITH (lists = 100);
 
+-- Privacy-first logging of user interactions (question + final answer) and
+-- anonymized client metadata.
+--
+-- MUST NOT contain raw IP addresses.
+CREATE TABLE IF NOT EXISTS interaction_logs (
+    id BIGSERIAL PRIMARY KEY,
+    request_id TEXT NOT NULL,
+    request_at TIMESTAMPTZ NOT NULL,
+    response_at TIMESTAMPTZ NOT NULL,
+    latency_ms DOUBLE PRECISION,
+    question TEXT NOT NULL,
+    answer TEXT NOT NULL,
+    router_model TEXT,
+    synthesis_model TEXT,
+    embeddings_provider TEXT,
+    embeddings_model TEXT,
+    ip_prefix TEXT,
+    ip_hash TEXT,
+    user_agent TEXT,
+    country TEXT,
+    logged_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS interaction_logs_logged_at_idx
+    ON interaction_logs (logged_at);
+
+CREATE INDEX IF NOT EXISTS interaction_logs_request_id_idx
+    ON interaction_logs (request_id);
+
+CREATE INDEX IF NOT EXISTS interaction_logs_ip_prefix_idx
+    ON interaction_logs (ip_prefix);
+
+CREATE INDEX IF NOT EXISTS interaction_logs_ip_hash_idx
+    ON interaction_logs (ip_hash);
+

@@ -23,15 +23,25 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
 
+from app.config import get_settings
+from app.geoip import lookup_country
+from app.interaction_logging import InteractionLog, write_interaction_log
 from app.llm import rewrite_question, route_category, synthesize_answer
 from app.logging_setup import configure_logging
-from app.observability import REQUEST_ID_HEADER, reset_request_id, set_request_id
+from app.observability import (
+    REQUEST_ID_HEADER,
+    get_request_id,
+    reset_request_id,
+    set_request_id,
+)
+from app.privacy import anonymize_ip_prefix, extract_client_ip, hash_ip
 from app.retrieval import retrieve
 from app.schemas import (
     Category,
@@ -206,7 +216,13 @@ def format_answer(
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest, debug_retrieval: bool = False) -> ChatResponse:
+def chat(
+    http_request: Request, request: ChatRequest, debug_retrieval: bool = False
+) -> ChatResponse:
+    settings = get_settings()
+    request_at = datetime.now(UTC)
+    start = time.perf_counter()
+
     standalone_question = rewrite_question(
         request.question,
         [message.model_dump() for message in request.messages]
@@ -280,4 +296,40 @@ def chat(request: ChatRequest, debug_retrieval: bool = False) -> ChatResponse:
         response.confidence,
         response.confidence_reason,
     )
+
+    response_at = datetime.now(UTC)
+    latency_ms = round((time.perf_counter() - start) * 1000, 2)
+
+    # Best-effort interaction logging. Never block the response.
+    try:
+        client_ip = extract_client_ip(http_request, settings)
+        ip_prefix = anonymize_ip_prefix(client_ip) if client_ip else None
+        ip_hash = (
+            hash_ip(ip=client_ip, salt=settings.ip_hash_salt) if client_ip else None
+        )
+        user_agent = http_request.headers.get("user-agent")
+        country = lookup_country(client_ip, settings) if client_ip else None
+
+        request_id = get_request_id() or ""
+        write_interaction_log(
+            InteractionLog(
+                request_id=request_id,
+                request_at=request_at,
+                response_at=response_at,
+                latency_ms=latency_ms,
+                question=request.question,
+                answer=response.answer,
+                router_model=settings.router_model,
+                synthesis_model=settings.synthesis_model,
+                embeddings_provider=settings.embeddings_provider,
+                embeddings_model=settings.embeddings_model,
+                ip_prefix=ip_prefix,
+                ip_hash=ip_hash,
+                user_agent=user_agent,
+                country=country,
+            )
+        )
+    except Exception:
+        logger.exception("interaction_log_failed")
+
     return response

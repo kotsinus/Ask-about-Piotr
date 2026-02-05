@@ -44,6 +44,59 @@ Env vars:
 Each request gets an `X-Request-ID` response header. If the client sends
 `X-Request-ID`, it is propagated.
 
+### Interaction logging (Postgres)
+
+On every `POST /chat` request, the backend performs **best-effort** persistence of
+the final interaction to Postgres table `interaction_logs` (created in
+[`backend/db/init.sql`](backend/db/init.sql:1)). Failures to write the log **must
+not** break the request path.
+
+Implementation note: persistence is implemented via SQLAlchemy ORM (engine + session
+management in [`backend/app/db.py`](backend/app/db.py:1) and model mapping in
+[`backend/app/models.py`](backend/app/models.py:1)).
+
+Logged fields (high level):
+- `question`, `answer`
+- `request_id`, `request_at`, `response_at`, `latency_ms`
+- Model metadata: `router_model`, `synthesis_model`, `embeddings_provider`, `embeddings_model`
+- Client metadata:
+  - `ip_prefix` (IPv4 `/24` or IPv6 `/48`)
+  - `ip_hash` (salted, one-way hash)
+  - `user_agent`
+  - `country` (optional; see GeoIP below)
+
+Privacy model (IP handling):
+- **Raw IP addresses are never persisted**.
+- `ip_prefix` keeps only coarse network information for basic aggregation and abuse
+  monitoring.
+- `ip_hash` enables stable de-duplication/rate-limit analysis without storing the raw IP.
+- `X-Forwarded-For` is only trusted when `TRUSTED_PROXY_CIDRS` is set; otherwise the
+  direct peer IP is used.
+
+Configuration:
+- Required:
+  - `DATABASE_URL`
+  - `IP_HASH_SALT` (set a secret unique per deployment; see [`.env.example`](.env.example:1))
+- Required when running behind a reverse proxy:
+  - `TRUSTED_PROXY_CIDRS` (comma-separated CIDRs that identify trusted proxy peers)
+- Optional (default OFF):
+  - `GEOIP_ENABLED=false` to disable country lookup
+  - `GEOIP_PROVIDER`, `GEOIP_URL`
+
+Inspecting logged interactions (example SQL):
+```sql
+SELECT
+  logged_at,
+  request_id,
+  latency_ms,
+  ip_prefix,
+  country,
+  left(question, 120) AS question_preview
+FROM interaction_logs
+ORDER BY logged_at DESC
+LIMIT 20;
+```
+
 ## Ingestion Runbook
 1) Start Postgres + backend:
 ```bash
@@ -56,6 +109,9 @@ python backend/scripts/ingest_cards.py
 3) Ask a question via UI or API.
 
 Environment variables are defined in [`.env.example`](.env.example:1).
+
+For more detail on the privacy-first design and proxy trust model, see
+[`plans/interaction-logging.md`](plans/interaction-logging.md:1).
 
 ## Frontend Toolchain (Node / npm / Next.js / TypeScript)
 
