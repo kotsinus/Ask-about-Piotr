@@ -51,6 +51,7 @@ class Settings:
     openai_api_key: str | None
     router_model: str
     synthesis_model: str
+    synthesis_temperature: float
     prompt_cache_enabled: bool
     retrieval_max_distance: float | None
     retrieval_distance_delta: float | None
@@ -85,6 +86,7 @@ def get_settings() -> Settings:
     openai_api_key = os.getenv("OPENAI_API_KEY")
     router_model = os.getenv("ROUTER_MODEL", "gpt-4.1-mini")
     synthesis_model = os.getenv("SYNTHESIS_MODEL", "gpt-4o-mini")
+    synthesis_temperature = float(os.getenv("SYNTHESIS_TEMPERATURE", "0.1"))
     prompt_cache_enabled = os.getenv("PROMPT_CACHE_ENABLED", "true").lower() in (
         "1",
         "true",
@@ -117,6 +119,7 @@ def get_settings() -> Settings:
         openai_api_key=openai_api_key,
         router_model=router_model,
         synthesis_model=synthesis_model,
+        synthesis_temperature=synthesis_temperature,
         prompt_cache_enabled=prompt_cache_enabled,
         retrieval_max_distance=retrieval_max_distance,
         retrieval_distance_delta=retrieval_distance_delta,

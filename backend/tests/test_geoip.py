@@ -37,6 +37,7 @@ def _settings(**overrides: Any) -> Settings:
         openai_api_key=None,
         router_model="gpt-4.1-mini",
         synthesis_model="gpt-4o-mini",
+        synthesis_temperature=0.1,
         prompt_cache_enabled=False,
         retrieval_max_distance=0.9,
         retrieval_distance_delta=0.25,

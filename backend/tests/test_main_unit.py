@@ -140,6 +140,7 @@ def test_chat_does_not_use_last_topic_for_retrieval_when_messages_empty(
         lambda: SimpleNamespace(
             router_model="router",
             synthesis_model="synth",
+            synthesis_temperature=0.1,
             embeddings_provider="stub",
             embeddings_model="stub",
             ip_hash_salt="salt",
@@ -192,6 +193,7 @@ def test_chat_uses_last_topic_for_retrieval_on_followup_question(
         lambda: SimpleNamespace(
             router_model="router",
             synthesis_model="synth",
+            synthesis_temperature=0.1,
             embeddings_provider="stub",
             embeddings_model="stub",
             ip_hash_salt="salt",

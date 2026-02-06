@@ -66,6 +66,7 @@ def _settings(**overrides):
         openai_api_key="test-key",
         router_model="router",
         synthesis_model="synth",
+        synthesis_temperature=0.1,
         embeddings_model=None,
     )
     for k, v in overrides.items():

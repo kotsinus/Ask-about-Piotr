@@ -34,7 +34,7 @@ from openai import APIConnectionError, APIError, AuthenticationError, RateLimitE
 from app.config import get_settings
 from app.geoip import lookup_country
 from app.interaction_logging import InteractionLog, write_interaction_log
-from app.llm import rewrite_question, route_category, synthesize_answer
+from app.llm import clean_why, rewrite_question, route_category, synthesize_answer
 from app.logging_setup import configure_logging
 from app.observability import (
     REQUEST_ID_HEADER,
@@ -338,9 +338,11 @@ def chat(
     except Exception:
         category = classify_question(standalone_question)
     chunks = retrieve(standalone_question, conversation_topic=conversation_topic)
+
     synthesis = synthesize_answer(
         standalone_question,
         chunks,
+        category,
         conversation_topic=conversation_topic,
         conversation_messages=[message.model_dump() for message in request.messages]
         if request.messages
@@ -378,12 +380,10 @@ def chat(
         SourceRef(card_id=chunk.card_id, section=chunk.section) for chunk in used_chunks
     ]
 
-    resolved_topic = chunks[0].card_id if chunks else conversation_topic
-
     response = ChatResponse(
         category=category,
         answer=synthesis.answer,
-        why_this_matters=synthesis.why_this_matters,
+        why_this_matters=clean_why(synthesis.why_this_matters),
         evidence=evidence,
         sources=sources,
         debug_retrieval=[
@@ -400,7 +400,7 @@ def chat(
         confidence_reason=synthesis.confidence_reason,
         context=ConversationContext(
             conversation_id=conversation_id,
-            last_topic=resolved_topic,
+            last_topic=conversation_topic,
         ),
         formatted_answer="",
     )
