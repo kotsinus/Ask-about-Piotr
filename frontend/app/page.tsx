@@ -349,6 +349,10 @@ export default function HomePage() {
           : message.content
     }));
 
+    // Protect against refresh/rehydration: only send last_topic when we have
+    // usable history (at least one complete prior turn).
+    const shouldSendLastTopic = messages.length >= 2;
+
     try {
       const response = await fetch(`${apiUrl}/chat`, {
         method: "POST",
@@ -361,7 +365,7 @@ export default function HomePage() {
           messages: history,
           context: {
             conversation_id: conversationId,
-            last_topic: lastTopic
+            last_topic: shouldSendLastTopic ? lastTopic : null
           }
         })
       });

@@ -17,13 +17,21 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from starlette.requests import Request
 
-from app.main import _is_uuid, classify_question, request_logging_middleware
-from app.schemas import Category
+from app.llm import SynthesisResult
+from app.main import _is_uuid, chat, classify_question, request_logging_middleware
+from app.schemas import (
+    Category,
+    ChatMessage,
+    ChatRequest,
+    Confidence,
+    ConversationContext,
+)
 
 
 @pytest.mark.parametrize(
@@ -85,3 +93,120 @@ async def test_request_logging_middleware_logs_and_reraises_on_exception(
         await request_logging_middleware(request, _call_next)
 
     assert called["reset"] == 1
+
+
+def _make_http_request() -> Request:
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/chat",
+        "headers": [],
+        "client": ("203.0.113.10", 1234),
+    }
+    req = Request(scope)
+    req.state.session_id = "00000000-0000-0000-0000-000000000000"
+    return req
+
+
+def test_chat_does_not_use_last_topic_for_retrieval_when_messages_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _retrieve(
+        question: str, limit: int = 25, conversation_topic: str | None = None
+    ):
+        captured["conversation_topic"] = conversation_topic
+        return []
+
+    monkeypatch.setattr("app.main.retrieve", _retrieve)
+    monkeypatch.setattr("app.main.rewrite_question", lambda q, messages=None: q)
+    monkeypatch.setattr(
+        "app.main.route_category",
+        lambda q: (_ for _ in ()).throw(RuntimeError("no router")),
+    )
+    monkeypatch.setattr(
+        "app.main.synthesize_answer",
+        lambda *args, **kwargs: SynthesisResult(
+            answer="ok",
+            why_this_matters="ok",
+            confidence=Confidence.medium,
+            confidence_reason=None,
+            used_chunk_indices=[],
+        ),
+    )
+    monkeypatch.setattr(
+        "app.main.get_settings",
+        lambda: SimpleNamespace(
+            router_model="router",
+            synthesis_model="synth",
+            embeddings_provider="stub",
+            embeddings_model="stub",
+            ip_hash_salt="salt",
+        ),
+    )
+    monkeypatch.setattr("app.main.extract_client_ip", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.main.write_interaction_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.main.get_request_id", lambda: "req-1")
+
+    http_request = _make_http_request()
+    chat_request = ChatRequest(
+        question="What is your education?",
+        messages=[],
+        context=ConversationContext(conversation_id="c1", last_topic="poison-topic"),
+    )
+
+    chat(http_request=http_request, request=chat_request)
+    assert captured["conversation_topic"] is None
+
+
+def test_chat_uses_last_topic_for_retrieval_on_followup_question(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _retrieve(
+        question: str, limit: int = 25, conversation_topic: str | None = None
+    ):
+        captured["conversation_topic"] = conversation_topic
+        return []
+
+    monkeypatch.setattr("app.main.retrieve", _retrieve)
+    monkeypatch.setattr("app.main.rewrite_question", lambda q, messages=None: q)
+    monkeypatch.setattr(
+        "app.main.route_category",
+        lambda q: (_ for _ in ()).throw(RuntimeError("no router")),
+    )
+    monkeypatch.setattr(
+        "app.main.synthesize_answer",
+        lambda *args, **kwargs: SynthesisResult(
+            answer="ok",
+            why_this_matters="ok",
+            confidence=Confidence.medium,
+            confidence_reason=None,
+            used_chunk_indices=[],
+        ),
+    )
+    monkeypatch.setattr(
+        "app.main.get_settings",
+        lambda: SimpleNamespace(
+            router_model="router",
+            synthesis_model="synth",
+            embeddings_provider="stub",
+            embeddings_model="stub",
+            ip_hash_salt="salt",
+        ),
+    )
+    monkeypatch.setattr("app.main.extract_client_ip", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.main.write_interaction_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.main.get_request_id", lambda: "req-1")
+
+    http_request = _make_http_request()
+    chat_request = ChatRequest(
+        question="What about that?",
+        messages=[ChatMessage(role="user", content="Tell me about Decreen.")],
+        context=ConversationContext(conversation_id="c1", last_topic="decreen"),
+    )
+
+    chat(http_request=http_request, request=chat_request)
+    assert captured["conversation_topic"] == "decreen"

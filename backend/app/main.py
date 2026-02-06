@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
 import uuid
 from datetime import UTC, datetime
@@ -260,9 +261,41 @@ def format_answer(
 def chat(
     http_request: Request, request: ChatRequest, debug_retrieval: bool = False
 ) -> ChatResponse:
+    def _should_use_conversation_topic(question: str, messages_count: int) -> bool:
+        """Heuristic: use topic only for follow-ups when we have history."""
+
+        if messages_count <= 0:
+            return False
+
+        q = " ".join(question.strip().lower().split())
+        if not q:
+            return False
+
+        followup_starts = (
+            "and ",
+            "also ",
+            "what about",
+            "how about",
+        )
+        if any(q.startswith(prefix) for prefix in followup_starts):
+            return True
+
+        # Ambiguity markers: third-person pronouns / deictic references.
+        if re.search(r"\b(it|that|this|they|them|those|these)\b", q):
+            return True
+
+        # Very short questions without a clear addressee are often follow-ups.
+        if len(q) <= 25 and not re.search(r"\b(you|your|piotr)\b", q):
+            return True
+
+        return False
+
     settings = get_settings()
     request_at = datetime.now(UTC)
     start = time.perf_counter()
+
+    request_id = get_request_id() or ""
+    session_id = getattr(http_request.state, "session_id", None)
 
     # If the client doesn't provide a conversation id, create one and return it
     # in the response context so the client can persist and reuse it.
@@ -270,6 +303,28 @@ def chat(
         request.context.conversation_id
         if request.context and request.context.conversation_id
         else str(uuid.uuid4())
+    )
+
+    messages_count = len(request.messages) if request.messages else 0
+    incoming_last_topic = request.context.last_topic if request.context else None
+    use_topic_for_retrieval = bool(
+        incoming_last_topic
+    ) and _should_use_conversation_topic(
+        question=request.question,
+        messages_count=messages_count,
+    )
+    conversation_topic = incoming_last_topic if use_topic_for_retrieval else None
+
+    logger.info(
+        "chat_start",
+        extra={
+            "request_id": request_id,
+            "session_id": session_id,
+            "conversation_id": conversation_id,
+            "messages_count": messages_count,
+            "incoming_last_topic": incoming_last_topic,
+            "topic_used_for_retrieval": use_topic_for_retrieval,
+        },
     )
 
     standalone_question = rewrite_question(
@@ -282,7 +337,6 @@ def chat(
         category = route_category(standalone_question)
     except Exception:
         category = classify_question(standalone_question)
-    conversation_topic = request.context.last_topic if request.context else None
     chunks = retrieve(standalone_question, conversation_topic=conversation_topic)
     synthesis = synthesize_answer(
         standalone_question,
@@ -292,6 +346,21 @@ def chat(
         if request.messages
         else None,
     )
+
+    refusal = "I do not have enough evidence in the provided materials."
+    if synthesis.answer == refusal:
+        logger.warning(
+            "chat_refusal_no_evidence",
+            extra={
+                "request_id": request_id,
+                "session_id": session_id,
+                "conversation_id": conversation_id,
+                "messages_count": messages_count,
+                "incoming_last_topic": incoming_last_topic,
+                "topic_used_for_retrieval": use_topic_for_retrieval,
+                "retrieval_chunk_count": len(chunks),
+            },
+        )
 
     # Return evidence/sources only for chunks actually used in the answer.
     used_indices = [
@@ -357,8 +426,6 @@ def chat(
         user_agent = http_request.headers.get("user-agent")
         country = lookup_country(client_ip, settings) if client_ip else None
 
-        request_id = get_request_id() or ""
-        session_id = getattr(http_request.state, "session_id", None)
         write_interaction_log(
             InteractionLog(
                 request_id=request_id,
