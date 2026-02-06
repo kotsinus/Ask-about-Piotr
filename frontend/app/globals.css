@@ -110,6 +110,15 @@ main {
   font-size: 14px;
 }
 
+.hero-subtitle {
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.25;
+  font-style: italic;
+  /* Pull subtitle closer to the title (header uses `.stack` gap). */
+  margin: -14px 0 -10px;
+}
+
 .chat-bubble {
   border: 1px solid var(--border);
   padding: 12px 14px;

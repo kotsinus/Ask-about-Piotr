@@ -22,8 +22,9 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata = {
-  title: "Ask about Piotr",
-  description: "Evidence-grounded Q&A about Piotr's experience"
+  title: "Ask Piotr Synak",
+  description:
+    "Grounded Q&A about Piotr Synak's experience, backed by curated knowledge cards with citations"
 };
 
 export default function RootLayout({

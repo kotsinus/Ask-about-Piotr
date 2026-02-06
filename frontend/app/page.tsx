@@ -229,7 +229,9 @@ function AnswerDetailsPanel({
               </section>
             ))
           ) : (
-            <div className="muted">Select an assistant answer and click Details to view metadata.</div>
+            <div className="muted">
+              Select Piotr&apos;s answer and click Details to view metadata.
+            </div>
           )}
         </div>
       </div>
@@ -415,10 +417,10 @@ export default function HomePage() {
       <div className="app-layout">
         <div className={`app-shell ${hasMessages ? "has-messages" : "empty"}`}>
           <header className="stack">
-            <h1>Ask about Piotr</h1>
+            <h1>Ask Piotr Synak</h1>
+            <p className="hero-subtitle">An evidence-grounded AI explaining my work</p>
             <p className="muted">
-              Ask a question about Piotr&apos;s experience. Responses are grounded in
-              curated knowledge cards with citations.
+              Ask me about my experience. I answer only from retrieved source material, with citations and explicit uncertainty when evidence is missing.
             </p>
           </header>
 
@@ -431,7 +433,7 @@ export default function HomePage() {
                 }`}
               >
                 <div className="label">
-                  {message.role === "user" ? "You" : "Assistant"}
+                  {message.role === "user" ? "You" : "Piotr"}
                 </div>
                 {message.payload ? (
                   <div className="answer-view">
