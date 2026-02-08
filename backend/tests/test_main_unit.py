@@ -21,6 +21,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from fastapi import BackgroundTasks
 from starlette.requests import Request
 
 from app.llm import SynthesisResult
@@ -157,7 +158,11 @@ def test_chat_does_not_use_last_topic_for_retrieval_when_messages_empty(
         context=ConversationContext(conversation_id="c1", last_topic="poison-topic"),
     )
 
-    chat(http_request=http_request, request=chat_request)
+    chat(
+        http_request=http_request,
+        request=chat_request,
+        background_tasks=BackgroundTasks(),
+    )
     assert captured["conversation_topic"] is None
 
 
@@ -210,5 +215,9 @@ def test_chat_uses_last_topic_for_retrieval_on_followup_question(
         context=ConversationContext(conversation_id="c1", last_topic="decreen"),
     )
 
-    chat(http_request=http_request, request=chat_request)
+    chat(
+        http_request=http_request,
+        request=chat_request,
+        background_tasks=BackgroundTasks(),
+    )
     assert captured["conversation_topic"] == "decreen"

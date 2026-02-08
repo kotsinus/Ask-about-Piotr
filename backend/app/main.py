@@ -26,7 +26,7 @@ import time
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import FastAPI, Request
+from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
@@ -259,8 +259,65 @@ def format_answer(
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(
-    http_request: Request, request: ChatRequest, debug_retrieval: bool = False
+    http_request: Request,
+    request: ChatRequest,
+    background_tasks: BackgroundTasks,
+    debug_retrieval: bool = False,
 ) -> ChatResponse:
+    def _log_interaction_background(
+        *,
+        settings,
+        request_id: str,
+        session_id: str | None,
+        conversation_id: str | None,
+        request_at: datetime,
+        response_at: datetime,
+        latency_ms: float | None,
+        question: str,
+        answer: str,
+        router_model: str | None,
+        synthesis_model: str | None,
+        embeddings_provider: str | None,
+        embeddings_model: str | None,
+        client_ip: str | None,
+        user_agent: str | None,
+    ) -> None:
+        """Best-effort interaction logging.
+
+        This must never block the response path. We therefore run it as a
+        background task (DB write + optional GeoIP HTTP call).
+        """
+
+        try:
+            ip_prefix = anonymize_ip_prefix(client_ip) if client_ip else None
+            ip_hash = (
+                hash_ip(ip=client_ip, salt=settings.ip_hash_salt) if client_ip else None
+            )
+            country = lookup_country(client_ip, settings) if client_ip else None
+
+            write_interaction_log(
+                InteractionLog(
+                    request_id=request_id,
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    request_at=request_at,
+                    response_at=response_at,
+                    latency_ms=latency_ms,
+                    question=question,
+                    answer=answer,
+                    router_model=router_model,
+                    synthesis_model=synthesis_model,
+                    embeddings_provider=embeddings_provider,
+                    embeddings_model=embeddings_model,
+                    ip_prefix=ip_prefix,
+                    ip_hash=ip_hash,
+                    user_agent=user_agent,
+                    country=country,
+                )
+            )
+        except Exception:
+            logger.exception("interaction_log_failed")
+
     def _should_use_conversation_topic(question: str, messages_count: int) -> bool:
         """Heuristic: use topic only for follow-ups when we have history."""
 
@@ -418,37 +475,33 @@ def chat(
     response_at = datetime.now(UTC)
     latency_ms = round((time.perf_counter() - start) * 1000, 2)
 
-    # Best-effort interaction logging. Never block the response.
+    # Best-effort interaction logging.
+    #
+    # NOTE: This performs blocking I/O (optional GeoIP HTTP call + DB write), so
+    # it must not run on the main response path.
     try:
+        tasks = background_tasks
         client_ip = extract_client_ip(http_request, settings)
-        ip_prefix = anonymize_ip_prefix(client_ip) if client_ip else None
-        ip_hash = (
-            hash_ip(ip=client_ip, salt=settings.ip_hash_salt) if client_ip else None
-        )
         user_agent = http_request.headers.get("user-agent")
-        country = lookup_country(client_ip, settings) if client_ip else None
-
-        write_interaction_log(
-            InteractionLog(
-                request_id=request_id,
-                session_id=session_id,
-                conversation_id=conversation_id,
-                request_at=request_at,
-                response_at=response_at,
-                latency_ms=latency_ms,
-                question=request.question,
-                answer=response.answer,
-                router_model=settings.router_model,
-                synthesis_model=settings.synthesis_model,
-                embeddings_provider=settings.embeddings_provider,
-                embeddings_model=settings.embeddings_model,
-                ip_prefix=ip_prefix,
-                ip_hash=ip_hash,
-                user_agent=user_agent,
-                country=country,
-            )
+        tasks.add_task(
+            _log_interaction_background,
+            settings=settings,
+            request_id=request_id,
+            session_id=session_id,
+            conversation_id=conversation_id,
+            request_at=request_at,
+            response_at=response_at,
+            latency_ms=latency_ms,
+            question=request.question,
+            answer=response.answer,
+            router_model=settings.router_model,
+            synthesis_model=settings.synthesis_model,
+            embeddings_provider=settings.embeddings_provider,
+            embeddings_model=settings.embeddings_model,
+            client_ip=client_ip,
+            user_agent=user_agent,
         )
     except Exception:
-        logger.exception("interaction_log_failed")
+        logger.exception("interaction_log_schedule_failed")
 
     return response
