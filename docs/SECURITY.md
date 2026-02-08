@@ -2,6 +2,8 @@
 
 This document summarizes the security and privacy posture implemented in the repository.
 
+This project prioritizes transparency over completeness; missing controls are documented explicitly rather than implied.
+
 For the full security/privacy discussion (including threats and mitigations), see
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md:1).
 

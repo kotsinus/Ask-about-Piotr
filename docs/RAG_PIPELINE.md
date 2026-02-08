@@ -17,6 +17,8 @@ The system is a **strictly grounded** RAG pipeline:
 The design goal is to make failures diagnosable (retrieval empty vs. synthesis non-compliant vs. formatting/schema failure)
 and to avoid “helpful” hallucinations.
 
+The pipeline is intentionally designed so that every failure mode is observable and attributable to a single stage.
+
 ## End-to-end flow (rewrite → route → retrieve → synthesize → guardrails)
 
 This is the current request path for `POST /chat`:

@@ -4,6 +4,8 @@ AI-powered application that answers questions about Piotr's professional experie
 using only a curated knowledge base. The system is strictly grounded in evidence
 from Markdown knowledge cards and refuses to answer when evidence is missing.
 
+This repository prioritizes correctness and transparency over feature breadth.
+
 ## Repository Structure
 - `backend/` — FastAPI RAG backend (current focus)
 - `frontend/` — placeholder for future UI

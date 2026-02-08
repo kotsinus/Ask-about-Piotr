@@ -2,6 +2,8 @@
 
 This document describes the in-repo observability model (what you can see and how to correlate events).
 
+Metrics and tracing are intentionally omitted to keep the runtime minimal and auditable.
+
 ## Correlation primitives
 
 ### Request ID (`X-Request-ID`)
