@@ -37,6 +37,28 @@ class _CacheEntry:
 
 _CACHE: dict[str, _CacheEntry] = {}
 
+# Hard cap to prevent unbounded growth. TTL alone is not a size bound.
+_CACHE_MAX_ENTRIES = 10_000
+
+
+def _cache_prune(*, max_entries: int) -> None:
+    if max_entries <= 0:
+        _CACHE.clear()
+        return
+
+    now = time.monotonic()
+    expired = [ip for ip, entry in _CACHE.items() if now >= entry.expires_at]
+    for ip in expired:
+        _CACHE.pop(ip, None)
+
+    if len(_CACHE) <= max_entries:
+        return
+
+    # Evict oldest inserted keys (dict preserves insertion order).
+    overflow = len(_CACHE) - max_entries
+    for ip in list(_CACHE.keys())[:overflow]:
+        _CACHE.pop(ip, None)
+
 
 def _cache_get(ip: str) -> str | None | object:
     entry = _CACHE.get(ip)
@@ -50,6 +72,7 @@ def _cache_get(ip: str) -> str | None | object:
 
 def _cache_set(ip: str, country: str | None, *, ttl_seconds: float) -> None:
     _CACHE[ip] = _CacheEntry(country=country, expires_at=time.monotonic() + ttl_seconds)
+    _cache_prune(max_entries=_CACHE_MAX_ENTRIES)
 
 
 _MISSING = object()

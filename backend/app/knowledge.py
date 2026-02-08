@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -150,11 +151,16 @@ def _split_sections(text: str, filename: str) -> dict[str, str]:
 
 def _parse_heading(line: str) -> str | None:
     stripped = line.strip()
-    if stripped.startswith("# "):
-        heading = stripped[2:].strip()
-        if heading.startswith("Category"):
+    match = re.match(r"^(#{1,2})\s+(.+)$", stripped)
+    if match:
+        heading_raw = match.group(2).strip()
+        # Allow headings like "Problem:" / "Category:".
+        heading = heading_raw.rstrip(":").strip()
+
+        # Special-case required sections that may appear with extra punctuation.
+        if heading.lower().startswith("category"):
             return "Category"
-        if heading.startswith("Links"):
+        if heading.lower().startswith("links"):
             return "Links"
         return heading
     return None
