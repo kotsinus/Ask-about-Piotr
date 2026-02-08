@@ -19,7 +19,7 @@
 
 export const metadata = {
   title: "Privacy Policy",
-  description: "Privacy policy for the Ask Piotr Synak demo"
+  description: "Privacy policy for the Ask Piotr Synak demo",
 };
 
 export default function PrivacyPolicyPage() {
@@ -33,59 +33,72 @@ export default function PrivacyPolicyPage() {
 
         <div className="legal-prose">
           <p>
-            This website is a personal, non-commercial demo project showcasing professional
-            experience and technical capabilities.
+            This website is a personal, non-commercial demo project showcasing
+            professional experience and technical capabilities.
           </p>
 
           <p>
-            The goal of this policy is to explain, in a clear and transparent way, how data is
-            handled when you use this site.
+            The goal of this policy is to explain, in a clear and transparent
+            way, how data is handled when you use this site.
           </p>
 
-          <h2>1. What data is collected</h2>
+          <h2>1. Data controller</h2>
           <p>
-            This website does not collect personal data such as names, email addresses, accounts,
-            or profiles.
+            Data controller (site owner): <strong>Piotr Synak</strong>.
+          </p>
+
+          <h2>2. What data is collected</h2>
+          <p>
+            This website does not collect personal data such as names, email
+            addresses, accounts, or profiles.
           </p>
           <p>The only data processed during normal operation is:</p>
           <ul>
             <li>an anonymous session identifier stored in a strictly necessary cookie</li>
-            <li>
-              minimal technical request metadata required to operate the service (e.g. request
-              timing)
-            </li>
+            <li>minimal technical request metadata required to operate the service (e.g. request timing)</li>
           </ul>
-          <p>No form submissions, user accounts, or identifiers are required to use the site.</p>
+          <p>
+            No form submissions, user accounts, or identifiers are required to
+            use the site.
+          </p>
 
-          <h2>2. Cookies</h2>
+          <h2>3. Cookies</h2>
           <p>This site uses one strictly necessary technical cookie:</p>
           <ul>
             <li>
-              <strong>Purpose:</strong> maintain a short-lived anonymous session required for
-              correct operation
+              <strong>Name:</strong> <code>ask_piotr_session_id</code>
             </li>
             <li>
-              <strong>Type:</strong> first-party, HttpOnly
+              <strong>Purpose:</strong> store an anonymous session identifier
+              required to maintain conversation continuity
             </li>
             <li>
-              <strong>Scope:</strong> functional only
+              <strong>Type:</strong> first-party, HttpOnly, SameSite=Lax, Secure
+              when served over HTTPS
             </li>
             <li>
-              <strong>Lifetime:</strong> limited to the active session or a short technical
-              duration
+              <strong>Scope:</strong> strictly functional
+            </li>
+            <li>
+              <strong>Lifetime:</strong> up to 1 year (Max-Age: 31536000 seconds)
             </li>
           </ul>
+
           <p>This cookie:</p>
           <ul>
             <li>does not track users across websites</li>
             <li>does not enable profiling</li>
-            <li>does not support advertising or analytics</li>
+            <li>is not used for analytics or advertising</li>
           </ul>
+
           <p>
-            According to EU ePrivacy rules and GDPR, such cookies do not require user consent.
+            Strictly necessary cookies are generally exempt from consent
+            requirements under EU ePrivacy rules. You can still disable cookies
+            in your browser, although some site functionality may not work
+            correctly.
           </p>
 
-          <h2>3. No tracking or analytics</h2>
+          <h2>4. No tracking or analytics</h2>
           <p>This website does not use:</p>
           <ul>
             <li>Google Analytics</li>
@@ -96,93 +109,125 @@ export default function PrivacyPolicyPage() {
           </ul>
           <p>There are no ads and no commercial tracking of any kind.</p>
 
-          <h2>4. Interaction logging (privacy-first)</h2>
+          <h2>5. Interaction logging (privacy-first)</h2>
           <p>
-            For technical debugging and quality monitoring, the backend may log interactions in a
-            privacy-minimised form:
+            For operational reliability, abuse prevention, and debugging, the
+            backend may process limited logs in a privacy-minimised form.
           </p>
           <ul>
-            <li>IP addresses are never stored in raw form</li>
-            <li>Any IP-derived data is anonymised or hashed</li>
-            <li>Logs are used solely for operational reliability and abuse prevention</li>
-            <li>Data is not shared with third parties</li>
+            <li>Logs are used solely for reliability and abuse prevention</li>
+            <li>Data is not sold and not used for advertising</li>
+            <li>Retention is limited (see below)</li>
           </ul>
 
-          <h2>5. Data retention</h2>
+          <p className="muted">
+            Note: infrastructure providers (hosting/CDN/reverse proxy) may
+            transiently process technical connection data (including IP
+            addresses) for security and delivery purposes.
+          </p>
+
+          <p className="muted">
+            The service may also use an internal request header (
+            <code>x-session-id</code>) to correlate requests during processing.
+            This header is not stored in the browser.
+          </p>
+
+          <h2>6. Data retention</h2>
           <p>
-            Technical logs, if stored, are retained only for a limited period and are not used to
-            identify individuals.
+            Technical logs, if stored, are retained only for a limited period
+            and are not used to identify individuals.
           </p>
           <p>No personal profiles or long-term behavioral histories are created.</p>
 
-          <h2>6. Data sharing</h2>
-          <p>No personal data is sold, shared, or transferred to third parties.</p>
+          <h2>7. Data sharing</h2>
           <p>
-            External AI model providers may process request content only to generate responses, and
-            only within the technical scope of the service.
+            No personal data is sold, shared, or transferred to third parties
+            for marketing purposes.
+          </p>
+          <p>
+            To generate answers, the service may call external AI model
+            providers. Those providers may process request content transiently
+            to produce a response, within the technical scope of the service.
           </p>
 
-          <h2>7. Use of Artificial Intelligence</h2>
-          <p>This website uses artificial intelligence (AI) models to generate answers to user questions.</p>
+          <h2>8. Use of Artificial Intelligence</h2>
+          <p>
+            This website uses artificial intelligence (AI) models to generate
+            answers to user questions.
+          </p>
           <p>The AI system operates under the following principles:</p>
           <ul>
             <li>Evidence-based answers only</li>
             <li>
-              Responses are generated exclusively from a curated, predefined knowledge base created
-              by the site owner.
+              Responses are generated exclusively from a curated, predefined
+              knowledge base created by the site owner.
             </li>
-            <li>The system is designed not to invent, guess, or extrapolate beyond available source material.</li>
+            <li>
+              The system is designed not to invent, guess, or extrapolate beyond
+              available source material.
+            </li>
           </ul>
-          <p>No autonomous learning from users</p>
+
+          <h3>No autonomous learning from users</h3>
           <ul>
             <li>User interactions are not used to train or fine-tune AI models.</li>
           </ul>
-          <p>No personal profiling</p>
-          <ul>
-            <li>The AI does not build user profiles, infer identities, or track individuals across sessions.</li>
-          </ul>
-          <p>Human-authored knowledge base</p>
+
+          <h3>No personal profiling</h3>
           <ul>
             <li>
-              All factual content originates from human-curated documents describing professional
-              experience, projects, and publications.
-            </li>
-          </ul>
-          <p>Model providers</p>
-          <ul>
-            <li>
-              AI model providers may process request content transiently to generate responses.
-            </li>
-            <li>
-              No personal data is intentionally submitted, and no long-term storage is controlled by this site.
+              The AI does not build user profiles, infer identities, or track
+              individuals across sessions.
             </li>
           </ul>
 
-          <h2>8. Limitations and transparency</h2>
-          <p>
-            While AI is used to assist with information retrieval and summarisation:
-          </p>
+          <h3>Human-authored knowledge base</h3>
+          <ul>
+            <li>
+              All factual content originates from human-curated documents
+              describing professional experience, projects, and publications.
+            </li>
+          </ul>
+
+          <h3>Model providers</h3>
+          <ul>
+            <li>
+              AI model providers may process request content transiently to
+              generate responses.
+            </li>
+            <li>
+              No personal data is intentionally submitted. Where supported,
+              privacy-preserving settings are preferred.
+            </li>
+          </ul>
+
+          <h2>9. Limitations and transparency</h2>
+          <p>While AI is used to assist with information retrieval and summarisation:</p>
           <ul>
             <li>the system may refuse to answer if sufficient evidence is not available</li>
             <li>answers are constrained by the completeness of the underlying knowledge base</li>
-            <li>AI output should be interpreted as informational, not advisory</li>
+            <li>
+              AI output should be interpreted as informational, not advisory (no
+              legal/medical/financial advice)
+            </li>
           </ul>
           <p>
-            This design prioritises correctness, transparency, and responsible AI usage over
-            conversational breadth.
+            This design prioritises correctness, transparency, and responsible AI
+            usage over conversational breadth.
           </p>
 
-          <h2>9. Your rights</h2>
+          <h2>10. Your rights</h2>
           <p>
-            If you are located in the EU or Switzerland, you have rights under GDPR / revFADP,
-            including the right to information and deletion.
+            If you are located in the EU or Switzerland, you have rights under
+            GDPR / revFADP, including the right to information and deletion.
           </p>
           <p>
-            Because this site does not maintain personal user accounts or identifiable profiles,
-            there is typically no personal data to retrieve or erase.
+            Because this site does not maintain personal user accounts or
+            identifiable profiles, there is typically no personal data to
+            retrieve or erase.
           </p>
 
-          <h2>10. Contact</h2>
+          <h2>11. Contact</h2>
           <p>If you have any questions about privacy or data handling, you can contact:</p>
           <p>
             Piotr Synak
@@ -190,10 +235,10 @@ export default function PrivacyPolicyPage() {
             📧 ask.about.piotr@gmail.com
           </p>
 
-          <h2>11. Changes to this policy</h2>
+          <h2>12. Changes to this policy</h2>
           <p>
-            This policy may be updated if the technical architecture or data handling practices
-            change.
+            This policy may be updated if the technical architecture or data
+            handling practices change.
           </p>
           <p>The date at the top indicates the latest revision.</p>
         </div>
@@ -201,4 +246,3 @@ export default function PrivacyPolicyPage() {
     </main>
   );
 }
-
