@@ -226,3 +226,60 @@ def test_clean_why_empty_returns_category_specific_fallback() -> None:
         "It shapes the trade-offs I make when designing system boundaries and keeping services operable over time.",
         "It affects long-term complexity and operability when scaling systems.",
     }
+
+
+def test_synthesize_answer_includes_style_and_why_hints_and_parses_indices(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    capture: dict[str, object] = {}
+    payload = {
+        "answer": "Some sufficiently long answer that is not a refusal.",
+        "why_this_matters": "Because.",
+        "confidence": "Medium",
+        "confidence_reason": None,
+        "used_chunk_indices": ["0", "x", "0"],
+    }
+    monkeypatch.setattr(llm, "get_settings", lambda: _settings())
+    monkeypatch.setattr("app.openai_client.get_settings", lambda: _settings())
+    monkeypatch.setattr("app.openai_client._client", None)
+    monkeypatch.setattr(
+        "app.openai_client.OpenAI",
+        lambda api_key: _FakeOpenAI(content=json.dumps(payload), capture=capture),
+    )
+
+    chunks = [
+        RetrievedChunk(
+            card_id="c1",
+            category="cat",
+            section="Overview",
+            source_url=None,
+            content="Evidence sentence one. Evidence sentence two.",
+            distance=0.1,
+        )
+    ]
+    result = llm.synthesize_answer(
+        "q", chunks, category=Category.hands_on_engineering.value
+    )
+    assert result.used_chunk_indices == [0]
+
+    user_msg = capture["kwargs"]["messages"][1]["content"]  # type: ignore[index]
+    assert "Answer style hint:" in user_msg
+    assert "Why-this-matters hint:" in user_msg
+
+
+def test_parse_category_debug_branch_and_generic_fallbacks(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level("DEBUG")
+    llm.logger.setLevel("DEBUG")
+
+    assert llm._parse_category("???").value == Category.hands_on_engineering.value
+    assert any("unknown_category_string" in r.message for r in caplog.records)
+
+    assert llm._stable_choice((), seed="x") == ""
+    generic = {
+        "It affects how I make technical decisions.",
+        "It influences practical trade-offs I make when building systems.",
+    }
+    assert llm._fallback_why(category=None, seed="s") in generic
+    assert llm.clean_why("It demonstrates.", category="Unknown") in generic

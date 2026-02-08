@@ -21,12 +21,24 @@ from pathlib import Path
 
 import pytest
 
+from app import knowledge
 from app.knowledge import (
     REQUIRED_SECTIONS,
     KnowledgeCard,
     chunk_cards,
     load_cards,
 )
+
+
+def test_load_cards_raises_when_knowledge_dir_missing(tmp_path: Path) -> None:
+    missing = tmp_path / "nope"
+    with pytest.raises(FileNotFoundError, match="Knowledge directory not found"):
+        load_cards(missing)
+
+
+def test_extract_source_url_ignores_dash_only_line() -> None:
+    # Regression for links sections that contain a list marker but no URL.
+    assert knowledge._extract_source_url("\n  \n-  \n") is None
 
 
 def _card_text(*, links_line: str = "- https://example.com/source") -> str:

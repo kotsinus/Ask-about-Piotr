@@ -167,5 +167,7 @@ def _extract_source_url(links_section: str) -> str | None:
             continue
         if candidate.startswith("-"):
             candidate = candidate[1:].strip()
+            if not candidate:
+                continue
         return candidate
     return None

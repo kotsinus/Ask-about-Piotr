@@ -13,6 +13,11 @@ venv/
 # FastAPI / Uvicorn
 .uvicorn/
 
+# Coverage
+.coverage
+coverage.xml
+htmlcov/
+
 # Node / Frontend (future)
 node_modules/
 npm-debug.log*

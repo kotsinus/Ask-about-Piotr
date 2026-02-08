@@ -25,6 +25,33 @@ import pytest
 from app.llm import route_category
 
 
+def test_ttlru_cache_validates_expires_and_evicts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.prompt_cache import TTLRUCache
+
+    with pytest.raises(ValueError, match="max_entries"):
+        TTLRUCache(max_entries=0, ttl_seconds=1)
+    with pytest.raises(ValueError, match="ttl_seconds"):
+        TTLRUCache(max_entries=1, ttl_seconds=0)
+
+    now = {"t": 100.0}
+    monkeypatch.setattr("app.prompt_cache.time.monotonic", lambda: now["t"])
+
+    cache = TTLRUCache(max_entries=2, ttl_seconds=10)
+    cache.set("a", 1)
+    cache.set("b", 2)
+
+    # Touch "a" so "b" becomes LRU.
+    assert cache.get("a") == 1
+    cache.set("c", 3)
+    assert cache.get("b") is None
+
+    # Expiry removes entry and returns None.
+    now["t"] += 11.0
+    assert cache.get("a") is None
+
+
 class _FakeOpenAI:
     def __init__(self, *, api_key: str, create_impl):
         self.api_key = api_key

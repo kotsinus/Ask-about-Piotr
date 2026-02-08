@@ -131,3 +131,58 @@ def test_ensure_interaction_logs_table_exists_calls_create_all(
 
     tables = called["kwargs"]["tables"]
     assert tables == [InteractionLogModel.__table__]
+
+
+def test_interaction_logging_success_after_create_and_import_fallbacks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    il._INTERACTION_LOGGING_DISABLED_REASON = None
+
+    # Successful path: undefined table -> create -> second write succeeds.
+    state = {"n": 0}
+
+    def _write_once(row: InteractionLog) -> None:
+        state["n"] += 1
+        if state["n"] == 1:
+            raise _undefined_table_exc()
+        return None
+
+    monkeypatch.setattr(il, "_write_interaction_log_once", _write_once)
+    monkeypatch.setattr(il, "_ensure_interaction_logs_table_exists", lambda: True)
+
+    il.write_interaction_log(_row())
+    assert state["n"] == 2
+    assert il.get_interaction_logging_disabled_reason() is None
+
+    # Branch: ProgrammingError without orig.
+    from sqlalchemy.exc import ProgrammingError
+
+    assert il._is_undefined_table(ProgrammingError("stmt", {}, None)) is False
+
+    # Branch: psycopg import fails => fallback to string match.
+    import builtins
+
+    orig_import = builtins.__import__
+
+    def _import(name, *args, **kwargs):
+        if name == "psycopg":
+            raise ImportError("blocked for test")
+        return orig_import(name, *args, **kwargs)
+
+    class _Orig:
+        def __repr__(self) -> str:
+            return "UndefinedTable(whatever)"
+
+    monkeypatch.setattr(builtins, "__import__", _import)
+    assert il._is_undefined_table(ProgrammingError("stmt", {}, _Orig())) is True
+
+
+def test_ensure_interaction_logs_table_exists_returns_false_on_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        il,
+        "get_engine",
+        lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    assert il._ensure_interaction_logs_table_exists() is False

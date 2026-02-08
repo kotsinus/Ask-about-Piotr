@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.config import get_settings
+from app.config import _parse_bool, _parse_optional_float, get_settings
 from app.db import _to_sqlalchemy_url
 
 
@@ -87,3 +87,17 @@ def test_to_sqlalchemy_url_normalizes_psycopg_driver() -> None:
         == "postgresql+psycopg://user:pass@localhost:5432/db"
     )
     assert _to_sqlalchemy_url("sqlite:///file.db") == "sqlite:///file.db"
+
+
+def test_config_parsers_cover_edge_branches(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert _parse_bool("maybe", default=True) is True
+    assert _parse_optional_float(None) is None
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://x")
+    monkeypatch.setenv("RETRIEVAL_PER_CARD_CAP", "not-an-int")
+    assert get_settings().retrieval_per_card_cap == 2
+
+    monkeypatch.setenv("APP_ENV", "prod")
+    monkeypatch.setenv("IP_HASH_SALT", "")
+    with pytest.raises(RuntimeError, match="IP_HASH_SALT is required"):
+        get_settings()

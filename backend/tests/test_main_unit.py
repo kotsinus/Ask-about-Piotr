@@ -221,3 +221,113 @@ def test_chat_uses_last_topic_for_retrieval_on_followup_question(
         background_tasks=BackgroundTasks(),
     )
     assert captured["conversation_topic"] == "decreen"
+
+
+@pytest.mark.parametrize(
+    ("question", "expected_use_topic"),
+    [
+        ("and what about the scale?", True),
+        ("Is it production-ready?", True),
+        ("Why?", True),
+        ("   ", False),
+    ],
+)
+def test_chat_topic_heuristics_controls_retrieval_topic_usage(
+    monkeypatch: pytest.MonkeyPatch, question: str, expected_use_topic: bool
+) -> None:
+    captured: dict[str, Any] = {}
+
+    def _retrieve(q: str, limit: int = 25, conversation_topic: str | None = None):
+        captured["conversation_topic"] = conversation_topic
+        return []
+
+    monkeypatch.setattr("app.main.retrieve", _retrieve)
+    monkeypatch.setattr("app.main.rewrite_question", lambda q, messages=None: q)
+    monkeypatch.setattr(
+        "app.main.route_category",
+        lambda q: (_ for _ in ()).throw(RuntimeError("no router")),
+    )
+    monkeypatch.setattr(
+        "app.main.synthesize_answer",
+        lambda *args, **kwargs: SynthesisResult(
+            answer="ok",
+            why_this_matters="ok",
+            confidence=Confidence.medium,
+            confidence_reason=None,
+            used_chunk_indices=[],
+        ),
+    )
+    monkeypatch.setattr(
+        "app.main.get_settings",
+        lambda: SimpleNamespace(
+            router_model="router",
+            synthesis_model="synth",
+            synthesis_temperature=0.1,
+            embeddings_provider="stub",
+            embeddings_model="stub",
+            ip_hash_salt="salt",
+        ),
+    )
+    monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
+    monkeypatch.setattr("app.main.write_interaction_log", lambda *a, **k: None)
+    monkeypatch.setattr("app.main.get_request_id", lambda: "req-1")
+
+    http_request = _make_http_request()
+    chat_request = ChatRequest(
+        question=question,
+        messages=[ChatMessage(role="user", content="prior")],
+        context=ConversationContext(conversation_id="c1", last_topic="topic"),
+    )
+    chat(
+        http_request=http_request,
+        request=chat_request,
+        background_tasks=BackgroundTasks(),
+    )
+
+    expected = "topic" if expected_use_topic else None
+    assert captured["conversation_topic"] == expected
+
+
+def test_chat_swallow_background_task_scheduling_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Cover the defensive `try/except` around scheduling background tasks.
+    monkeypatch.setattr("app.main.retrieve", lambda *a, **k: [])
+    monkeypatch.setattr("app.main.rewrite_question", lambda q, messages=None: q)
+    monkeypatch.setattr(
+        "app.main.route_category",
+        lambda q: (_ for _ in ()).throw(RuntimeError("no router")),
+    )
+    monkeypatch.setattr(
+        "app.main.synthesize_answer",
+        lambda *args, **kwargs: SynthesisResult(
+            answer="ok",
+            why_this_matters="ok",
+            confidence=Confidence.medium,
+            confidence_reason=None,
+            used_chunk_indices=[],
+        ),
+    )
+    monkeypatch.setattr(
+        "app.main.get_settings",
+        lambda: SimpleNamespace(
+            router_model="router",
+            synthesis_model="synth",
+            synthesis_temperature=0.1,
+            embeddings_provider="stub",
+            embeddings_model="stub",
+            ip_hash_salt="salt",
+        ),
+    )
+    monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
+    monkeypatch.setattr("app.main.get_request_id", lambda: "req-1")
+
+    http_request = _make_http_request()
+    chat_request = ChatRequest(question="Q", messages=[], context=None)
+
+    response = chat(
+        http_request=http_request,
+        request=chat_request,
+        background_tasks=object(),
+    )
+    assert response.answer == "ok"

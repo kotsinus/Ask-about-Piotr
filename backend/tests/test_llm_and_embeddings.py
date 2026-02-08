@@ -22,7 +22,12 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.embeddings import OpenAIEmbeddingProvider, get_embedding_provider
+from app.embeddings import (
+    EmbeddingProvider,
+    OpenAIEmbeddingProvider,
+    StubEmbeddingProvider,
+    get_embedding_provider,
+)
 from app.llm import rewrite_question, route_category, synthesize_answer
 from app.retrieval import RetrievedChunk
 from app.schemas import Category, Confidence
@@ -257,3 +262,13 @@ def test_openai_embedding_provider_batches_and_filters_empty_texts(
 
     with pytest.raises(RuntimeError, match="No valid text provided"):
         provider.embed([" ", "\n\n"])
+
+
+def test_embeddings_base_and_stub_provider_raise() -> None:
+    provider = EmbeddingProvider(name="x", dimensions=3)
+    with pytest.raises(NotImplementedError):
+        provider.embed(["x"])  # covers base interface branch
+
+    stub = StubEmbeddingProvider(name="stub", dimensions=3)
+    with pytest.raises(RuntimeError, match="stubbed"):
+        stub.embed(["x"])

@@ -28,6 +28,17 @@ from app.config import Settings
 from app.geoip import lookup_country
 
 
+def test_build_url_unknown_provider_falls_back_to_ipapi_co() -> None:
+    from types import SimpleNamespace
+
+    from app.geoip import _build_url
+
+    settings = SimpleNamespace(geoip_url=None, geoip_provider="unknown")
+    assert (
+        _build_url(settings, "203.0.113.7") == "https://ipapi.co/203.0.113.7/country/"
+    )
+
+
 def _settings(**overrides: Any) -> Settings:
     base = Settings(
         app_env="test",
