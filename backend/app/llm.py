@@ -275,8 +275,6 @@ def synthesize_answer(
         f"Conversation topic: {conversation_topic}\n\n" if conversation_topic else ""
     )
 
-    style_hint = f"Answer style hint: {category}\n\n" if category else ""
-
     user_prompt = (
         "Question:\n"
         f"{question}\n\n"

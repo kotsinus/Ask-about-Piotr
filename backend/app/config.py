@@ -44,6 +44,9 @@ def _parse_csv(value: str | None) -> list[str]:
 
 @dataclass(frozen=True)
 class Settings:
+    # Deployment environment (used for safety checks)
+    app_env: str
+
     database_url: str
     embeddings_provider: str
     embeddings_model: str | None
@@ -60,10 +63,30 @@ class Settings:
     ip_hash_salt: str
     trusted_proxy_cidrs: list[str]
 
+    # Web security / cross-origin configuration
+    cookie_secure: bool
+    cors_allow_origins: list[str]
+
     # Optional GEO-IP lookup (default OFF)
     geoip_enabled: bool
     geoip_provider: str
     geoip_url: str | None
+
+
+@dataclass(frozen=True)
+class WebSettings:
+    cookie_secure: bool
+    cors_allow_origins: list[str]
+
+
+def get_web_settings() -> WebSettings:
+    """Settings needed at import time (must NOT require DATABASE_URL)."""
+
+    cookie_secure = _parse_bool(os.getenv("COOKIE_SECURE"), default=False)
+    cors_allow_origins = _parse_csv(
+        os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:3000")
+    )
+    return WebSettings(cookie_secure=cookie_secure, cors_allow_origins=cors_allow_origins)
 
 
 def _parse_optional_float(value: str | None) -> float | None:
@@ -76,6 +99,8 @@ def _parse_optional_float(value: str | None) -> float | None:
 
 
 def get_settings() -> Settings:
+    app_env = (os.getenv("APP_ENV", "dev") or "dev").strip().lower()
+
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
         raise RuntimeError("DATABASE_URL is required.")
@@ -105,13 +130,20 @@ def get_settings() -> Settings:
 
     # Logging metadata
     ip_hash_salt = os.getenv("IP_HASH_SALT", "")
+    if app_env in {"prod", "production"} and not ip_hash_salt.strip():
+        raise RuntimeError("IP_HASH_SALT is required in production.")
+
     trusted_proxy_cidrs = _parse_csv(os.getenv("TRUSTED_PROXY_CIDRS"))
+
+    # Web security / CORS
+    web = get_web_settings()
 
     geoip_enabled = _parse_bool(os.getenv("GEOIP_ENABLED"), default=False)
     geoip_provider = (os.getenv("GEOIP_PROVIDER", "ipapi_co") or "ipapi_co").strip()
     geoip_url = os.getenv("GEOIP_URL")
 
     return Settings(
+        app_env=app_env,
         database_url=database_url,
         embeddings_provider=embeddings_provider,
         embeddings_model=embeddings_model,
@@ -125,6 +157,8 @@ def get_settings() -> Settings:
         retrieval_distance_delta=retrieval_distance_delta,
         ip_hash_salt=ip_hash_salt,
         trusted_proxy_cidrs=trusted_proxy_cidrs,
+        cookie_secure=web.cookie_secure,
+        cors_allow_origins=web.cors_allow_origins,
         geoip_enabled=geoip_enabled,
         geoip_provider=geoip_provider,
         geoip_url=geoip_url,

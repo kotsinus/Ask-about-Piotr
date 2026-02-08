@@ -77,6 +77,10 @@ Configuration:
 - Required:
   - `DATABASE_URL`
   - `IP_HASH_SALT` (set a secret unique per deployment; see [`.env.example`](.env.example:1))
+
+Web security / CORS:
+- `COOKIE_SECURE` (default: `false`; set `true` in production behind HTTPS)
+- `CORS_ALLOW_ORIGINS` (default: `http://localhost:3000`; comma-separated)
 - Required when running behind a reverse proxy:
   - `TRUSTED_PROXY_CIDRS` (comma-separated CIDRs that identify trusted proxy peers)
 - Optional (default OFF):

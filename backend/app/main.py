@@ -31,7 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
 
-from app.config import get_settings
+from app.config import get_settings, get_web_settings
 from app.geoip import lookup_country
 from app.interaction_logging import InteractionLog, write_interaction_log
 from app.llm import clean_why, rewrite_question, route_category, synthesize_answer
@@ -61,6 +61,11 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Ask about Piotr API", version="0.1.0")
 
+# NOTE: we read web settings once at import time for middleware configuration.
+# This must not depend on DATABASE_URL (tests import the app without a DB).
+# If you need per-request overrides, rework this into an app factory.
+_WEB_SETTINGS = get_web_settings()
+
 SESSION_COOKIE_NAME = "ask_piotr_session_id"
 SESSION_ID_HEADER = "x-session-id"
 
@@ -77,7 +82,7 @@ def _is_uuid(value: str | None) -> bool:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_WEB_SETTINGS.cors_allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -121,14 +126,13 @@ async def request_logging_middleware(request: Request, call_next):
         raise
     else:
         if not existing_session_id:
-            # `secure=True` should be used in production (HTTPS), but `False` is
-            # convenient for local development.
+            secure_cookie = _WEB_SETTINGS.cookie_secure
             response.set_cookie(
                 key=SESSION_COOKIE_NAME,
                 value=session_id,
                 httponly=True,
                 samesite="lax",
-                secure=False,
+                secure=secure_cookie,
                 max_age=60 * 60 * 24 * 365,
             )
         response.headers[REQUEST_ID_HEADER] = request_id
@@ -290,9 +294,9 @@ def chat(
 
         try:
             ip_prefix = anonymize_ip_prefix(client_ip) if client_ip else None
-            ip_hash = (
-                hash_ip(ip=client_ip, salt=settings.ip_hash_salt) if client_ip else None
-            )
+            ip_hash = None
+            if client_ip and (settings.ip_hash_salt or "").strip():
+                ip_hash = hash_ip(ip=client_ip, salt=settings.ip_hash_salt)
             country = lookup_country(client_ip, settings) if client_ip else None
 
             write_interaction_log(

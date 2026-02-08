@@ -26,12 +26,17 @@ services:
     volumes:
       - ./knowledge:/knowledge:ro
     environment:
+      - APP_ENV=${APP_ENV:-dev}
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/ask_piotr
       - EMBEDDINGS_PROVIDER=openai
       - EMBEDDINGS_MODEL=text-embedding-3-small
       - ROUTER_MODEL=gpt-4.1-mini
       - SYNTHESIS_MODEL=gpt-4o-mini
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+
+      # Web security / CORS
+      - COOKIE_SECURE=${COOKIE_SECURE:-false}
+      - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS:-http://localhost:3000}
 
       # Privacy-first interaction logging / client metadata
       - IP_HASH_SALT=${IP_HASH_SALT}

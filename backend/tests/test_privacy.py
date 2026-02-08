@@ -33,6 +33,7 @@ from app.privacy import (
 
 def _settings(**overrides: Any) -> Settings:
     base = Settings(
+        app_env="test",
         database_url="postgresql://test:test@localhost:5432/test",
         embeddings_provider="stub",
         embeddings_model=None,
@@ -46,6 +47,8 @@ def _settings(**overrides: Any) -> Settings:
         retrieval_distance_delta=0.25,
         ip_hash_salt="salt",
         trusted_proxy_cidrs=[],
+        cookie_secure=False,
+        cors_allow_origins=["http://localhost:3000"],
         geoip_enabled=False,
         geoip_provider="ipapi_co",
         geoip_url=None,
