@@ -499,7 +499,11 @@ export default function HomePage() {
                         <button
                           type="button"
                           className="meta-link"
-                          onClick={() => {
+                          onClick={(event) => {
+                            // Prevent the click from bubbling to the parent
+                            // `.chat-bubble` onClick, which always expands the
+                            // RHS panel.
+                            event.stopPropagation();
                             setActiveDetailsIndex(index);
                             setDetailsExpanded((prev) => !prev);
                           }}

@@ -350,6 +350,10 @@ button.meta-link {
   background: transparent;
   border: none;
   cursor: pointer;
+  /* Override global `button { align-self: flex-start; }` so Details aligns with
+   * pills and other metadata in the flex row.
+   */
+  align-self: center;
 }
 
 .meta-link:hover {
