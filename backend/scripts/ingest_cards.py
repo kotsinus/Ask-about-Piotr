@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import sys
+from collections import Counter
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
@@ -75,21 +76,56 @@ from app.embeddings import get_embedding_provider
 from app.knowledge import chunk_cards, load_cards
 
 
+def _print_cards_summary(*, cards) -> None:
+    card_ids = sorted([c.card_id for c in cards])
+    categories = Counter([c.category for c in cards])
+
+    print(f"Loaded {len(cards)} knowledge cards", flush=True)
+    if card_ids:
+        print("Cards:", flush=True)
+        for card_id in card_ids:
+            print(f"- {card_id}", flush=True)
+    if categories:
+        print("Category counts:", flush=True)
+        for category, count in sorted(
+            categories.items(), key=lambda kv: (-kv[1], kv[0])
+        ):
+            print(f"- {category}: {count}", flush=True)
+
+
 def main() -> None:
     _load_env_file(REPO_ROOT / ".env")
     settings = get_settings()
     database_url = _normalize_database_url(settings.database_url)
     _ensure_database_exists(database_url)
+
+    knowledge_dir = Path(__file__).resolve().parents[2] / "knowledge"
+    cards = load_cards(knowledge_dir)
+    print(f"Knowledge directory: {knowledge_dir}", flush=True)
+    _print_cards_summary(cards=cards)
+
+    chunks = chunk_cards(cards)
+    chunk_counts = Counter([c.card_id for c in chunks])
+    print(f"Chunked into {len(chunks)} total chunks", flush=True)
+    if chunk_counts:
+        print("Chunks per card:", flush=True)
+        for card_id, count in sorted(
+            chunk_counts.items(), key=lambda kv: (-kv[1], kv[0])
+        ):
+            print(f"- {card_id}: {count}", flush=True)
+
     provider = get_embedding_provider(
         name=settings.embeddings_provider,
         dimensions=settings.embeddings_dimensions,
     )
-
-    knowledge_dir = Path(__file__).resolve().parents[2] / "knowledge"
-    cards = load_cards(knowledge_dir)
-    chunks = chunk_cards(cards)
+    print(
+        "Embeddings provider: "
+        f"{settings.embeddings_provider} (dimensions={settings.embeddings_dimensions})",
+        flush=True,
+    )
 
     embeddings = provider.embed([chunk.content for chunk in chunks])
+    print(f"Generated {len(embeddings)} embeddings", flush=True)
 
     with psycopg.connect(database_url) as conn:
         with conn.cursor() as cursor:
@@ -132,7 +168,11 @@ def main() -> None:
                         embedding,
                     ),
                 )
+            cursor.execute("SELECT COUNT(*) FROM knowledge_chunks;")
+            inserted = int(cursor.fetchone()[0])
         conn.commit()
+
+    print(f"Inserted {inserted} rows into knowledge_chunks", flush=True)
 
 
 if __name__ == "__main__":

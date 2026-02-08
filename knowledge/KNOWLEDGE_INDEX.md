@@ -4,6 +4,7 @@ This repository contains curated knowledge cards following the schema in `knowle
 Below is a practical mapping from the 100 demo questions to the cards that provide evidence.
 
 ## 1-10 General Professional Profile
+- `profile-identity`
 - `profile-professional-summary`
 - `experience-professional-profile`
 - `experience-timeline-cv-facts`

@@ -24,6 +24,7 @@
 - `leadership-agile` → `knowledge/cards/leadership-agile.md`
 - `personal-interests` → `knowledge/cards/personal-interests.md`
 - `personal-location-citizenship` → `knowledge/cards/personal-location-citizenship.md`
+- `profile-identity` → `knowledge/cards/profile-identity.md`
 - `profile-professional-summary` → `knowledge/cards/profile-professional-summary.md`
 - `project-ask-about-piotr-demo-scope` → `knowledge/cards/project-ask-about-piotr-demo-scope.md`
 - `project-decreen-knowledge-graph-onboarding` → `knowledge/cards/project-decreen-knowledge-graph-onboarding.md`

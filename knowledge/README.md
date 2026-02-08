@@ -10,7 +10,7 @@ Each card is a standalone Markdown file that MUST include the following sections
 in this exact order and with these exact headings.
 
 1. Title
-2. Category (project | research | certification | experience)
+2. Category (profile | project | research | certification | experience)
 3. Problem
 4. My role
 5. What I built
@@ -30,7 +30,7 @@ in this exact order and with these exact headings.
 When cards are chunked, each chunk MUST include these metadata fields:
 
 - `card_id`: stable identifier derived from the filename (e.g., `project-ml-platform`).
-- `category`: one of `project | research | certification | experience`.
+- `category`: one of `profile | project | research | certification | experience`.
 - `section`: exact section heading from the schema (e.g., `Tech stack`).
 - `source_url`: URL or file reference from the Links section (if present).
 
