@@ -75,8 +75,9 @@ def test_rewrite_question_uses_openai_when_key_present(
         assert kind == "chat"
         return _chat_response(json.dumps({"standalone_question": "Standalone?"}))
 
+    monkeypatch.setattr("app.openai_client._client", None)
     monkeypatch.setattr(
-        "app.llm.OpenAI",
+        "app.openai_client.OpenAI",
         lambda api_key: _FakeOpenAI(api_key=api_key, create_impl=_create_impl),
     )
 
@@ -92,8 +93,9 @@ def test_rewrite_question_handles_non_json_response(
 ) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
+    monkeypatch.setattr("app.openai_client._client", None)
     monkeypatch.setattr(
-        "app.llm.OpenAI",
+        "app.openai_client.OpenAI",
         lambda api_key: _FakeOpenAI(
             api_key=api_key,
             create_impl=lambda **k: _chat_response("not-json"),
@@ -114,8 +116,9 @@ def test_route_category_parses_known_and_unknown_categories(
 ) -> None:
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
+    monkeypatch.setattr("app.openai_client._client", None)
     monkeypatch.setattr(
-        "app.llm.OpenAI",
+        "app.openai_client.OpenAI",
         lambda api_key: _FakeOpenAI(
             api_key=api_key,
             create_impl=lambda **k: _chat_response(
@@ -125,8 +128,9 @@ def test_route_category_parses_known_and_unknown_categories(
     )
     assert route_category("Q") == Category.ai_and_ml_practice
 
+    monkeypatch.setattr("app.openai_client._client", None)
     monkeypatch.setattr(
-        "app.llm.OpenAI",
+        "app.openai_client.OpenAI",
         lambda api_key: _FakeOpenAI(
             api_key=api_key,
             create_impl=lambda **k: _chat_response(json.dumps({"category": "???"})),
@@ -165,8 +169,9 @@ def test_synthesize_answer_falls_back_to_all_indices_when_missing(
         # used_chunk_indices missing => should fall back to all.
     }
 
+    monkeypatch.setattr("app.openai_client._client", None)
     monkeypatch.setattr(
-        "app.llm.OpenAI",
+        "app.openai_client.OpenAI",
         lambda api_key: _FakeOpenAI(
             api_key=api_key,
             create_impl=lambda **k: _chat_response(json.dumps(payload)),
@@ -237,8 +242,9 @@ def test_openai_embedding_provider_batches_and_filters_empty_texts(
             data=[SimpleNamespace(embedding=[float(i)]) for i in range(len(input))]
         )
 
+    monkeypatch.setattr("app.openai_client._client", None)
     monkeypatch.setattr(
-        "app.embeddings.OpenAI",
+        "app.openai_client.OpenAI",
         lambda api_key: _FakeOpenAI(api_key=api_key, create_impl=_create_impl),
     )
 

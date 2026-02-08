@@ -86,9 +86,10 @@ def test_synthesize_answer_includes_context_and_topic_in_prompt(
         "used_chunk_indices": ["0"],
     }
     monkeypatch.setattr(llm, "get_settings", lambda: _settings())
+    monkeypatch.setattr("app.openai_client.get_settings", lambda: _settings())
+    monkeypatch.setattr("app.openai_client._client", None)
     monkeypatch.setattr(
-        llm,
-        "OpenAI",
+        "app.openai_client.OpenAI",
         lambda api_key: _FakeOpenAI(content=json.dumps(payload), capture=capture),
     )
 
@@ -128,8 +129,11 @@ def test_synthesize_answer_falls_back_when_answer_missing(
         "used_chunk_indices": [],
     }
     monkeypatch.setattr(llm, "get_settings", lambda: _settings())
+    monkeypatch.setattr("app.openai_client.get_settings", lambda: _settings())
+    monkeypatch.setattr("app.openai_client._client", None)
     monkeypatch.setattr(
-        llm, "OpenAI", lambda api_key: _FakeOpenAI(content=json.dumps(payload))
+        "app.openai_client.OpenAI",
+        lambda api_key: _FakeOpenAI(content=json.dumps(payload)),
     )
 
     chunks = [
@@ -158,8 +162,11 @@ def test_synthesize_answer_indices_non_list_falls_back_to_all(
         "used_chunk_indices": "not-a-list",
     }
     monkeypatch.setattr(llm, "get_settings", lambda: _settings())
+    monkeypatch.setattr("app.openai_client.get_settings", lambda: _settings())
+    monkeypatch.setattr("app.openai_client._client", None)
     monkeypatch.setattr(
-        llm, "OpenAI", lambda api_key: _FakeOpenAI(content=json.dumps(payload))
+        "app.openai_client.OpenAI",
+        lambda api_key: _FakeOpenAI(content=json.dumps(payload)),
     )
 
     chunks = [
@@ -188,5 +195,10 @@ def test_rewrite_question_returns_original_on_bad_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(llm, "get_settings", lambda: _settings())
-    monkeypatch.setattr(llm, "OpenAI", lambda api_key: _FakeOpenAI(content="{bad json"))
+    monkeypatch.setattr("app.openai_client.get_settings", lambda: _settings())
+    monkeypatch.setattr("app.openai_client._client", None)
+    monkeypatch.setattr(
+        "app.openai_client.OpenAI",
+        lambda api_key: _FakeOpenAI(content="{bad json"),
+    )
     assert llm.rewrite_question("q", messages=[{"role": "user", "content": "x"}]) == "q"

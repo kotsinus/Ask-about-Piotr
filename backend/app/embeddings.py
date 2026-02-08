@@ -22,9 +22,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from openai import OpenAI
-
 from app.config import get_settings
+from app.openai_client import get_openai_client
 
 
 @dataclass(frozen=True)
@@ -59,7 +58,7 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         if not cleaned:
             raise RuntimeError("No valid text provided for embeddings.")
 
-        client = OpenAI(api_key=settings.openai_api_key)
+        client = get_openai_client()
         model = settings.embeddings_model or "text-embedding-3-small"
         embeddings: list[list[float]] = []
         for batch_start in range(0, len(cleaned), 64):

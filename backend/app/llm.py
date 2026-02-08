@@ -24,9 +24,8 @@ import json
 import re
 from dataclasses import dataclass
 
-from openai import OpenAI
-
 from app.config import get_settings
+from app.openai_client import get_openai_client
 from app.retrieval import RetrievedChunk
 from app.schemas import Category, Confidence
 
@@ -52,7 +51,7 @@ def rewrite_question(question: str, messages: list[dict] | None = None) -> str:
     # Keep last few turns to limit token use.
     trimmed = messages[-6:]
 
-    client = OpenAI(api_key=settings.openai_api_key)
+    client = get_openai_client()
     system_prompt = (
         "Rewrite the user's latest question into a standalone question.\n"
         "Use the conversation history only to resolve references (pronouns, ellipsis, omitted subject).\n"
@@ -104,7 +103,7 @@ def route_category(question: str) -> Category:
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY is required for routing.")
 
-    client = OpenAI(api_key=settings.openai_api_key)
+    client = get_openai_client()
     system_prompt = (
         "Classify the question into exactly one category from this list:\n"
         "- Hands-on engineering\n"
@@ -158,7 +157,7 @@ def synthesize_answer(
     if not settings.openai_api_key:
         return _fallback_synthesis(chunks)
 
-    client = OpenAI(api_key=settings.openai_api_key)
+    client = get_openai_client()
     evidence_lines = [
         f"[{idx}] [{chunk.card_id}.{chunk.section}] {chunk.content}"
         for idx, chunk in enumerate(chunks)
