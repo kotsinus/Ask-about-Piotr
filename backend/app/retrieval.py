@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 
 import psycopg
@@ -116,7 +117,11 @@ def retrieve(
         logger.warning(
             "retrieval_cutoff_filtered_to_zero_fallback",
             extra={
-                "question": question,
+                # Privacy: do not log raw user input (may contain PII).
+                "question_len": len(question or ""),
+                "question_hash": hashlib.sha256(
+                    (question or "").encode("utf-8")
+                ).hexdigest()[:8],
                 "candidate_count": len(candidate_rows),
                 "best_distance": best_distance,
                 "retrieval_max_distance": max_distance,

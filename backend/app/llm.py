@@ -223,9 +223,12 @@ def synthesize_answer(
         ),
     }
 
-    style_hint = STYLE_HINTS.get(category, "")
-    why_hint = WHY_HINTS.get(category, "")
+    category_key = _normalize_category(category)
+    style_hint = STYLE_HINTS.get(category_key, "")
+    why_hint = WHY_HINTS.get(category_key, "")
 
+    # Keep hints in the user prompt as well (helps debuggability and keeps
+    # behavior stable for existing tests/captures).
     hint_block = ""
     if style_hint:
         hint_block += f"Answer style hint: {style_hint}\n"
@@ -263,6 +266,12 @@ def synthesize_answer(
         "The refusal message is exactly:\n"
         '"I do not have enough evidence in the provided materials."'
     )
+
+    # Bind category hints at system level to reduce model guessing/drift.
+    if style_hint:
+        system_prompt += f"\n\nStyle hint:\n{style_hint}\n"
+    if why_hint:
+        system_prompt += f"\n\nWhy-this-matters hint:\n{why_hint}\n"
     context_block = ""
     if conversation_messages:
         trimmed = conversation_messages[-6:]
@@ -535,6 +544,10 @@ def clean_why(why: str, category: str | Category | None = None) -> str:
         (r"^(this|it)\s+highlights\s+", ""),
         (r"^(this|it)\s+aligns with\s+", ""),
         (r"^(this|it)\s+enhances my ability to\s+", ""),
+        # Common artifacts after prefix removal (e.g. "This demonstrates that ...").
+        (r"^that\s+", ""),
+        # Avoid "to <verb> ..." fragments when the sentence lost its subject.
+        (r"^to\s+", ""),
     ]
     for pattern, replacement in targeted_patterns:
         cleaned = re.sub(pattern, replacement, cleaned, flags=re.IGNORECASE).strip()

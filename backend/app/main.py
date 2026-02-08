@@ -380,7 +380,6 @@ def chat(
     logger.info(
         "chat_start",
         extra={
-            "request_id": request_id,
             "session_id": session_id,
             "conversation_id": conversation_id,
             "messages_count": messages_count,
@@ -416,7 +415,6 @@ def chat(
         logger.warning(
             "chat_refusal_no_evidence",
             extra={
-                "request_id": request_id,
                 "session_id": session_id,
                 "conversation_id": conversation_id,
                 "messages_count": messages_count,

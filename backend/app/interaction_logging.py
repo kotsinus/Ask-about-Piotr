@@ -33,6 +33,10 @@ logger = logging.getLogger(__name__)
 # fresh DB volume) we degrade gracefully.
 _INTERACTION_LOGGING_DISABLED_REASON: str | None = None
 
+# Avoid multiple concurrent / repeated CREATE TABLE attempts per process on a
+# fresh environment (can make logs noisy under burst traffic).
+_INTERACTION_LOGS_TABLE_CREATE_ATTEMPTED = False
+
 
 @dataclass(frozen=True)
 class InteractionLog:
@@ -65,23 +69,49 @@ def write_interaction_log(row: InteractionLog) -> None:
         _write_interaction_log_once(row)
     except ProgrammingError as exc:
         if _is_undefined_table(exc):
+            global _INTERACTION_LOGS_TABLE_CREATE_ATTEMPTED
             # Typical when Postgres is running but init.sql hasn't been applied
             # (e.g., existing Docker volume created before the table was added).
-            logger.warning(
-                "interaction_logs_table_missing",
-                extra={"action": "attempt_create_table"},
-            )
-            if _ensure_interaction_logs_table_exists():
-                try:
-                    _write_interaction_log_once(row)
-                    return
-                except Exception:
-                    logger.exception("interaction_log_write_failed_after_create")
-                    _INTERACTION_LOGGING_DISABLED_REASON = "write_failed_after_create"
-                    return
+            if not _INTERACTION_LOGS_TABLE_CREATE_ATTEMPTED:
+                _INTERACTION_LOGS_TABLE_CREATE_ATTEMPTED = True
+                logger.warning(
+                    "interaction_logs_table_missing",
+                    extra={"action": "attempt_create_table"},
+                )
+                if _ensure_interaction_logs_table_exists():
+                    try:
+                        _write_interaction_log_once(row)
+                        return
+                    except Exception:
+                        logger.exception("interaction_log_write_failed_after_create")
+                        _INTERACTION_LOGGING_DISABLED_REASON = (
+                            "write_failed_after_create"
+                        )
+                        return
 
-            _INTERACTION_LOGGING_DISABLED_REASON = "table_missing_and_create_failed"
-            return
+                _INTERACTION_LOGGING_DISABLED_REASON = "table_missing_and_create_failed"
+                return
+
+            # We've already tried creating the table in this process.
+            #
+            # Do not attempt CREATE TABLE again (noise under burst traffic), but
+            # do one best-effort retry: the table may have been created by a
+            # concurrent request while we were handling this error.
+            try:
+                _write_interaction_log_once(row)
+                return
+            except ProgrammingError as exc2:
+                if _is_undefined_table(exc2):
+                    _INTERACTION_LOGGING_DISABLED_REASON = (
+                        "table_missing_create_already_attempted"
+                    )
+                    return
+                logger.exception("interaction_log_write_failed")
+                return
+            except Exception:
+                _INTERACTION_LOGGING_DISABLED_REASON = "write_failed_after_create"
+                logger.exception("interaction_log_write_failed_after_create")
+                return
 
         logger.exception("interaction_log_write_failed")
     except Exception:
