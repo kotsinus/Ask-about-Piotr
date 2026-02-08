@@ -18,6 +18,7 @@
  */
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 import "./globals.css";
 
@@ -34,7 +35,22 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning>{children}</body>
+      <body suppressHydrationWarning>
+        <div className="site-root">
+          <div className="site-content">{children}</div>
+          <footer className="site-footer" aria-label="Site footer">
+            <div className="site-footer-inner">
+              <p className="site-footer-line">
+                Privacy-first demo. This site uses a strictly necessary, anonymous session cookie
+                to function correctly. No tracking, no analytics, no ads.{" "}
+                <Link className="site-footer-link" href="/privacy-policy">
+                  Privacy policy
+                </Link>
+              </p>
+            </div>
+          </footer>
+        </div>
+      </body>
     </html>
   );
 }
