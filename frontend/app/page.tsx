@@ -53,8 +53,6 @@ type Message = {
   payload?: ChatResponse;
 };
 
-const DEFAULT_API_URL = "http://localhost:8000";
-
 const normalizePreviewText = (value: string, maxChars = 120) => {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (!normalized) {
@@ -183,7 +181,7 @@ function AnswerDetailsPanel({
                   </>
                 ) : panel.key === "evidence" || panel.key === "sources" ? (
                   <>
-                    <h3 className="details-section-title">
+                    <h3 className="details-section-title has-toggle">
                       <button
                         type="button"
                         className="details-section-toggle"
@@ -231,7 +229,7 @@ function AnswerDetailsPanel({
             ))
           ) : (
             <div className="muted">
-              Select Piotr&apos;s answer and click Details to view metadata.
+              Select Piotr&apos;s answer to view why/evidence/sources in the Details sidebar.
             </div>
           )}
         </div>
@@ -239,13 +237,6 @@ function AnswerDetailsPanel({
     </aside>
   );
 }
-
-const hasAnyDetails = (response: ChatResponse) => {
-  const hasWhy = Boolean(response.why_this_matters?.trim());
-  const hasEvidence = (response.evidence?.length ?? 0) > 0;
-  const hasSources = (response.sources?.length ?? 0) > 0;
-  return hasWhy || hasEvidence || hasSources;
-};
 
 export default function HomePage() {
   const [question, setQuestion] = useState("");
@@ -257,10 +248,14 @@ export default function HomePage() {
   const [detailsExpanded, setDetailsExpanded] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const apiUrl = useMemo(
-    () => process.env.NEXT_PUBLIC_API_URL ?? DEFAULT_API_URL,
-    []
-  );
+  const apiUrl = useMemo(() => {
+    const value = process.env.NEXT_PUBLIC_API_URL;
+    if (!value || !value.trim()) {
+      return "";
+    }
+    return value.trim().replace(/\/+$/, "");
+  }, []);
+  const apiConfigured = Boolean(apiUrl);
 
   const latestAssistantAnswerIndex = useMemo(() => {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -339,6 +334,19 @@ export default function HomePage() {
     if (!question.trim()) {
       return;
     }
+
+    if (!apiConfigured) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "Error: API URL not configured. Set NEXT_PUBLIC_API_URL (e.g. https://your-backend.example) and rebuild/redeploy the frontend."
+        }
+      ]);
+      return;
+    }
+
     const currentQuestion = question.trim();
     setQuestion("");
     setMessages((prev) => [...prev, { role: "user", content: currentQuestion }]);
@@ -412,10 +420,11 @@ export default function HomePage() {
   };
 
   const hasMessages = messages.length > 0;
+  const layoutClassName = `app-layout ${detailsExpanded ? "details-expanded" : ""}`.trim();
 
   return (
     <main className="app-main">
-      <div className="app-layout">
+      <div className={layoutClassName}>
         <div className={`app-shell ${hasMessages ? "has-messages" : "empty"}`}>
           <header className="stack">
             <h1>Ask Piotr Synak</h1>
@@ -423,103 +432,91 @@ export default function HomePage() {
             <p className="muted">
               Ask me about my experience. I answer only from retrieved source material, with citations and explicit uncertainty when evidence is missing.
             </p>
+
+            {!apiConfigured ? (
+              <div className="panel panel-warning" role="status" aria-live="polite">
+                <div className="panel-warning-title">API URL not configured</div>
+                <div className="muted">
+                  This public demo needs <code>NEXT_PUBLIC_API_URL</code> to be set at build time.
+                  Without it, the frontend cannot reach the backend API.
+                </div>
+              </div>
+            ) : null}
           </header>
 
           <section className={`chat-scroll stack ${hasMessages ? "" : "hidden"}`}>
-            {messages.map((message, index) => (
-              (() => {
-                const selectable = message.role === "assistant" && Boolean(message.payload);
-                return (
-              <div
-                key={`${message.role}-${index}`}
-                className={`chat-bubble ${message.role} ${
-                  index === activeDetailsIndex ? "is-selected" : ""
-                } ${selectable ? "is-clickable" : ""}`}
-                role={selectable ? "button" : undefined}
-                tabIndex={selectable ? 0 : -1}
-                onClick={() => {
-                  if (!selectable) {
-                    return;
-                  }
-                  setActiveDetailsIndex(index);
-                  setDetailsExpanded(true);
-                }}
-                onKeyDown={(event) => {
-                  if (!selectable) {
-                    return;
-                  }
-                  if (event.key !== "Enter" && event.key !== " ") {
-                    return;
-                  }
-                  event.preventDefault();
-                  setActiveDetailsIndex(index);
-                  setDetailsExpanded(true);
-                }}
-              >
-                <div className="label">
-                  {message.role === "user" ? (
-                    "You"
-                  ) : (
-                    <span className="label-with-avatar">
-                      <Image
-                        src="/piotr_synak.jpg"
-                        width={18}
-                        height={18}
-                        className="avatar"
-                        alt="Piotr Synak"
-                      />
-                      <span>Piotr</span>
-                    </span>
-                  )}
-                </div>
-                {message.payload ? (
-                  <div className="answer-view">
-                    <div className="answer-main">
-                      <div className="answer-prose">{message.payload.answer}</div>
-                    </div>
+            {messages.map((message, index) => {
+              const selectable = message.role === "assistant" && Boolean(message.payload);
+              const bubbleClassName = `chat-bubble ${message.role} ${
+                index === activeDetailsIndex ? "is-selected" : ""
+              } ${selectable ? "is-clickable" : ""}`.trim();
 
-                    <div
-                      className="answer-meta"
-                      role="group"
-                      aria-label="Answer metadata"
-                    >
-                      <span
-                        className="pill pill-confidence"
-                        title={message.payload.confidence_reason ?? undefined}
-                      >
-                        Confidence: {message.payload.confidence}
+              const bubbleBody = (
+                <>
+                  <div className="label">
+                    {message.role === "user" ? (
+                      "You"
+                    ) : (
+                      <span className="label-with-avatar">
+                        <Image
+                          src="/piotr_synak.jpg"
+                          width={18}
+                          height={18}
+                          className="avatar"
+                          alt="Piotr Synak"
+                        />
+                        <span>Piotr</span>
                       </span>
-                      {Array.isArray(message.payload.sources) &&
-                      message.payload.sources.length > 0 ? (
-                        <span className="meta-item">
-                          Sources: {message.payload.sources.length}
-                        </span>
-                      ) : null}
-                      {hasAnyDetails(message.payload) ? (
-                        <button
-                          type="button"
-                          className="meta-link"
-                          onClick={(event) => {
-                            // Prevent the click from bubbling to the parent
-                            // `.chat-bubble` onClick, which always expands the
-                            // RHS panel.
-                            event.stopPropagation();
-                            setActiveDetailsIndex(index);
-                            setDetailsExpanded((prev) => !prev);
-                          }}
-                        >
-                          Details
-                        </button>
-                      ) : null}
-                    </div>
+                    )}
                   </div>
-                ) : (
-                  <div>{message.content}</div>
-                )}
-              </div>
+                  {message.payload ? (
+                    <div className="answer-view">
+                      <div className="answer-main">
+                        <div className="answer-prose">{message.payload.answer}</div>
+                      </div>
+
+                      <div className="answer-meta" role="group" aria-label="Answer metadata">
+                        <span
+                          className="pill pill-confidence"
+                          title={message.payload.confidence_reason ?? undefined}
+                        >
+                          Confidence: {message.payload.confidence}
+                        </span>
+                        {Array.isArray(message.payload.sources) &&
+                        message.payload.sources.length > 0 ? (
+                          <span className="meta-item">Sources: {message.payload.sources.length}</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>{message.content}</div>
+                  )}
+                </>
+              );
+
+              if (selectable) {
+                return (
+                  <button
+                    key={`${message.role}-${index}`}
+                    type="button"
+                    className={bubbleClassName}
+                    onClick={() => {
+                      setActiveDetailsIndex(index);
+                      setDetailsExpanded(true);
+                    }}
+                    aria-current={index === activeDetailsIndex ? "true" : undefined}
+                  >
+                    {bubbleBody}
+                  </button>
                 );
-              })()
-            ))}
+              }
+
+              return (
+                <div key={`${message.role}-${index}`} className={bubbleClassName}>
+                  {bubbleBody}
+                </div>
+              );
+            })}
             <div ref={messagesEndRef} />
           </section>
 
@@ -537,8 +534,9 @@ export default function HomePage() {
                 onChange={(event) => setQuestion(event.target.value)}
                 onKeyDown={handleKeyDown}
                 ref={textareaRef}
+                disabled={!apiConfigured}
               />
-              <button onClick={submitQuestion} disabled={loading}>
+              <button onClick={submitQuestion} disabled={loading || !apiConfigured}>
                 {loading ? "Asking..." : "Ask"}
               </button>
             </div>

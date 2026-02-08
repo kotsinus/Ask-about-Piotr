@@ -34,8 +34,10 @@ export default function RootLayout({
   children: ReactNode;
 }) {
   return (
+    // Some browser extensions (e.g. grammar checkers) inject attributes into
+    // <html> before React hydrates, which can cause hydration mismatch warnings.
     <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning>
+      <body>
         <div className="site-root">
           <div className="site-content">{children}</div>
           <footer className="site-footer" aria-label="Site footer">
