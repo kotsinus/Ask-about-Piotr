@@ -24,7 +24,7 @@ import pytest
 
 from app import llm
 from app.retrieval import RetrievedChunk
-from app.schemas import Confidence
+from app.schemas import Category, Confidence
 
 
 class _FakeOpenAI:
@@ -203,3 +203,26 @@ def test_rewrite_question_returns_original_on_bad_json(
         lambda api_key: _FakeOpenAI(content="{bad json"),
     )
     assert llm.rewrite_question("q", messages=[{"role": "user", "content": "x"}]) == "q"
+
+
+def test_clean_why_soft_removes_banned_phrases_without_constant_fallback() -> None:
+    text = "This highlights the reliability trade-offs in production systems."
+    out = llm.clean_why(text, Category.hands_on_engineering)
+    assert "highlights" not in out.lower()
+    assert "reliability" in out.lower()
+
+
+def test_clean_why_uses_category_specific_fallback_when_too_short() -> None:
+    out = llm.clean_why("It demonstrates.", Category.education_and_formal_background)
+    assert out in {
+        "It gives a foundation I rely on when reasoning about systems and data.",
+        "It provides background that shapes how I approach technical problems.",
+    }
+
+
+def test_clean_why_empty_returns_category_specific_fallback() -> None:
+    out = llm.clean_why(" ", Category.architecture_and_system_design)
+    assert out in {
+        "It shapes the trade-offs I make when designing system boundaries and keeping services operable over time.",
+        "It affects long-term complexity and operability when scaling systems.",
+    }

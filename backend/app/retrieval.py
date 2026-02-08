@@ -79,7 +79,9 @@ def retrieve(
         dimensions=settings.embeddings_dimensions,
     )
     embedding = provider.embed([retrieval_query])[0]
-    embedding_text = "[" + ",".join(str(value) for value in embedding) + "]"
+    # Prefer passing the vector as a native sequence so pgvector's psycopg adapter
+    # can serialize it efficiently (instead of formatting a textual "[...]").
+    embedding_vector = [float(value) for value in embedding]
 
     # We may skip many highly-similar chunks from a single card to allow evidence
     # to come from multiple cards. Fetch a larger candidate set to keep recall.
@@ -97,7 +99,7 @@ def retrieve(
                 ORDER BY distance
                 LIMIT %s;
                 """,
-                (embedding_text, candidate_limit),
+                (embedding_vector, candidate_limit),
             )
             rows = cursor.fetchall()
 

@@ -58,6 +58,13 @@ def _fake_chat_response(*, content: str):
     )
 
 
+def chat_completions_create(**kwargs):
+    """Create a chat completion with no local response caching."""
+
+    client = get_openai_client()
+    return client.chat.completions.create(**kwargs)
+
+
 def chat_completions_create_cached(*, cache_namespace: str, **kwargs):
     """Create a chat completion, optionally served from an in-memory cache.
 
@@ -72,16 +79,14 @@ def chat_completions_create_cached(*, cache_namespace: str, **kwargs):
         temperature in (None, 0) or temperature == 0.0
     )
     if not use_cache:
-        client = get_openai_client()
-        return client.chat.completions.create(**kwargs)
+        return chat_completions_create(**kwargs)
 
     key = make_cache_key(namespace=cache_namespace, payload=kwargs)
     cached = _CHAT_COMPLETION_CACHE.get(key)
     if cached is not None:
         return _fake_chat_response(content=cached)
 
-    client = get_openai_client()
-    response = client.chat.completions.create(**kwargs)
+    response = chat_completions_create(**kwargs)
     content = response.choices[0].message.content or ""
     _CHAT_COMPLETION_CACHE.set(key, content)
     return response

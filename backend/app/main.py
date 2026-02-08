@@ -446,7 +446,7 @@ def chat(
     response = ChatResponse(
         category=category,
         answer=synthesis.answer,
-        why_this_matters=clean_why(synthesis.why_this_matters),
+        why_this_matters=clean_why(synthesis.why_this_matters, category),
         evidence=evidence,
         sources=sources,
         debug_retrieval=[

@@ -21,11 +21,12 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from dataclasses import dataclass
 
 from app.config import get_settings
-from app.openai_client import chat_completions_create_cached
+from app.openai_client import chat_completions_create, chat_completions_create_cached
 from app.retrieval import RetrievedChunk
 from app.schemas import Category, Confidence
 
@@ -283,8 +284,10 @@ def synthesize_answer(
         + "Evidence:\n"
         + "\n".join(evidence_lines)
     )
-    response = chat_completions_create_cached(
-        cache_namespace="synthesize_answer",
+    # NOTE: synthesize_answer is intentionally *not* routed through the local
+    # response cache. We run it with a non-zero temperature by default, so
+    # caching would be misleading at best (and incorrect at worst).
+    response = chat_completions_create(
         model=settings.synthesis_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -411,13 +414,109 @@ BANNED_WHY_PHRASES = (
 )
 
 
-def clean_why(why: str) -> str:
-    if not why:
-        return why
+_WHY_FALLBACKS: dict[str, tuple[str, ...]] = {
+    Category.hands_on_engineering.value: (
+        "It affects how I build and debug production systems.",
+        "It influences the trade-offs I make around reliability, maintainability, and delivery.",
+    ),
+    Category.architecture_and_system_design.value: (
+        "It shapes the trade-offs I make when designing system boundaries and keeping services operable over time.",
+        "It affects long-term complexity and operability when scaling systems.",
+    ),
+    Category.ai_and_ml_practice.value: (
+        "It affects how I evaluate models and reduce failure modes in production.",
+        "It changes how I balance model quality, cost, and reliability in real deployments.",
+    ),
+    Category.leadership_and_product_strategy.value: (
+        "It affects how I align stakeholders and make trade-offs that improve outcomes.",
+        "It changes how I prioritize work and reduce execution risk for the team.",
+    ),
+    Category.research_and_academic_credibility.value: (
+        "It affects how rigorous my reasoning is when making technical claims.",
+        "It supports credibility when discussing technical trade-offs and evidence.",
+    ),
+    Category.education_and_formal_background.value: (
+        "It gives a foundation I rely on when reasoning about systems and data.",
+        "It provides background that shapes how I approach technical problems.",
+    ),
+    Category.career_fit_and_role_alignment.value: (
+        "It influences the kind of work I can deliver effectively in this role.",
+        "It affects whether my experience matches the constraints and goals of the role.",
+    ),
+    Category.personal_interests_and_working_style.value: (
+        "It affects how I collaborate and stay effective over the long term.",
+        "It influences day-to-day communication and how I work with a team.",
+    ),
+}
 
-    low = why.lower()
-    if any(phrase in low for phrase in BANNED_WHY_PHRASES):
-        # Safe, neutral fallback that never overclaims
-        return "It provides context for how I approach technical problems and make decisions."
 
-    return why
+def _stable_choice(options: tuple[str, ...], *, seed: str) -> str:
+    if not options:
+        return ""
+    digest = hashlib.sha256(seed.encode("utf-8")).digest()
+    idx = int.from_bytes(digest[:4], "big") % len(options)
+    return options[idx]
+
+
+def _normalize_category(category: str | Category | None) -> str:
+    if category is None:
+        return ""
+    # Category is a StrEnum, so str(category) is already the human-readable label.
+    return str(category).strip()
+
+
+def _fallback_why(*, category: str | Category | None, seed: str) -> str:
+    category_key = _normalize_category(category)
+    options = _WHY_FALLBACKS.get(category_key)
+    if options:
+        return _stable_choice(options, seed=f"{category_key}:{seed}")
+    # Generic, modest fallback (used only for unknown category strings).
+    generic = (
+        "It affects how I make technical decisions.",
+        "It influences practical trade-offs I make when building systems.",
+    )
+    return _stable_choice(generic, seed=seed)
+
+
+def clean_why(why: str, category: str | Category | None = None) -> str:
+    """Remove banned boilerplate while keeping output varied and category-aware.
+
+    Strategy:
+    - Prefer a soft clean: remove/trim banned phrases.
+    - If the result becomes too short (or still contains banned phrases), use a
+      neutral per-category fallback (chosen deterministically).
+    """
+
+    raw = (why or "").strip()
+    if not raw:
+        return _fallback_why(category=category, seed="empty")
+
+    cleaned = raw
+
+    # Targeted prefix cleanups to avoid leaving broken sentences.
+    targeted_patterns: list[tuple[str, str]] = [
+        (r"\bit is important to note that\s+", ""),
+        (r"\bimportant to note that\s+", ""),
+        (r"^(this|it)\s+demonstrates\s+", ""),
+        (r"^(this|it)\s+highlights\s+", ""),
+        (r"^(this|it)\s+aligns with\s+", ""),
+        (r"^(this|it)\s+enhances my ability to\s+", ""),
+    ]
+    for pattern, replacement in targeted_patterns:
+        cleaned = re.sub(pattern, replacement, cleaned, flags=re.IGNORECASE).strip()
+
+    # General phrase removal (case-insensitive).
+    for phrase in BANNED_WHY_PHRASES:
+        cleaned = re.sub(re.escape(phrase), "", cleaned, flags=re.IGNORECASE)
+
+    # Whitespace/punctuation cleanup.
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned).strip()
+    cleaned = re.sub(r"^[\-–—:;,.\s]+", "", cleaned).strip()
+
+    too_short = len(cleaned) < 18 or len(cleaned.split()) < 4
+    still_banned = any(phrase in cleaned.lower() for phrase in BANNED_WHY_PHRASES)
+    if too_short or still_banned:
+        return _fallback_why(category=category, seed=raw)
+
+    return cleaned
