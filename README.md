@@ -18,6 +18,26 @@ from Markdown knowledge cards and refuses to answer when evidence is missing.
 
 Architectural intent: the system intentionally separates **retrieval correctness**, **answer synthesis**, **stylistic shaping**, and **post-generation safety filters** to minimize hallucinations and enable deterministic reasoning about failures.
 
+## What this system is NOT
+
+- This is not a general-purpose chatbot.
+- It does not answer speculative or opinion-based questions.
+- It does not use the open internet or external search.
+- It does not learn from user conversations.
+- It does not attempt to be helpful beyond the available evidence.
+
+## Documentation
+
+- [Docs index](docs/README.md)
+- [Architecture overview](docs/ARCHITECTURE.md)
+- [RAG pipeline design](docs/RAG_PIPELINE.md)
+- [Data model](docs/DATA_MODEL.md)
+- [Security model](docs/SECURITY.md)
+- [Observability](docs/OBSERVABILITY.md)
+- [Data retention and logging](docs/RETENTION.md)
+- [Decisions (mini ADR log)](docs/DECISIONS.md)
+- [Limitations](docs/LIMITATIONS.md)
+
 ## Quick Start (Backend)
 ### Run with Docker
 ```bash
@@ -109,6 +129,9 @@ LIMIT 20;
 docker compose up --build
 ```
 2) Load knowledge cards into pgvector:
+
+This step rebuilds the entire knowledge base; previously ingested cards are removed.
+
 ```bash
 python backend/scripts/ingest_cards.py
 ```
@@ -118,18 +141,6 @@ Environment variables are defined in [`.env.example`](.env.example:1).
 
 For more detail on the privacy-first design and proxy trust model, see
 [`plans/interaction-logging.md`](plans/interaction-logging.md:1).
-
-## Frontend Toolchain (Node / npm / Next.js / TypeScript)
-
-Current frontend versions are pinned in [`frontend/package.json`](frontend/package.json:1).
-
-- Node.js: **22 LTS** (Docker uses `node:22.22.0-alpine` in [`frontend/Dockerfile`](frontend/Dockerfile:1))
-- npm: pinned via `packageManager` in [`frontend/package.json`](frontend/package.json:1)
-- Next.js: pinned in [`frontend/package.json`](frontend/package.json:1)
-- TypeScript: pinned in [`frontend/package.json`](frontend/package.json:1)
-
-Local dev alignment:
-- Use [`frontend/.nvmrc`](frontend/.nvmrc:1) to select a compatible Node 22 version.
 
 ## API
 `POST /chat`
@@ -141,12 +152,25 @@ Request body:
 }
 ```
 
-Response contains the mandatory answer format in `formatted_answer`, plus
-structured fields for evidence and sources.
+Response contains a deterministic, human-readable `formatted_answer`, derived
+from strict structured fields (`answer`, `evidence`, `sources`, `confidence`)
+which are the authoritative response contract.
 
 ## Knowledge Cards
 See [`knowledge/README.md`](knowledge/README.md:1) for the required card schema
 and metadata model.
+
+## Frontend Toolchain (optional / future UI)
+
+Current frontend versions are pinned in [`frontend/package.json`](frontend/package.json:1).
+
+- Node.js: **22 LTS** (Docker uses `node:22.22.0-alpine` in [`frontend/Dockerfile`](frontend/Dockerfile:1))
+- npm: pinned via `packageManager` in [`frontend/package.json`](frontend/package.json:1)
+- Next.js: pinned in [`frontend/package.json`](frontend/package.json:1)
+- TypeScript: pinned in [`frontend/package.json`](frontend/package.json:1)
+
+Local dev alignment:
+- Use [`frontend/.nvmrc`](frontend/.nvmrc:1) to select a compatible Node 22 version.
 
 ## License
 Apache License 2.0. See [`LICENSE`](LICENSE:1).

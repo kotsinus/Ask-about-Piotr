@@ -598,9 +598,12 @@ Privacy properties:
 Retention policy:
 
 * **TBD / Not enforced in code**: there is currently no automated deletion/rotation job in the repository.
+* Retention is enforced for `knowledge_chunks` via full table rebuild on each ingestion run; no automated retention is currently enforced for `interaction_logs`.
 * Recommendation: define a retention window and enforce via scheduled job:
   * Example SQL policy: delete logs older than N days.
   * Prefer partitioning by date if volume grows.
+
+Operator note: a minimal manual retention snippet is provided in [`plans/retention.md`](plans/retention.md:1).
 
 Design notes: [`plans/interaction-logging.md`](plans/interaction-logging.md:1).
 
