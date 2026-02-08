@@ -491,7 +491,13 @@ textarea {
   transition: height 120ms ease;
 }
 
-button {
+/*
+ * CTA buttons (e.g. the Ask button).
+ *
+ * IMPORTANT: Keep this scoped to the composer so we don't accidentally style
+ * other interactive buttons like clickable chat bubbles (`button.chat-bubble`).
+ */
+.composer button {
   align-self: flex-start;
   background: var(--accent);
   color: white;
@@ -502,7 +508,7 @@ button {
   cursor: pointer;
 }
 
-button:disabled {
+.composer button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -552,7 +558,7 @@ button:disabled {
   gap: 12px;
   padding: 10px 6px;
 
-  /* Override global button styling (the rail is an interactive button). */
+  /* Normalize button appearance (the rail is an interactive button). */
   appearance: none;
   -webkit-appearance: none;
   text-align: center;

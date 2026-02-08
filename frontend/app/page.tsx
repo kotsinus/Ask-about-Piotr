@@ -241,13 +241,16 @@ function AnswerDetailsPanel({
 export default function HomePage() {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const messagesRef = useRef<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [lastTopic, setLastTopic] = useState<string | null>(null);
   const [activeDetailsIndex, setActiveDetailsIndex] = useState<number | null>(null);
   const [detailsExpanded, setDetailsExpanded] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const resizeRafRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const shouldAutoScrollRef = useRef(true);
   const apiUrl = useMemo(() => {
     const value = process.env.NEXT_PUBLIC_API_URL;
     if (!value || !value.trim()) {
@@ -256,6 +259,21 @@ export default function HomePage() {
     return value.trim().replace(/\/+$/, "");
   }, []);
   const apiConfigured = Boolean(apiUrl);
+
+  // Keep a ref in sync with state so event handlers can reliably read the
+  // latest messages even under rapid interactions (e.g. multiple quick Enter
+  // presses before a re-render).
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  const setMessagesWithRef = useCallback((updater: (prev: Message[]) => Message[]) => {
+    setMessages((prev) => {
+      const next = updater(prev);
+      messagesRef.current = next;
+      return next;
+    });
+  }, []);
 
   const latestAssistantAnswerIndex = useMemo(() => {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -278,26 +296,61 @@ export default function HomePage() {
     setDetailsExpanded((prev) => !prev);
   }, []);
 
-  const resizeTextarea = () => {
+  const resizeTextarea = useCallback(() => {
     const textarea = textareaRef.current;
     if (!textarea) {
       return;
     }
-    textarea.style.height = "auto";
-    const computed = window.getComputedStyle(textarea);
-    const maxHeight = Number.parseFloat(computed.maxHeight || "0");
-    const nextHeight = textarea.scrollHeight;
-    if (Number.isFinite(maxHeight) && maxHeight > 0) {
-      textarea.style.height = `${Math.min(nextHeight, maxHeight)}px`;
-      textarea.style.overflowY = nextHeight > maxHeight ? "auto" : "hidden";
-      return;
+
+    if (resizeRafRef.current !== null) {
+      window.cancelAnimationFrame(resizeRafRef.current);
     }
-    textarea.style.height = `${nextHeight}px`;
-    textarea.style.overflowY = "hidden";
-  };
+
+    resizeRafRef.current = window.requestAnimationFrame(() => {
+      textarea.style.height = "auto";
+      const computed = window.getComputedStyle(textarea);
+      const maxHeight = Number.parseFloat(computed.maxHeight || "0");
+      const nextHeight = textarea.scrollHeight;
+      if (Number.isFinite(maxHeight) && maxHeight > 0) {
+        textarea.style.height = `${Math.min(nextHeight, maxHeight)}px`;
+        textarea.style.overflowY = nextHeight > maxHeight ? "auto" : "hidden";
+        return;
+      }
+      textarea.style.height = `${nextHeight}px`;
+      textarea.style.overflowY = "hidden";
+    });
+  }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    return () => {
+      if (resizeRafRef.current !== null) {
+        window.cancelAnimationFrame(resizeRafRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const thresholdPx = 140;
+    const updateAutoScrollFlag = () => {
+      const doc = document.documentElement;
+      const nearBottom = window.innerHeight + window.scrollY >= doc.scrollHeight - thresholdPx;
+      shouldAutoScrollRef.current = nearBottom;
+    };
+
+    updateAutoScrollFlag();
+    window.addEventListener("scroll", updateAutoScrollFlag, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", updateAutoScrollFlag);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!shouldAutoScrollRef.current) {
+      return;
+    }
+    const lastMessage = messages[messages.length - 1];
+    const behavior: ScrollBehavior = lastMessage?.role === "assistant" ? "smooth" : "auto";
+    messagesEndRef.current?.scrollIntoView({ behavior });
   }, [messages]);
 
   useEffect(() => {
@@ -309,7 +362,7 @@ export default function HomePage() {
 
   useEffect(() => {
     resizeTextarea();
-  }, [question]);
+  }, [question, resizeTextarea]);
 
   useEffect(() => {
     if (!detailsExpanded) {
@@ -336,7 +389,7 @@ export default function HomePage() {
     }
 
     if (!apiConfigured) {
-      setMessages((prev) => [
+      setMessagesWithRef((prev) => [
         ...prev,
         {
           role: "assistant",
@@ -348,11 +401,11 @@ export default function HomePage() {
     }
 
     const currentQuestion = question.trim();
-    setQuestion("");
-    setMessages((prev) => [...prev, { role: "user", content: currentQuestion }]);
-    setLoading(true);
+    const messagesSnapshot = messagesRef.current;
 
-    const history = messages.slice(-6).map((message) => ({
+    // Intentionally exclude the current question from `history` because it is
+    // sent separately as `question` in the request body.
+    const history = messagesSnapshot.slice(-6).map((message) => ({
       role: message.role,
       content:
         message.role === "assistant" && message.payload
@@ -362,7 +415,11 @@ export default function HomePage() {
 
     // Protect against refresh/rehydration: only send last_topic when we have
     // usable history (at least one complete prior turn).
-    const shouldSendLastTopic = messages.length >= 2;
+    const shouldSendLastTopic = messagesSnapshot.length >= 2;
+
+    setQuestion("");
+    setMessagesWithRef((prev) => [...prev, { role: "user", content: currentQuestion }]);
+    setLoading(true);
 
     try {
       const response = await fetch(`${apiUrl}/chat`, {
@@ -383,7 +440,12 @@ export default function HomePage() {
 
       if (!response.ok) {
         const text = await response.text();
-        throw new Error(text || "Backend error");
+        console.error("Backend error response:", {
+          status: response.status,
+          statusText: response.statusText,
+          body: text
+        });
+        throw new Error("Backend error. Please try again in a moment.");
       }
 
       const data = (await response.json()) as ChatResponse;
@@ -393,14 +455,14 @@ export default function HomePage() {
       if (data.context?.last_topic) {
         setLastTopic(data.context.last_topic);
       }
-      setMessages((prev) => [
+      setMessagesWithRef((prev) => [
         ...prev,
         { role: "assistant", content: data.formatted_answer, payload: data }
       ]);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Unknown error occurred";
-      setMessages((prev) => [
+      setMessagesWithRef((prev) => [
         ...prev,
         { role: "assistant", content: `Error: ${message}` }
       ]);
