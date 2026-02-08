@@ -534,6 +534,7 @@ export default function HomePage() {
                 onChange={(event) => setQuestion(event.target.value)}
                 onKeyDown={handleKeyDown}
                 ref={textareaRef}
+                rows={1}
                 disabled={!apiConfigured}
               />
               <button onClick={submitQuestion} disabled={loading || !apiConfigured}>

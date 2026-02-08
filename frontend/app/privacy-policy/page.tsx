@@ -80,8 +80,15 @@ export default function PrivacyPolicyPage() {
               <strong>Scope:</strong> strictly functional
             </li>
             <li>
-              <strong>Lifetime:</strong> up to 1 year (Max-Age: 31536000 seconds)
+              <strong>Lifetime:</strong> the cookie may persist for up to 1 year
+              (Max-Age: 31536000 seconds); however, the associated server-side session
+              context is transient and may expire or be reset at any time
             </li>
+            <p className="muted">
+              The presence of the cookie does not imply long-term storage of conversation
+              data or continuous availability of prior session context.
+            </p>
+
           </ul>
 
           <p>This cookie:</p>

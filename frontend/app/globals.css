@@ -475,14 +475,17 @@ textarea {
   /* Keep the "Your question" field to a true single-line height by default.
    * (It still auto-expands via JS when the content wraps.)
    */
-  min-height: 40px;
-  height: 40px;
+  min-height: 34px;
+  height: 34px;
   max-height: 280px;
-  padding: 10px 14px;
+  /* Slightly asymmetric vertical padding to optically center the baseline
+   * (many fonts look bottom-heavy with equal padding).
+   */
+  padding: 9px 14px 7px;
   border-radius: 10px;
   border: 1px solid var(--border);
   font-size: 15px;
-  line-height: 1.35;
+  line-height: 1.2;
   resize: none;
   overflow: hidden;
   transition: height 120ms ease;
