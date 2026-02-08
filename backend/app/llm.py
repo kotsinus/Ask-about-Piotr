@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from dataclasses import dataclass
 
@@ -29,6 +30,8 @@ from app.config import get_settings
 from app.openai_client import chat_completions_create, chat_completions_create_cached
 from app.retrieval import RetrievedChunk
 from app.schemas import Category, Confidence
+
+logger = logging.getLogger(__name__)
 
 
 def rewrite_question(question: str, messages: list[dict] | None = None) -> str:
@@ -392,7 +395,19 @@ def _parse_category(value: str) -> Category:
         "education and formal background": Category.education_and_formal_background,
         "personal interests and working style": Category.personal_interests_and_working_style,
     }
-    return mapping.get(value.strip().lower(), Category.hands_on_engineering)
+    normalized = (value or "").strip().lower()
+    parsed = mapping.get(normalized)
+    if parsed is not None:
+        return parsed
+
+    # Router drift observability: if the model starts returning slightly different
+    # strings, we'd like to notice it during development without spamming prod.
+    if logger.isEnabledFor(logging.DEBUG):
+        logger.debug(
+            "unknown_category_string",
+            extra={"category": value, "category_normalized": normalized},
+        )
+    return Category.hands_on_engineering
 
 
 def _parse_confidence(value: str) -> Confidence:

@@ -64,6 +64,7 @@ def _settings(**overrides):
         embeddings_dimensions=3,
         retrieval_max_distance=None,
         retrieval_distance_delta=None,
+        retrieval_per_card_cap=2,
     )
     for k, v in overrides.items():
         setattr(base, k, v)

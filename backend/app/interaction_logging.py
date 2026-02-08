@@ -142,3 +142,9 @@ def _ensure_interaction_logs_table_exists() -> bool:
     except Exception:
         logger.exception("interaction_logs_table_create_failed")
         return False
+
+
+def get_interaction_logging_disabled_reason() -> str | None:
+    """Expose the internal disable flag for diagnostics / tests."""
+
+    return _INTERACTION_LOGGING_DISABLED_REASON

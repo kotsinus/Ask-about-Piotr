@@ -45,6 +45,7 @@ def _settings(**overrides: Any) -> Settings:
         prompt_cache_enabled=False,
         retrieval_max_distance=0.9,
         retrieval_distance_delta=0.25,
+        retrieval_per_card_cap=2,
         ip_hash_salt="salt",
         trusted_proxy_cidrs=[],
         cookie_secure=False,

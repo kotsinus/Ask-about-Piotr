@@ -227,7 +227,7 @@ def retrieve(
 
     # Diversify lightly across cards: keep similarity ordering, but avoid returning
     # too many chunks from a single card when other relevant cards are present.
-    per_card_cap = 2
+    per_card_cap = getattr(settings, "retrieval_per_card_cap", 2)
     selected: list[tuple] = []
     per_card_counts: dict[str, int] = {}
     deferred_low_signal: list[tuple] = []

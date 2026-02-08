@@ -58,6 +58,7 @@ class Settings:
     prompt_cache_enabled: bool
     retrieval_max_distance: float | None
     retrieval_distance_delta: float | None
+    retrieval_per_card_cap: int
 
     # Privacy-first logging / metadata
     ip_hash_salt: str
@@ -130,6 +131,15 @@ def get_settings() -> Settings:
         os.getenv("RETRIEVAL_DISTANCE_DELTA", "0.25")
     )
 
+    # Retrieval result diversification.
+    # - Caps how many chunks can come from a single card during the capped passes.
+    # - The final fill pass may exceed it when there aren't enough distinct cards.
+    try:
+        retrieval_per_card_cap = int(os.getenv("RETRIEVAL_PER_CARD_CAP", "2"))
+    except Exception:
+        retrieval_per_card_cap = 2
+    retrieval_per_card_cap = max(1, retrieval_per_card_cap)
+
     # Logging metadata
     ip_hash_salt = os.getenv("IP_HASH_SALT", "")
     if app_env in {"prod", "production"} and not ip_hash_salt.strip():
@@ -157,6 +167,7 @@ def get_settings() -> Settings:
         prompt_cache_enabled=prompt_cache_enabled,
         retrieval_max_distance=retrieval_max_distance,
         retrieval_distance_delta=retrieval_distance_delta,
+        retrieval_per_card_cap=retrieval_per_card_cap,
         ip_hash_salt=ip_hash_salt,
         trusted_proxy_cidrs=trusted_proxy_cidrs,
         cookie_secure=web.cookie_secure,
