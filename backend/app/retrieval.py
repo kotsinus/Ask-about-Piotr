@@ -45,6 +45,7 @@ from __future__ import annotations
 import logging
 
 import psycopg
+from pgvector import Vector
 from pgvector.psycopg import register_vector
 from pydantic import BaseModel
 
@@ -82,6 +83,7 @@ def retrieve(
     # Prefer passing the vector as a native sequence so pgvector's psycopg adapter
     # can serialize it efficiently (instead of formatting a textual "[...]").
     embedding_vector = [float(value) for value in embedding]
+    embedding_param = Vector(embedding_vector)
 
     # We may skip many highly-similar chunks from a single card to allow evidence
     # to come from multiple cards. Fetch a larger candidate set to keep recall.
@@ -99,7 +101,7 @@ def retrieve(
                 ORDER BY distance
                 LIMIT %s;
                 """,
-                (embedding_vector, candidate_limit),
+                (embedding_param, candidate_limit),
             )
             rows = cursor.fetchall()
 
