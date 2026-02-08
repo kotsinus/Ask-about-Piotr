@@ -14,12 +14,15 @@
 
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 
 from openai import OpenAI
 
 from app.config import get_settings
 from app.prompt_cache import TTLRUCache, make_cache_key
+
+logger = logging.getLogger(__name__)
 
 _client: OpenAI | None = None
 
@@ -81,7 +84,18 @@ def chat_completions_create_cached(*, cache_namespace: str, **kwargs):
     if not use_cache:
         return chat_completions_create(**kwargs)
 
-    key = make_cache_key(namespace=cache_namespace, payload=kwargs)
+    try:
+        key = make_cache_key(namespace=cache_namespace, payload=kwargs)
+    except TypeError:
+        # Cache key creation can fail if kwargs contain non-JSON-serializable
+        # objects. Caching must never break routing/rewrite.
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug(
+                "prompt_cache_key_non_serializable_payload",
+                extra={"cache_namespace": cache_namespace},
+            )
+        return chat_completions_create(**kwargs)
+
     cached = _CHAT_COMPLETION_CACHE.get(key)
     if cached is not None:
         return _fake_chat_response(content=cached)

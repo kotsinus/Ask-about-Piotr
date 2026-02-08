@@ -70,6 +70,61 @@ SESSION_COOKIE_NAME = "ask_piotr_session_id"
 SESSION_ID_HEADER = "x-session-id"
 
 
+def _log_interaction_background(
+    *,
+    settings,
+    request_id: str,
+    session_id: str | None,
+    conversation_id: str | None,
+    request_at: datetime,
+    response_at: datetime,
+    latency_ms: float | None,
+    question: str,
+    answer: str,
+    router_model: str | None,
+    synthesis_model: str | None,
+    embeddings_provider: str | None,
+    embeddings_model: str | None,
+    client_ip: str | None,
+    user_agent: str | None,
+) -> None:
+    """Best-effort interaction logging.
+
+    This must never block the response path. We therefore run it as a
+    background task (DB write + optional GeoIP HTTP call).
+    """
+
+    try:
+        ip_prefix = anonymize_ip_prefix(client_ip) if client_ip else None
+        ip_hash = None
+        if client_ip and (settings.ip_hash_salt or "").strip():
+            ip_hash = hash_ip(ip=client_ip, salt=settings.ip_hash_salt)
+        country = lookup_country(client_ip, settings) if client_ip else None
+
+        write_interaction_log(
+            InteractionLog(
+                request_id=request_id,
+                session_id=session_id,
+                conversation_id=conversation_id,
+                request_at=request_at,
+                response_at=response_at,
+                latency_ms=latency_ms,
+                question=question,
+                answer=answer,
+                router_model=router_model,
+                synthesis_model=synthesis_model,
+                embeddings_provider=embeddings_provider,
+                embeddings_model=embeddings_model,
+                ip_prefix=ip_prefix,
+                ip_hash=ip_hash,
+                user_agent=user_agent,
+                country=country,
+            )
+        )
+    except Exception:
+        logger.exception("interaction_log_failed")
+
+
 def _is_uuid(value: str | None) -> bool:
     if not value:
         return False
@@ -268,60 +323,6 @@ def chat(
     background_tasks: BackgroundTasks,
     debug_retrieval: bool = False,
 ) -> ChatResponse:
-    def _log_interaction_background(
-        *,
-        settings,
-        request_id: str,
-        session_id: str | None,
-        conversation_id: str | None,
-        request_at: datetime,
-        response_at: datetime,
-        latency_ms: float | None,
-        question: str,
-        answer: str,
-        router_model: str | None,
-        synthesis_model: str | None,
-        embeddings_provider: str | None,
-        embeddings_model: str | None,
-        client_ip: str | None,
-        user_agent: str | None,
-    ) -> None:
-        """Best-effort interaction logging.
-
-        This must never block the response path. We therefore run it as a
-        background task (DB write + optional GeoIP HTTP call).
-        """
-
-        try:
-            ip_prefix = anonymize_ip_prefix(client_ip) if client_ip else None
-            ip_hash = None
-            if client_ip and (settings.ip_hash_salt or "").strip():
-                ip_hash = hash_ip(ip=client_ip, salt=settings.ip_hash_salt)
-            country = lookup_country(client_ip, settings) if client_ip else None
-
-            write_interaction_log(
-                InteractionLog(
-                    request_id=request_id,
-                    session_id=session_id,
-                    conversation_id=conversation_id,
-                    request_at=request_at,
-                    response_at=response_at,
-                    latency_ms=latency_ms,
-                    question=question,
-                    answer=answer,
-                    router_model=router_model,
-                    synthesis_model=synthesis_model,
-                    embeddings_provider=embeddings_provider,
-                    embeddings_model=embeddings_model,
-                    ip_prefix=ip_prefix,
-                    ip_hash=ip_hash,
-                    user_agent=user_agent,
-                    country=country,
-                )
-            )
-        except Exception:
-            logger.exception("interaction_log_failed")
-
     def _should_use_conversation_topic(question: str, messages_count: int) -> bool:
         """Heuristic: use topic only for follow-ups when we have history."""
 

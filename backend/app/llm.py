@@ -429,6 +429,25 @@ BANNED_WHY_PHRASES = (
 )
 
 
+# Regex variants used for detection after cleanup.
+#
+# Rationale:
+# - General phrase removal below uses exact string matches (re.escape(phrase)).
+# - If the model outputs inflected forms or punctuation variants (e.g.
+#   "demonstrated", "demonstrating", "highlighted"), the exact removal may not
+#   fully trigger.
+# - We keep removal conservative, but detection broader so we can fall back to a
+#   safe, neutral template when the output still contains boilerplate.
+_BANNED_WHY_REGEXES = (
+    r"\bcrucial\b",
+    r"\bdemonstrat\w*\b",
+    r"\balign\w*\s+with\b",
+    r"\bhighlight\w*\b",
+    r"\bimportant\w*\s+to\s+note\b",
+    r"\benhanc\w*\s+my\s+ability\b",
+)
+
+
 _WHY_FALLBACKS: dict[str, tuple[str, ...]] = {
     Category.hands_on_engineering.value: (
         "It affects how I build and debug production systems.",
@@ -530,7 +549,10 @@ def clean_why(why: str, category: str | Category | None = None) -> str:
     cleaned = re.sub(r"^[\-–—:;,.\s]+", "", cleaned).strip()
 
     too_short = len(cleaned) < 18 or len(cleaned.split()) < 4
-    still_banned = any(phrase in cleaned.lower() for phrase in BANNED_WHY_PHRASES)
+    still_banned = any(
+        re.search(pattern, cleaned, flags=re.IGNORECASE)
+        for pattern in _BANNED_WHY_REGEXES
+    )
     if too_short or still_banned:
         return _fallback_why(category=category, seed=raw)
 

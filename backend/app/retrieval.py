@@ -250,11 +250,16 @@ def retrieve(
     # If diversification was too strict (e.g., only one card exists), fill the
     # remaining slots without the per-card cap.
     if len(selected) < limit:
-        selected_set = {id(row) for row in selected}
+        # Deduplicate by value, not object identity.
+        #
+        # Rows are tuples (from cursor.fetchall()) and therefore hashable.
+        # Using id(row) is fragile and can lead to surprising edge-cases.
+        selected_set = set(selected)
         for row in rows_ranked:
-            if id(row) in selected_set:
+            if row in selected_set:
                 continue
             selected.append(row)
+            selected_set.add(row)
             if len(selected) >= limit:
                 break
 
