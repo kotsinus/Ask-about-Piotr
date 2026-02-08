@@ -19,9 +19,6 @@ import json
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Generic, TypeVar
-
-T = TypeVar("T")
 
 
 def make_cache_key(*, namespace: str, payload: object) -> str:
@@ -37,12 +34,12 @@ def make_cache_key(*, namespace: str, payload: object) -> str:
 
 
 @dataclass
-class _Entry(Generic[T]):
+class _Entry[T]:
     value: T
     expires_at: float
 
 
-class TTLRUCache(Generic[T]):
+class TTLRUCache[T]:
     """A tiny in-memory TTL cache with LRU eviction.
 
     - Per-process, in-memory only.
