@@ -25,7 +25,7 @@ import re
 from dataclasses import dataclass
 
 from app.config import get_settings
-from app.openai_client import get_openai_client
+from app.openai_client import chat_completions_create_cached
 from app.retrieval import RetrievedChunk
 from app.schemas import Category, Confidence
 
@@ -51,7 +51,6 @@ def rewrite_question(question: str, messages: list[dict] | None = None) -> str:
     # Keep last few turns to limit token use.
     trimmed = messages[-6:]
 
-    client = get_openai_client()
     system_prompt = (
         "Rewrite the user's latest question into a standalone question.\n"
         "Use the conversation history only to resolve references (pronouns, ellipsis, omitted subject).\n"
@@ -68,7 +67,8 @@ def rewrite_question(question: str, messages: list[dict] | None = None) -> str:
         + question
     )
 
-    response = client.chat.completions.create(
+    response = chat_completions_create_cached(
+        cache_namespace="rewrite_question",
         model=settings.router_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -103,7 +103,6 @@ def route_category(question: str) -> Category:
     if not settings.openai_api_key:
         raise RuntimeError("OPENAI_API_KEY is required for routing.")
 
-    client = get_openai_client()
     system_prompt = (
         "Classify the question into exactly one category from this list:\n"
         "- Hands-on engineering\n"
@@ -118,7 +117,8 @@ def route_category(question: str) -> Category:
         "Do not add any other keys."
     )
 
-    response = client.chat.completions.create(
+    response = chat_completions_create_cached(
+        cache_namespace="route_category",
         model=settings.router_model,
         messages=[
             {"role": "system", "content": system_prompt},
@@ -157,7 +157,6 @@ def synthesize_answer(
     if not settings.openai_api_key:
         return _fallback_synthesis(chunks)
 
-    client = get_openai_client()
     evidence_lines = [
         f"[{idx}] [{chunk.card_id}.{chunk.section}] {chunk.content}"
         for idx, chunk in enumerate(chunks)
@@ -284,7 +283,8 @@ def synthesize_answer(
         + "Evidence:\n"
         + "\n".join(evidence_lines)
     )
-    response = client.chat.completions.create(
+    response = chat_completions_create_cached(
+        cache_namespace="synthesize_answer",
         model=settings.synthesis_model,
         messages=[
             {"role": "system", "content": system_prompt},

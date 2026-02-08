@@ -86,7 +86,9 @@ def get_web_settings() -> WebSettings:
     cors_allow_origins = _parse_csv(
         os.getenv("CORS_ALLOW_ORIGINS", "http://localhost:3000")
     )
-    return WebSettings(cookie_secure=cookie_secure, cors_allow_origins=cors_allow_origins)
+    return WebSettings(
+        cookie_secure=cookie_secure, cors_allow_origins=cors_allow_origins
+    )
 
 
 def _parse_optional_float(value: str | None) -> float | None:

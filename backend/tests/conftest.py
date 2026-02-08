@@ -55,6 +55,11 @@ def _reset_module_state() -> None:
 
     interaction_logging._INTERACTION_LOGGING_DISABLED_REASON = None
 
+    # LLM has an in-memory prompt/response cache.
+    from app import openai_client
+
+    openai_client._CHAT_COMPLETION_CACHE.clear()
+
 
 @pytest.fixture
 def asgi_transport():

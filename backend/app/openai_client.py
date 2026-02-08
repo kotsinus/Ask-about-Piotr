@@ -14,11 +14,24 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from openai import OpenAI
 
 from app.config import get_settings
+from app.prompt_cache import TTLRUCache, make_cache_key
 
 _client: OpenAI | None = None
+
+# Cache OpenAI chat completion *responses* for deterministic calls.
+#
+# Why here:
+# - Centralizes caching (and future retry/telemetry) in one place.
+# - Controlled by Settings.prompt_cache_enabled.
+#
+# NOTE: This is not OpenAI's server-side "prompt caching" feature.
+# It's a local, per-process response cache to reduce duplicate calls.
+_CHAT_COMPLETION_CACHE = TTLRUCache[str](max_entries=256, ttl_seconds=15 * 60)
 
 
 def get_openai_client() -> OpenAI:
@@ -35,3 +48,40 @@ def get_openai_client() -> OpenAI:
             raise RuntimeError("OPENAI_API_KEY missing")
         _client = OpenAI(api_key=settings.openai_api_key)
     return _client
+
+
+def _fake_chat_response(*, content: str):
+    """Create a minimal response-like object compatible with existing callers."""
+
+    return SimpleNamespace(
+        choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
+    )
+
+
+def chat_completions_create_cached(*, cache_namespace: str, **kwargs):
+    """Create a chat completion, optionally served from an in-memory cache.
+
+    Cache policy:
+    - enabled only when Settings.prompt_cache_enabled is True
+    - enabled only when temperature is 0 or None (avoid caching stochastic output)
+    """
+
+    settings = get_settings()
+    temperature = kwargs.get("temperature")
+    use_cache = bool(settings.prompt_cache_enabled) and (
+        temperature in (None, 0) or temperature == 0.0
+    )
+    if not use_cache:
+        client = get_openai_client()
+        return client.chat.completions.create(**kwargs)
+
+    key = make_cache_key(namespace=cache_namespace, payload=kwargs)
+    cached = _CHAT_COMPLETION_CACHE.get(key)
+    if cached is not None:
+        return _fake_chat_response(content=cached)
+
+    client = get_openai_client()
+    response = client.chat.completions.create(**kwargs)
+    content = response.choices[0].message.content or ""
+    _CHAT_COMPLETION_CACHE.set(key, content)
+    return response

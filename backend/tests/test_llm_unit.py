@@ -67,6 +67,7 @@ def _settings(**overrides):
         router_model="router",
         synthesis_model="synth",
         synthesis_temperature=0.1,
+        prompt_cache_enabled=False,
         embeddings_model=None,
     )
     for k, v in overrides.items():
