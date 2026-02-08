@@ -33,7 +33,8 @@ class Category(StrEnum):
     leadership_and_product_strategy = "Leadership and product strategy"
     research_and_academic_credibility = "Research and academic credibility"
     career_fit_and_role_alignment = "Career fit and role alignment"
-
+    education_and_formal_background = "Education and formal background"
+    personal_interests_and_working_style = "Personal interests and working style"
 
 class Confidence(StrEnum):
     high = "High"

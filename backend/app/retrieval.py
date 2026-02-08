@@ -88,12 +88,10 @@ def retrieve(
     with psycopg.connect(settings.database_url) as conn:
         register_vector(conn)
         with conn.cursor() as cursor:
-            cursor.execute("SET LOCAL enable_indexscan = off;")
-            cursor.execute("SET LOCAL enable_bitmapscan = off;")
             cursor.execute(
                 """
                 SELECT card_id, category, section, source_url, content,
-                       embedding <=> %s::vector AS distance
+                       embedding <=> %s AS distance
                 FROM knowledge_chunks
                 WHERE section <> 'Links'
                 ORDER BY distance

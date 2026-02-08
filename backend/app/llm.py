@@ -389,6 +389,8 @@ def _parse_category(value: str) -> Category:
         "leadership and product strategy": Category.leadership_and_product_strategy,
         "research and academic credibility": Category.research_and_academic_credibility,
         "career fit and role alignment": Category.career_fit_and_role_alignment,
+        "education and formal background": Category.education_and_formal_background,
+        "personal interests and working style": Category.personal_interests_and_working_style,
     }
     return mapping.get(value.strip().lower(), Category.hands_on_engineering)
 

@@ -379,6 +379,8 @@ def chat(
     sources = [
         SourceRef(card_id=chunk.card_id, section=chunk.section) for chunk in used_chunks
     ]
+    
+    resolved_topic = chunks[0].card_id if chunks else conversation_topic
 
     response = ChatResponse(
         category=category,
@@ -400,7 +402,7 @@ def chat(
         confidence_reason=synthesis.confidence_reason,
         context=ConversationContext(
             conversation_id=conversation_id,
-            last_topic=conversation_topic,
+            last_topic=resolved_topic,
         ),
         formatted_answer="",
     )
