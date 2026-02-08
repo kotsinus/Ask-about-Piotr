@@ -35,4 +35,3 @@ def get_openai_client() -> OpenAI:
             raise RuntimeError("OPENAI_API_KEY missing")
         _client = OpenAI(api_key=settings.openai_api_key)
     return _client
-

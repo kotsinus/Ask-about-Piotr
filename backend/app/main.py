@@ -379,7 +379,7 @@ def chat(
     sources = [
         SourceRef(card_id=chunk.card_id, section=chunk.section) for chunk in used_chunks
     ]
-    
+
     resolved_topic = chunks[0].card_id if chunks else conversation_topic
 
     response = ChatResponse(

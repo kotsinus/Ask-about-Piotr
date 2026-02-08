@@ -19,6 +19,7 @@
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  devIndicators: false,
   reactStrictMode: true,
   // Silence “inferred workspace root” warnings when multiple lockfiles exist
   // outside this repo (e.g. a global `package-lock.json`).

@@ -36,6 +36,7 @@ class Category(StrEnum):
     education_and_formal_background = "Education and formal background"
     personal_interests_and_working_style = "Personal interests and working style"
 
+
 class Confidence(StrEnum):
     high = "High"
     medium = "Medium"

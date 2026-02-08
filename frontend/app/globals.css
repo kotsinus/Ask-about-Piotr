@@ -38,17 +38,26 @@ body {
 /* Ensure footer stays at the bottom for short pages. */
 .site-root {
   min-height: 100vh;
+  /* Prefer dynamic viewport height on mobile to avoid address-bar "jumping". */
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
 
 .site-content {
   flex: 1;
+  /* Make the main area a flex container so pages can "fill remaining height"
+   * without forcing the footer below the fold.
+   */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .site-footer {
   width: 100%;
-  padding: 18px 0;
+  /* Footer is just a footnote; keep it compact to preserve vertical space. */
+  padding: 8px 0;
 }
 
 .site-footer-inner {
@@ -94,10 +103,20 @@ main {
   --details-panel-width: 380px;
   --details-rail-width: 40px;
   --page-padding-left: 24px;
-  --page-padding-top: 32px;
-  --page-padding-bottom: 64px;
+  /* Keep top padding compact so the hero doesn't start too low. */
+  --page-padding-top: 1px;
+  /* Keep some breathing room above the footer, but avoid a tall empty band. */
+  --page-padding-bottom: 16px;
   /* Flush to viewport edge on the right (no right padding). */
   padding: var(--page-padding-top) 0 var(--page-padding-bottom) var(--page-padding-left);
+
+  /* Fill available height inside `.site-content` (prevents extra scroll on
+   * short/empty pages and keeps the footer visible).
+   */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* Simple legal page typography */
@@ -144,10 +163,21 @@ main {
   align-items: flex-start;
   gap: var(--layout-gap);
   width: 100%;
+
+  /* Allow the layout to fill the available height of `.app-main`. */
+  flex: 1;
+  min-height: 0;
+
+  /* Reserve space for the (fixed) RHS rail so main content isn't covered. */
+  padding-right: var(--details-rail-width);
+}
+
+/* When expanded, reserve the full sidebar width. */
+.app-layout:has(.rhs-details.is-expanded) {
+  padding-right: calc(var(--details-rail-width) + var(--details-panel-width));
 }
 
 .app-shell {
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -174,8 +204,10 @@ main {
 }
 
 .chat-scroll {
-  flex: 1;
-  overflow-y: auto;
+  /* Let the page (body) be the single scroll container to avoid nested-scroll
+   * + sticky interactions that can cause viewport "jumping".
+   */
+  overflow-y: visible;
   /*
    * Provide horizontal breathing room so focus/selection outlines and borders
    * are not clipped on the left edge by the scroll container.
@@ -486,10 +518,15 @@ button:disabled {
 /* Variant C: right-hand-side (RHS) details panel */
 
 .rhs-details {
-  position: sticky;
-  top: var(--page-padding-top);
-  height: calc(100vh - (var(--page-padding-top) * 2));
-  align-self: start;
+  /* Fixed sidebar: always full-height (top-to-bottom) without affecting
+   * document height (so footer remains reachable without extra scroll).
+   */
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  height: auto;
+  z-index: 20;
   display: flex;
   flex-direction: row;
   justify-content: flex-end;
@@ -694,8 +731,8 @@ button:disabled {
 @media (max-width: 980px) {
   .app-main {
     --page-padding-left: 16px;
-    --page-padding-top: 24px;
-    --page-padding-bottom: 48px;
+    --page-padding-top: 14px;
+    --page-padding-bottom: 28px;
     padding: var(--page-padding-top) 0 var(--page-padding-bottom) var(--page-padding-left);
     --layout-gap: 14px;
     --details-panel-width: 360px;
