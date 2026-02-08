@@ -20,6 +20,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 
 type EvidenceItem = {
   snippet: string;
@@ -426,14 +427,50 @@ export default function HomePage() {
 
           <section className={`chat-scroll stack ${hasMessages ? "" : "hidden"}`}>
             {messages.map((message, index) => (
+              (() => {
+                const selectable = message.role === "assistant" && Boolean(message.payload);
+                return (
               <div
                 key={`${message.role}-${index}`}
                 className={`chat-bubble ${message.role} ${
                   index === activeDetailsIndex ? "is-selected" : ""
-                }`}
+                } ${selectable ? "is-clickable" : ""}`}
+                role={selectable ? "button" : undefined}
+                tabIndex={selectable ? 0 : -1}
+                onClick={() => {
+                  if (!selectable) {
+                    return;
+                  }
+                  setActiveDetailsIndex(index);
+                  setDetailsExpanded(true);
+                }}
+                onKeyDown={(event) => {
+                  if (!selectable) {
+                    return;
+                  }
+                  if (event.key !== "Enter" && event.key !== " ") {
+                    return;
+                  }
+                  event.preventDefault();
+                  setActiveDetailsIndex(index);
+                  setDetailsExpanded(true);
+                }}
               >
                 <div className="label">
-                  {message.role === "user" ? "You" : "Piotr"}
+                  {message.role === "user" ? (
+                    "You"
+                  ) : (
+                    <span className="label-with-avatar">
+                      <Image
+                        src="/piotr_synak.jpg"
+                        width={18}
+                        height={18}
+                        className="avatar"
+                        alt="Piotr Synak"
+                      />
+                      <span>Piotr</span>
+                    </span>
+                  )}
                 </div>
                 {message.payload ? (
                   <div className="answer-view">
@@ -476,6 +513,8 @@ export default function HomePage() {
                   <div>{message.content}</div>
                 )}
               </div>
+                );
+              })()
             ))}
             <div ref={messagesEndRef} />
           </section>
