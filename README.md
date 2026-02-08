@@ -16,6 +16,8 @@ from Markdown knowledge cards and refuses to answer when evidence is missing.
 - If evidence is insufficient, the system explicitly refuses
 - The pipeline is retrieval → synthesis with strict boundaries
 
+Architectural intent: the system intentionally separates **retrieval correctness**, **answer synthesis**, **stylistic shaping**, and **post-generation safety filters** to minimize hallucinations and enable deterministic reasoning about failures.
+
 ## Quick Start (Backend)
 ### Run with Docker
 ```bash

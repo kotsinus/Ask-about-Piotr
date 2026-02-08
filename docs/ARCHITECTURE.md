@@ -1,6 +1,6 @@
 # Ask-about-Piotr — Architecture
 
-Last updated: 2026-02-05
+Last updated: 2026-02-08
 
 ## How to read this document
 
@@ -285,7 +285,7 @@ sequenceDiagram
 
 Important properties:
 
-* The backend produces both structured fields and a fully formatted view (`formatted_answer`) defined in [`backend/app/schemas.py`](backend/app/schemas.py:1).
+* The backend returns a strict structured response schema; `formatted_answer` is a deterministic convenience rendering derived from those fields (see [`backend/app/schemas.py`](backend/app/schemas.py:1)).
 * If no OpenAI API key is configured, synthesis falls back to deterministic behavior in [`backend/app/llm.py`](backend/app/llm.py:1).
 * Retrieval quality is controlled via distance cutoffs configured in [`backend/app/config.py`](backend/app/config.py:1) and implemented in [`backend/app/retrieval.py`](backend/app/retrieval.py:1).
 
@@ -505,6 +505,8 @@ Tests: [`backend/tests/test_healthz_and_openai_handlers.py`](backend/tests/test_
 * Query parameters:
   * `debug_retrieval` (bool) — if enabled, includes retrieval distances for debugging.
 
+Implementation note (follow-ups): the current implementation uses `last_topic` as a “sticky last-card identifier” (`card_id`) to bias retrieval for short follow-up questions.
+
 Session and correlation headers/cookies:
 
 * Request id header: `X-Request-ID` constant defined in [`backend/app/observability.py`](backend/app/observability.py:1).
@@ -641,6 +643,17 @@ The system attempts to prevent “hallucinated” or ungrounded answers by contr
 * The synthesizer prompt requires using provided evidence only and mandates refusal when evidence is insufficient (see [`backend/app/llm.py`](backend/app/llm.py:1)).
 * The server constructs evidence and sources only from chunks used in the synthesized answer (see [`backend/app/main.py`](backend/app/main.py:1)).
 
+#### Separation of concerns (designed to minimize hallucinations)
+
+This system intentionally separates:
+
+* **retrieval correctness** — selecting an evidence set with explicit thresholds and post-processing,
+* **answer synthesis** — generating a grounded answer using the provided evidence only,
+* **stylistic shaping** — rendering a consistent operator-facing format (templates, sections, phrasing rules),
+* **post-generation safety filters** — deterministic checks and constraints applied after generation (e.g., schema/format enforcement, required citations, and refusal rules when evidence is missing).
+
+The separation is a core reliability strategy: it reduces the surface area for hallucinations and makes failures easier to reason about deterministically (e.g., retrieval empty vs. synthesis non-compliant vs. formatting/validation failure). Not all safety filters are “moderation” features; in this repository today they are primarily **grounding, schema, and citation constraints** enforced by the backend.
+
 Known limitations:
 
 * Prompt injection is a risk for any LLM system. This design reduces risk by keeping the evidence set curated and by requiring evidence indices.
@@ -655,6 +668,7 @@ Known limitations:
 | LLM hallucination | Incorrect answers | Evidence-only synthesis prompt in [`backend/app/llm.py`](backend/app/llm.py:1) | Add automated grounding tests and refusal-rate monitoring |
 | External provider outage | Downtime | OpenAI exceptions mapped to 401/429/503 in [`backend/app/main.py`](backend/app/main.py:1) | Add retries with backoff and circuit breakers where appropriate |
 | Abuse and high request volume | Cost and resource exhaustion | Minimal logging + ip prefix and hash | Add rate limiting at edge and per-session throttling |
+| Budget exhaustion / API key abuse | Cost blow-up and service disruption | None (beyond coarse correlation via logs) | Add edge rate limiting; per-session throttling; daily budget cap; alerting |
 
 ---
 
