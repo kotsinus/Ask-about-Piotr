@@ -478,10 +478,8 @@ textarea {
   min-height: 34px;
   height: 34px;
   max-height: 280px;
-  /* Slightly asymmetric vertical padding to optically center the baseline
-   * (many fonts look bottom-heavy with equal padding).
-   */
-  padding: 9px 14px 7px;
+  /* Keep vertical padding balanced so single-line text feels centered. */
+  padding: 8px 14px;
   border-radius: 10px;
   border: 1px solid var(--border);
   font-size: 15px;
