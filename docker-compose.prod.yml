@@ -33,6 +33,12 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # Retrieval (RAG) needs embeddings; default is "stub" which raises at runtime.
+      # Configure OpenAI embeddings in prod.
+      - EMBEDDINGS_PROVIDER=openai
+      # Optional explicit defaults (kept here to make prod behavior obvious).
+      - EMBEDDINGS_MODEL=${EMBEDDINGS_MODEL:-text-embedding-3-small}
+      - EMBEDDINGS_DIMENSIONS=${EMBEDDINGS_DIMENSIONS:-1536}
       - COOKIE_SECURE=true
       - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS}
       - IP_HASH_SALT=${IP_HASH_SALT}

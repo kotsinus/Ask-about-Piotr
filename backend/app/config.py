@@ -108,7 +108,7 @@ def get_settings() -> Settings:
     if not database_url:
         raise RuntimeError("DATABASE_URL is required.")
 
-    embeddings_provider = os.getenv("EMBEDDINGS_PROVIDER", "stub")
+    embeddings_provider = (os.getenv("EMBEDDINGS_PROVIDER", "stub") or "stub").strip().lower()
     embeddings_model = os.getenv("EMBEDDINGS_MODEL")
     embeddings_dimensions = int(os.getenv("EMBEDDINGS_DIMENSIONS", "1536"))
     openai_api_key = os.getenv("OPENAI_API_KEY")
@@ -144,6 +144,19 @@ def get_settings() -> Settings:
     ip_hash_salt = os.getenv("IP_HASH_SALT", "")
     if app_env in {"prod", "production"} and not ip_hash_salt.strip():
         raise RuntimeError("IP_HASH_SALT is required in production.")
+
+    # Fail fast on unsafe/default embedding configuration in production.
+    # Without embeddings, retrieval cannot run and /chat will 500 at runtime.
+    if app_env in {"prod", "production"}:
+        if embeddings_provider == "stub":
+            raise RuntimeError(
+                "EMBEDDINGS_PROVIDER must be configured for production (e.g., 'openai'); "
+                "the default 'stub' provider raises at runtime."
+            )
+        if embeddings_provider == "openai" and not (openai_api_key or "").strip():
+            raise RuntimeError(
+                "OPENAI_API_KEY is required when EMBEDDINGS_PROVIDER=openai."
+            )
 
     trusted_proxy_cidrs = _parse_csv(os.getenv("TRUSTED_PROXY_CIDRS"))
 
