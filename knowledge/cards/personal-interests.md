@@ -5,13 +5,13 @@ Personal Interests and Hobbies
 experience
 
 # Problem
-Users may ask about hobbies and personal interests and the system should answer only what is explicitly listed.
+Which personal interests are listed in the CV.
 
 # My role
 N/A
 
 # What I built
-The CV lists the following personal interests:
+The CV includes a section titled "Interests", which lists personal hobbies and activities.
 - Mastering sushi
 - Ferroequinology
 - Japanese model trains
