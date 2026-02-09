@@ -323,7 +323,8 @@ def synthesize_answer(
         word_count = len(answer.split())
 
         # Guardrail: prevent laconic answers that violate the contract
-        if normalized in {"yes", "no"} or word_count < 18:
+        # (e.g. "Yes", "No", "I don't know", etc.)
+        if normalized in {"yes", "no"} or word_count < 4:
             logger.warning(
                 "synthesis_answer_too_short_fallback",
                 extra={
