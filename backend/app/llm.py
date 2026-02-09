@@ -332,7 +332,7 @@ def synthesize_answer(
                 },
             )
             return _fallback_synthesis(chunks)
-    
+
     used_chunk_indices: list[int] = []
     if answer != refusal:
         raw_indices = payload.get("used_chunk_indices", [])
