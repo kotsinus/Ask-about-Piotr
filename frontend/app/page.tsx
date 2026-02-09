@@ -269,7 +269,8 @@ export default function HomePage() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [lastTopic, setLastTopic] = useState<string | null>(null);
   const [activeDetailsIndex, setActiveDetailsIndex] = useState<number | null>(null);
-  const [detailsExpanded, setDetailsExpanded] = useState(true);
+  // RHS (Details) panel should start collapsed by default.
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const resizeRafRef = useRef<number | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -366,6 +367,14 @@ export default function HomePage() {
   const toggleExpanded = useCallback(() => {
     setDetailsExpanded((prev) => !prev);
   }, []);
+
+  // Debug/diagnostics: validate RHS panel expansion toggles as expected.
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") {
+      return;
+    }
+    console.debug("[ui] detailsExpanded=", detailsExpanded);
+  }, [detailsExpanded]);
 
   const resizeTextarea = useCallback(() => {
     const textarea = textareaRef.current;
