@@ -108,7 +108,9 @@ def get_settings() -> Settings:
     if not database_url:
         raise RuntimeError("DATABASE_URL is required.")
 
-    embeddings_provider = (os.getenv("EMBEDDINGS_PROVIDER", "stub") or "stub").strip().lower()
+    embeddings_provider = (
+        (os.getenv("EMBEDDINGS_PROVIDER", "stub") or "stub").strip().lower()
+    )
     embeddings_model = os.getenv("EMBEDDINGS_MODEL")
     embeddings_dimensions = int(os.getenv("EMBEDDINGS_DIMENSIONS", "1536"))
     openai_api_key = os.getenv("OPENAI_API_KEY")
