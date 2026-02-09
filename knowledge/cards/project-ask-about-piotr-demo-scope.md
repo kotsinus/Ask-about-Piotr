@@ -17,7 +17,7 @@ A demo system based on curated knowledge cards derived from a CV, project descri
 The impact is better evaluation: the 100 sample questions can be mapped to specific cards, and out-of-scope questions can reliably trigger refusal. This demonstrates a production mindset: grounding, scope control, and evidence-based answers instead of “always answer.”
 
 # Tech stack
-Markdown knowledge cards with a strict schema; assets stored separately and referenced in Links. The cards are designed to be chunked with metadata (card_id, category, section, source_url) for retrieval and attribution.
+Frontend: Next.js (React). Backend: FastAPI (Python 3.12) with Pydantic and SQLAlchemy. Storage: PostgreSQL with pgvector for embedding search. LLM + embeddings: OpenAI API (model selection via env). Knowledge base: Markdown cards mounted read-only and ingested into pgvector for retrieval. Deployment: Docker Compose.
 
 # Key decisions and trade-offs
 The key trade-off is that strict grounding can feel less “chatty,” but it improves trust and reduces hallucinations. Refusal is treated as a feature, not a failure, and the demo makes that explicit to users and evaluators.
