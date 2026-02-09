@@ -13,17 +13,43 @@
 # limitations under the License.
 #
 # Purpose:
-# Frontend container image for the Next.js UI.
+# Frontend production image for Next.js (build + start)
 
-FROM node:22.22.0-alpine
-
+FROM node:22.22.0-alpine AS deps
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install
+# Install dependencies (prefer reproducible builds)
+COPY package.json package-lock.json ./
+RUN npm ci
 
-COPY . ./
+FROM node:22.22.0-alpine AS builder
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+ENV NODE_ENV=production
+# Optional: disable Next telemetry inside container
+ENV NEXT_TELEMETRY_DISABLED=1
+
+RUN npm run build
+
+FROM node:22.22.0-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+# Next listens on 0.0.0.0 by default in start, but we set explicitly
+ENV HOSTNAME=0.0.0.0
+
+# Copy only what we need to run
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/next.config.* ./ 2>/dev/null || true
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/node_modules ./node_modules
 
 EXPOSE 3000
 
-CMD ["npm", "run", "dev", "--", "-H", "0.0.0.0"]
+CMD ["npm", "run", "start", "--", "-H", "0.0.0.0", "-p", "3000"]

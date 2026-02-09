@@ -1,0 +1,68 @@
+# Copyright 2026 Piotr Synak
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Purpose:
+# Production orchestration for backend services.
+
+services:
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=/api
+    expose:
+      - "3000"
+    networks:
+      - web
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    volumes:
+      - ./knowledge:/knowledge:ro
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - COOKIE_SECURE=true
+      - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS}
+      - IP_HASH_SALT=${IP_HASH_SALT}
+      - TRUSTED_PROXY_CIDRS=${TRUSTED_PROXY_CIDRS}
+    expose:
+      - "8000"
+    depends_on:
+      - db
+    networks:
+      - web
+      - internal
+
+  db:
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    expose:
+      - "5432"
+    networks:
+      - internal
+
+volumes:
+  pgdata:
+
+networks:
+  web:
+    external: true
+  internal:
+    driver: bridge
+
