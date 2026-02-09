@@ -189,7 +189,8 @@ main {
 }
 
 .app-shell.empty {
-  justify-content: center;
+  justify-content: flex-start;
+  padding-top: 28px;
 }
 
 .panel {
@@ -239,10 +240,59 @@ main {
 .hero-subtitle {
   color: var(--muted);
   font-size: 16px;
-  line-height: 1.25;
-  font-style: italic;
-  /* Pull subtitle closer to the title (header uses `.stack` gap). */
-  margin: -14px 0 -10px;
+  line-height: 1.35;
+  font-style: normal;
+  margin: 0;
+}
+
+.hero {
+  max-width: 820px;
+}
+
+.hero-eyebrow {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.hero-title-row h1 {
+  margin: 0;
+  font-size: 42px;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.hero-lead {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.hero-trust {
+  margin-top: 6px;
+  padding: 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.hero-trust-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 900;
+  margin-bottom: 8px;
+}
+
+.hero-trust-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 /* MVP header actions row (CV / AI Projects / GitHub) */

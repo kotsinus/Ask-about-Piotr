@@ -26,7 +26,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Ask Piotr Synak",
   description:
-    "Grounded Q&A about Piotr Synak's experience, backed by curated knowledge cards with citations",
+    "Open-source, evidence-based Q&A about Piotr Synak’s experience — answers use verified sources with explicit citations.",
   icons: {
     icon: [
       {

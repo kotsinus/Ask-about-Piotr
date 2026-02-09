@@ -559,14 +559,15 @@ export default function HomePage() {
     <main className="app-main">
       <div className={layoutClassName}>
         <div className={`app-shell ${hasMessages ? "has-messages" : "empty"}`}>
-          <header className="stack">
+          <header className="hero stack">
+            <p className="hero-eyebrow">Open-source, evidence-based AI assistant</p>
+
             <div className="hero-title-row">
               <h1>Ask Piotr Synak</h1>
+
               {headerActions.length > 0 ? (
                 <nav className="header-actions" aria-label="Header actions">
                   {headerActions.map((action) => {
-                    // These header actions are documents / external resources and should
-                    // always open in a new tab/window.
                     const openInNewTab = true;
                     return (
                       <a
@@ -576,10 +577,7 @@ export default function HomePage() {
                         aria-label={action.ariaLabel}
                         title={action.ariaLabel}
                         {...(openInNewTab
-                          ? {
-                              target: "_blank",
-                              rel: "noopener noreferrer"
-                            }
+                          ? { target: "_blank", rel: "noopener noreferrer" }
                           : undefined)}
                       >
                         {action.label}
@@ -589,18 +587,21 @@ export default function HomePage() {
                 </nav>
               ) : null}
             </div>
+
             <p className="hero-subtitle">
-              An open-source AI that explains my professional experience using verifiable sources
-              only.
+              An AI system that answers questions about my professional experience using verified sources only.
             </p>
-            <p className="muted">Ask questions about my work, experience, or background.</p>
-            <p className="muted">
-              This assistant answers exclusively from retrieved documentation based on my CV,
-              selected projects, and publications.
-              <br />
-              Each response includes source citations and explicitly states uncertainty when the
-              available evidence is insufficient.
-            </p>
+
+            <p className="hero-lead">Ask about my work, projects, research, or leadership experience.</p>
+
+            <div className="hero-trust" role="note" aria-label="How this assistant works">
+              <span className="hero-trust-title">How this assistant works</span>
+              <ul className="hero-trust-list">
+                <li>Answers are generated only from my CV, selected projects, and publications</li>
+                <li>Every response includes explicit sources and evidence</li>
+                <li>If evidence is insufficient, the assistant clearly says so</li>
+              </ul>
+            </div>
 
             {!apiConfigured ? (
               <div className="panel panel-warning" role="status" aria-live="polite">
