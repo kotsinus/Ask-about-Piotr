@@ -17,15 +17,24 @@
  * Root layout for the Next.js app.
  */
 
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 
 import "./globals.css";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Ask Piotr Synak",
   description:
-    "Grounded Q&A about Piotr Synak's experience, backed by curated knowledge cards with citations"
+    "Grounded Q&A about Piotr Synak's experience, backed by curated knowledge cards with citations",
+  icons: {
+    icon: [
+      {
+        url: "/assets/photos/Piotr_Synak.jpg",
+        type: "image/jpeg"
+      }
+    ]
+  }
 };
 
 export default function RootLayout({
