@@ -36,16 +36,12 @@ RUN npm run build
 
 FROM node:22.22.0-alpine AS runner
 WORKDIR /app
-
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
-# Next listens on 0.0.0.0 by default in start, but we set explicitly
 ENV HOSTNAME=0.0.0.0
 
-# Copy only what we need to run
 COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/next.config.* ./ 2>/dev/null || true
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
