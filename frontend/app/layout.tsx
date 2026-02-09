@@ -52,9 +52,9 @@ export default function RootLayout({
           <footer className="site-footer" aria-label="Site footer">
             <div className="site-footer-inner">
               <p className="site-footer-line">
-                This is a privacy-first, open-source demo.
-                <br />
-                No tracking, no analytics, no ads.{" "}
+                This is a privacy-first, open-source demo. This site uses a strictly necessary, anonymous session 
+                cookie to function correctly. No tracking, no analytics, no ads.
+                {"\u00A0"}
                 <Link className="site-footer-link" href="/privacy-policy">
                   Privacy policy
                 </Link>

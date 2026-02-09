@@ -64,20 +64,23 @@ body {
   max-width: 980px;
   margin: 0 auto;
   padding: 0 24px;
+  /* Keep the footer as a single line without forcing the whole page to scroll horizontally. */
+  overflow-x: auto;
 }
 
 .site-footer-line {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.45;
+  white-space: nowrap;
 }
 
 .site-footer-link {
   display: inline;
   color: var(--accent);
   font-weight: 800;
-  font-size: 12px;
+  font-size: 11px;
   text-decoration: none;
   white-space: nowrap;
 }
