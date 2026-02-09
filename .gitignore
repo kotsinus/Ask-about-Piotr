@@ -27,6 +27,15 @@ pnpm-debug.log*
 .next/
 out/
 
+# Frontend build caches / artifacts
+*.tsbuildinfo
+.turbo/
+.eslintcache
+
+# Patch/diff artifacts
+*.patch
+*.diff
+
 # Docker
 *.tar
 

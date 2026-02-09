@@ -22,6 +22,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 
+type HeaderAction = {
+  key: "cv" | "ai-projects" | "github";
+  label: string;
+  href: string;
+  ariaLabel: string;
+};
+
+const HEADER_ACTION_DEFAULTS = {
+  cv: "/assets/cv/CV_Piotr_Synak.pdf",
+  aiProjects: "/assets/ai-projects/AI_Projects_Piotr_Synak.pdf",
+  github: "https://github.com/kotsinus/Ask-about-Piotr"
+} as const;
+
+const HEADER_ACTION_ENV = {
+  cv: process.env.NEXT_PUBLIC_CV_URL,
+  aiProjects: process.env.NEXT_PUBLIC_AI_PROJECTS_URL,
+  github: process.env.NEXT_PUBLIC_GITHUB_URL
+} as const;
+
+const normalizeHref = (value: string | undefined) => (value ?? "").trim();
+
 type EvidenceItem = {
   snippet: string;
   card_id: string;
@@ -260,6 +281,44 @@ export default function HomePage() {
   }, []);
   const apiConfigured = Boolean(apiUrl);
 
+  const headerActions = useMemo(() => {
+    const cvHref =
+      HEADER_ACTION_ENV.cv !== undefined
+        ? normalizeHref(HEADER_ACTION_ENV.cv)
+        : HEADER_ACTION_DEFAULTS.cv;
+    const aiProjectsHref =
+      HEADER_ACTION_ENV.aiProjects !== undefined
+        ? normalizeHref(HEADER_ACTION_ENV.aiProjects)
+        : HEADER_ACTION_DEFAULTS.aiProjects;
+    const githubHref =
+      HEADER_ACTION_ENV.github !== undefined
+        ? normalizeHref(HEADER_ACTION_ENV.github)
+        : HEADER_ACTION_DEFAULTS.github;
+
+    const actions: HeaderAction[] = [
+      {
+        key: "cv",
+        label: "CV (PDF)",
+        href: cvHref,
+        ariaLabel: "Open CV (PDF)"
+      },
+      {
+        key: "ai-projects",
+        label: "AI Projects (PDF)",
+        href: aiProjectsHref,
+        ariaLabel: "Open AI projects (PDF)"
+      },
+      {
+        key: "github",
+        label: "GitHub",
+        href: githubHref,
+        ariaLabel: "Open GitHub repository"
+      }
+    ];
+
+    return actions.filter((action) => Boolean(action.href));
+  }, []);
+
   // Keep a ref in sync with state so event handlers can reliably read the
   // latest messages even under rapid interactions (e.g. multiple quick Enter
   // presses before a re-render).
@@ -489,7 +548,34 @@ export default function HomePage() {
       <div className={layoutClassName}>
         <div className={`app-shell ${hasMessages ? "has-messages" : "empty"}`}>
           <header className="stack">
-            <h1>Ask Piotr Synak</h1>
+            <div className="hero-title-row">
+              <h1>Ask Piotr Synak</h1>
+              {headerActions.length > 0 ? (
+                <nav className="header-actions" aria-label="Header actions">
+                  {headerActions.map((action) => {
+                    // These header actions are documents / external resources and should
+                    // always open in a new tab/window.
+                    const openInNewTab = true;
+                    return (
+                      <a
+                        key={action.key}
+                        className="header-action-link"
+                        href={action.href}
+                        aria-label={action.ariaLabel}
+                        {...(openInNewTab
+                          ? {
+                              target: "_blank",
+                              rel: "noopener noreferrer"
+                            }
+                          : undefined)}
+                      >
+                        {action.label}
+                      </a>
+                    );
+                  })}
+                </nav>
+              ) : null}
+            </div>
             <p className="hero-subtitle">An evidence-grounded AI explaining my work</p>
             <p className="muted">
               Ask me about my experience. I answer only from retrieved source material, with citations and explicit uncertainty when evidence is missing.
