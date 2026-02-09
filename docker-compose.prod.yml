@@ -15,11 +15,11 @@ services:
         context: ./frontend
         dockerfile: Dockerfile
         args:
-          NEXT_PUBLIC_API_URL: /api
+          NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=/api
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api}
     expose:
       - "3000"
     networks:
@@ -35,7 +35,7 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       # Retrieval (RAG) needs embeddings; default is "stub" which raises at runtime.
       # Configure OpenAI embeddings in prod.
-      - EMBEDDINGS_PROVIDER=openai
+      - EMBEDDINGS_PROVIDER=${EMBEDDINGS_PROVIDER:-openai}
       # Optional explicit defaults (kept here to make prod behavior obvious).
       - EMBEDDINGS_MODEL=${EMBEDDINGS_MODEL:-text-embedding-3-small}
       - EMBEDDINGS_DIMENSIONS=${EMBEDDINGS_DIMENSIONS:-1536}
