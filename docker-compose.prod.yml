@@ -11,7 +11,11 @@
 
 services:
   frontend:
-    build: ./frontend
+    build: 
+        context: ./frontend
+        dockerfile: Dockerfile
+        args:
+          NEXT_PUBLIC_API_URL: /api
     restart: unless-stopped
     environment:
       - NODE_ENV=production
