@@ -23,7 +23,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 
 type HeaderAction = {
-  key: "cv" | "ai-projects" | "github";
+  key: "cv" | "ai-projects" | "github" | "publications";
   label: string;
   href: string;
   ariaLabel: string;
@@ -32,13 +32,15 @@ type HeaderAction = {
 const HEADER_ACTION_DEFAULTS = {
   cv: "/assets/cv/CV_Piotr_Synak.pdf",
   aiProjects: "/assets/ai-projects/AI_Projects_Piotr_Synak.pdf",
-  github: "https://github.com/kotsinus/Ask-about-Piotr"
+  github: "https://github.com/kotsinus/Ask-about-Piotr",
+  publications: "/assets/publications/Publications_Piotr_Synak.pdf"
 } as const;
 
 const HEADER_ACTION_ENV = {
   cv: process.env.NEXT_PUBLIC_CV_URL,
   aiProjects: process.env.NEXT_PUBLIC_AI_PROJECTS_URL,
-  github: process.env.NEXT_PUBLIC_GITHUB_URL
+  github: process.env.NEXT_PUBLIC_GITHUB_URL,
+  publications: process.env.NEXT_PUBLIC_PUBLICATIONS_URL
 } as const;
 
 const normalizeHref = (value: string | undefined) => (value ?? "").trim();
@@ -294,25 +296,35 @@ export default function HomePage() {
       HEADER_ACTION_ENV.github !== undefined
         ? normalizeHref(HEADER_ACTION_ENV.github)
         : HEADER_ACTION_DEFAULTS.github;
+    const publicationsHref =
+      HEADER_ACTION_ENV.publications !== undefined
+        ? normalizeHref(HEADER_ACTION_ENV.publications)
+        : HEADER_ACTION_DEFAULTS.publications;
 
     const actions: HeaderAction[] = [
       {
         key: "cv",
         label: "CV (PDF)",
         href: cvHref,
-        ariaLabel: "Open CV (PDF)"
+        ariaLabel: "Open curriculum vitae (PDF)"
       },
       {
         key: "ai-projects",
         label: "AI Projects (PDF)",
         href: aiProjectsHref,
-        ariaLabel: "Open AI projects (PDF)"
+        ariaLabel: "Open selected AI and data system projects (PDF)"
       },
       {
         key: "github",
         label: "GitHub",
         href: githubHref,
-        ariaLabel: "Open GitHub repository"
+        ariaLabel: "Open-source code and system architecture"
+      },
+      {
+        key: "publications",
+        label: "Publications (PDF)",
+        href: publicationsHref,
+        ariaLabel: "Open selected publications and research output (PDF)"
       }
     ];
 
@@ -562,6 +574,7 @@ export default function HomePage() {
                         className="header-action-link"
                         href={action.href}
                         aria-label={action.ariaLabel}
+                        title={action.ariaLabel}
                         {...(openInNewTab
                           ? {
                               target: "_blank",
@@ -576,9 +589,17 @@ export default function HomePage() {
                 </nav>
               ) : null}
             </div>
-            <p className="hero-subtitle">An evidence-grounded AI explaining my work</p>
+            <p className="hero-subtitle">
+              An open-source AI that explains my professional experience using verifiable sources
+              only.
+            </p>
+            <p className="muted">Ask questions about my work, experience, or background.</p>
             <p className="muted">
-              Ask me about my experience. I answer only from retrieved source material, with citations and explicit uncertainty when evidence is missing.
+              This assistant answers exclusively from retrieved documentation based on my CV,
+              selected projects, and publications.
+              <br />
+              Each response includes source citations and explicitly states uncertainty when the
+              available evidence is insufficient.
             </p>
 
             {!apiConfigured ? (
@@ -677,7 +698,7 @@ export default function HomePage() {
               </label>
               <textarea
                 id="question"
-                placeholder="e.g. What did you build for Decreen?"
+                placeholder="e.g. What is your professional background?"
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
                 onKeyDown={handleKeyDown}
@@ -690,6 +711,10 @@ export default function HomePage() {
               </button>
             </div>
           </section>
+
+          <p className="muted" aria-label="Trust signals">
+            Evidence-based retrieval · Source citations · Explicit refusal behavior · Privacy-first
+          </p>
         </div>
 
         <AnswerDetailsPanel
