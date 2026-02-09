@@ -317,6 +317,22 @@ def synthesize_answer(
         return _fallback_synthesis(chunks)
 
     refusal = "I do not have enough evidence in the provided materials."
+
+    if answer != refusal:
+        normalized = answer.strip().lower()
+        word_count = len(answer.split())
+
+        # Guardrail: prevent laconic answers that violate the contract
+        if normalized in {"yes", "no"} or word_count < 18:
+            logger.warning(
+                "synthesis_answer_too_short_fallback",
+                extra={
+                    "answer": answer,
+                    "word_count": word_count,
+                },
+            )
+            return _fallback_synthesis(chunks)
+    
     used_chunk_indices: list[int] = []
     if answer != refusal:
         raw_indices = payload.get("used_chunk_indices", [])

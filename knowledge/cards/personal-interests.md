@@ -5,22 +5,30 @@ Personal Interests and Hobbies
 experience
 
 # Problem
-Users may ask about hobbies and personal interests; the system should answer only what is explicitly listed.
+Users may ask about hobbies and personal interests and the system should answer only what is explicitly listed.
 
 # My role
-Provide a factual list of interests as documented, without extrapolating personality traits.
+N/A
 
 # What I built
-Interests listed include: mastering sushi, ferroequinology, Japanese model trains, butoh, judo, football, hiking, and photography.
+The CV lists the following personal interests:
+- Mastering sushi
+- Ferroequinology
+- Japanese model trains
+- Butoh
+- Judo
+- Football
+- Hiking
+- Photography
 
 # Scale and impact
-These interests may be discussed as personal context, but the system avoids making professional inferences unless separately documented.
+N/A
 
 # Tech stack
 N/A
 
 # Key decisions and trade-offs
-Avoids interpreting interests as competencies unless you explicitly curate a separate card connecting them to professional values.
+N/A
 
 # Links
 - CV: assets/cv/CV_Piotr_Synak.pdf
