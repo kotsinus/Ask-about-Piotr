@@ -31,8 +31,10 @@ services:
     - /app/.next
 
   backend:
-    build: ./backend
-    ports:
+     build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+   ports:
       - "8000:8000"
     volumes:
       - ./knowledge:/knowledge:ro
