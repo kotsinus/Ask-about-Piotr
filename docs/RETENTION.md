@@ -24,6 +24,13 @@ Retention model: **not enforced in code (TBD)**.
 - The backend writes logs best-effort (failures must not break the request path).
 - Raw IP addresses are never stored; only privacy-minimized derived fields.
 
+Optional fields (operator-controlled):
+
+- The backend can persist the **LLM conversation context window** (last few messages) used for the request.
+  This is stored in `interaction_logs.llm_context_messages` when enabled via
+  [`INTERACTION_LOG_INCLUDE_LLM_CONTEXT`](.env.example:1).
+  Each message `content` is truncated to 2000 characters before storage.
+
 Design notes: [`plans/interaction-logging.md`](plans/interaction-logging.md:1).
 
 ### Current status

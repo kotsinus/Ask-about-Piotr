@@ -64,6 +64,9 @@ class Settings:
     ip_hash_salt: str
     trusted_proxy_cidrs: list[str]
 
+    # Interaction logging controls
+    interaction_log_include_llm_context: bool
+
     # Web security / cross-origin configuration
     cookie_secure: bool
     cors_allow_origins: list[str]
@@ -162,6 +165,10 @@ def get_settings() -> Settings:
 
     trusted_proxy_cidrs = _parse_csv(os.getenv("TRUSTED_PROXY_CIDRS"))
 
+    interaction_log_include_llm_context = _parse_bool(
+        os.getenv("INTERACTION_LOG_INCLUDE_LLM_CONTEXT"), default=True
+    )
+
     # Web security / CORS
     web = get_web_settings()
 
@@ -185,6 +192,7 @@ def get_settings() -> Settings:
         retrieval_per_card_cap=retrieval_per_card_cap,
         ip_hash_salt=ip_hash_salt,
         trusted_proxy_cidrs=trusted_proxy_cidrs,
+        interaction_log_include_llm_context=interaction_log_include_llm_context,
         cookie_secure=web.cookie_secure,
         cors_allow_origins=web.cors_allow_origins,
         geoip_enabled=geoip_enabled,

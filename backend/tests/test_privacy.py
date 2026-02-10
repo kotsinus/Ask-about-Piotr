@@ -48,6 +48,7 @@ def _settings(**overrides: Any) -> Settings:
         retrieval_per_card_cap=2,
         ip_hash_salt="salt",
         trusted_proxy_cidrs=[],
+        interaction_log_include_llm_context=True,
         cookie_secure=False,
         cors_allow_origins=["http://localhost:3000"],
         geoip_enabled=False,

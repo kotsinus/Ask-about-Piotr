@@ -88,6 +88,12 @@ Failures to write **must not** break the request path.
 Writer: [`backend/app/interaction_logging.py`](backend/app/interaction_logging.py:1).
 Schema: [`backend/db/init.sql`](backend/db/init.sql:1).
 
+Configuration:
+
+- `INTERACTION_LOG_INCLUDE_LLM_CONTEXT` controls whether the conversation context window
+  (last few messages) is persisted in `interaction_logs.llm_context_messages`.
+  See [`.env.example`](.env.example:1).
+
 ## Web security / CORS
 
 CORS configuration is environment-driven (see [`.env.example`](.env.example:1)).

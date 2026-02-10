@@ -4,6 +4,18 @@ This document summarizes the persistence model in Postgres for Ask-about-Piotr.
 
 Canonical schema source: [`backend/db/init.sql`](backend/db/init.sql:1).
 
+Schema migrations (existing production DBs):
+
+- Postgres only runs `init.sql` automatically on **fresh** volumes.
+- For an already-running production database, apply the relevant idempotent SQL
+  migration(s) from [`backend/db/migrations/`](backend/db/migrations/2026-02-10_add_interaction_log_context_columns.sql:1).
+
+Example (psql):
+
+```sql
+\i backend/db/migrations/2026-02-10_add_interaction_log_context_columns.sql
+```
+
 For retention posture, see [`docs/RETENTION.md`](docs/RETENTION.md:1).
 
 ## Overview
@@ -52,6 +64,19 @@ Key columns (high level):
 - Model metadata: `router_model`, `synthesis_model`, `embeddings_provider`, `embeddings_model`.
 - Client metadata (privacy-first): `ip_prefix`, `ip_hash`, `user_agent`, `country`.
 
+Additional context columns (for debugging/analytics):
+
+- `standalone_question` (text, nullable) — rewritten version of `question` used for retrieval/synthesis.
+  Produced by [`rewrite_question()`](backend/app/llm.py:37).
+- `incoming_last_topic` (text, nullable) — topic provided by the client in request context (`ChatRequest.context.last_topic`).
+- `resolved_topic` (text, nullable) — topic returned to the client in response context (either best retrieved card id or `incoming_last_topic`).
+- `topic_used_for_retrieval` (boolean, nullable) — whether `incoming_last_topic` was used to augment retrieval.
+- `messages_count` (integer, nullable) — number of conversation history messages received in the request.
+- `retrieval_chunk_count` (integer, nullable) — number of chunks returned by similarity search (`len(chunks)` from [`retrieve()`](backend/app/retrieval.py:48)).
+- `llm_context_messages` (jsonb, nullable) — last ~6 conversation messages actually used as LLM context.
+  This field is controlled by env var `INTERACTION_LOG_INCLUDE_LLM_CONTEXT` (see [`.env.example`](.env.example:1)).
+  Each message `content` is truncated to 2000 characters before storage.
+
 Derived vs. persisted:
 
 - **Derived (privacy-minimized)**:
@@ -69,6 +94,7 @@ References:
 
 - Writer: [`backend/app/interaction_logging.py`](backend/app/interaction_logging.py:61)
 - Privacy helpers: [`backend/app/privacy.py`](backend/app/privacy.py:34)
+ - `/chat` orchestration + logging payload: [`backend/app/main.py`](backend/app/main.py:373)
 
 ## Transient / in-memory identifiers
 

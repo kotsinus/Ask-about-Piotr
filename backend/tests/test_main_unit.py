@@ -145,6 +145,7 @@ def test_chat_does_not_use_last_topic_for_retrieval_when_messages_empty(
             embeddings_provider="stub",
             embeddings_model="stub",
             ip_hash_salt="salt",
+            interaction_log_include_llm_context=True,
         ),
     )
     monkeypatch.setattr("app.main.extract_client_ip", lambda *args, **kwargs: None)
@@ -202,6 +203,7 @@ def test_chat_uses_last_topic_for_retrieval_on_followup_question(
             embeddings_provider="stub",
             embeddings_model="stub",
             ip_hash_salt="salt",
+            interaction_log_include_llm_context=True,
         ),
     )
     monkeypatch.setattr("app.main.extract_client_ip", lambda *args, **kwargs: None)
@@ -266,6 +268,7 @@ def test_chat_topic_heuristics_controls_retrieval_topic_usage(
             embeddings_provider="stub",
             embeddings_model="stub",
             ip_hash_salt="salt",
+            interaction_log_include_llm_context=True,
         ),
     )
     monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
@@ -317,6 +320,7 @@ def test_chat_swallow_background_task_scheduling_failure(
             embeddings_provider="stub",
             embeddings_model="stub",
             ip_hash_salt="salt",
+            interaction_log_include_llm_context=True,
         ),
     )
     monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)

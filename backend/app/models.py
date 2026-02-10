@@ -19,7 +19,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Float, Index, Text, func
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, Index, Integer, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -53,12 +54,24 @@ class InteractionLogModel(Base):
     latency_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     question: Mapped[str] = mapped_column(Text, nullable=False)
+    standalone_question: Mapped[str | None] = mapped_column(Text, nullable=True)
     answer: Mapped[str] = mapped_column(Text, nullable=False)
 
     router_model: Mapped[str | None] = mapped_column(Text, nullable=True)
     synthesis_model: Mapped[str | None] = mapped_column(Text, nullable=True)
     embeddings_provider: Mapped[str | None] = mapped_column(Text, nullable=True)
     embeddings_model: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    incoming_last_topic: Mapped[str | None] = mapped_column(Text, nullable=True)
+    resolved_topic: Mapped[str | None] = mapped_column(Text, nullable=True)
+    topic_used_for_retrieval: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
+    messages_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    retrieval_chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    llm_context_messages: Mapped[list[dict] | None] = mapped_column(
+        JSONB, nullable=True
+    )
 
     ip_prefix: Mapped[str | None] = mapped_column(Text, nullable=True)
     ip_hash: Mapped[str | None] = mapped_column(Text, nullable=True)

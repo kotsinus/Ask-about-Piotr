@@ -70,6 +70,44 @@ SESSION_COOKIE_NAME = "ask_piotr_session_id"
 SESSION_ID_HEADER = "x-session-id"
 
 
+def _truncate_text(value: str, max_chars: int) -> str:
+    if max_chars <= 0:
+        return ""
+    if len(value) <= max_chars:
+        return value
+    return value[:max_chars]
+
+
+def _build_llm_context_messages(
+    messages: list[dict] | None,
+    *,
+    max_messages: int = 6,
+    max_content_chars: int = 2000,
+) -> list[dict] | None:
+    """Serialize the exact message window used as LLM context today.
+
+    NOTE: The LLM prompt builders (rewrite + synthesis) currently trim to the
+    last 6 messages. This helper mirrors that behavior so interaction logging can
+    store what was actually passed.
+    """
+
+    if not messages:
+        return None
+
+    trimmed = messages[-max_messages:]
+    payload: list[dict] = []
+    for message in trimmed:
+        role = str(message.get("role", "")).strip()
+        content = str(message.get("content", ""))
+        payload.append(
+            {
+                "role": role,
+                "content": _truncate_text(content, max_content_chars),
+            }
+        )
+    return payload
+
+
 def _log_interaction_background(
     *,
     settings,
@@ -80,11 +118,18 @@ def _log_interaction_background(
     response_at: datetime,
     latency_ms: float | None,
     question: str,
+    standalone_question: str | None,
     answer: str,
     router_model: str | None,
     synthesis_model: str | None,
     embeddings_provider: str | None,
     embeddings_model: str | None,
+    incoming_last_topic: str | None,
+    resolved_topic: str | None,
+    topic_used_for_retrieval: bool | None,
+    messages_count: int | None,
+    retrieval_chunk_count: int | None,
+    llm_context_messages: list[dict] | None,
     client_ip: str | None,
     user_agent: str | None,
 ) -> None:
@@ -110,11 +155,20 @@ def _log_interaction_background(
                 response_at=response_at,
                 latency_ms=latency_ms,
                 question=question,
+                standalone_question=standalone_question,
                 answer=answer,
                 router_model=router_model,
                 synthesis_model=synthesis_model,
                 embeddings_provider=embeddings_provider,
                 embeddings_model=embeddings_model,
+                incoming_last_topic=incoming_last_topic,
+                resolved_topic=resolved_topic,
+                topic_used_for_retrieval=topic_used_for_retrieval,
+                messages_count=messages_count,
+                retrieval_chunk_count=retrieval_chunk_count,
+                llm_context_messages=llm_context_messages
+                if settings.interaction_log_include_llm_context
+                else None,
                 ip_prefix=ip_prefix,
                 ip_hash=ip_hash,
                 user_agent=user_agent,
@@ -486,6 +540,17 @@ def chat(
         tasks = background_tasks
         client_ip = extract_client_ip(http_request, settings)
         user_agent = http_request.headers.get("user-agent")
+
+        conversation_messages_payload = (
+            [message.model_dump() for message in request.messages]
+            if request.messages
+            else None
+        )
+        llm_context_messages = _build_llm_context_messages(
+            conversation_messages_payload,
+            max_messages=6,
+            max_content_chars=2000,
+        )
         tasks.add_task(
             _log_interaction_background,
             settings=settings,
@@ -496,11 +561,18 @@ def chat(
             response_at=response_at,
             latency_ms=latency_ms,
             question=request.question,
+            standalone_question=standalone_question,
             answer=response.answer,
             router_model=settings.router_model,
             synthesis_model=settings.synthesis_model,
             embeddings_provider=settings.embeddings_provider,
             embeddings_model=settings.embeddings_model,
+            incoming_last_topic=incoming_last_topic,
+            resolved_topic=resolved_topic,
+            topic_used_for_retrieval=use_topic_for_retrieval,
+            messages_count=messages_count,
+            retrieval_chunk_count=len(chunks),
+            llm_context_messages=llm_context_messages,
             client_ip=client_ip,
             user_agent=user_agent,
         )

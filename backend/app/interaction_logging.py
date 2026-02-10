@@ -47,11 +47,20 @@ class InteractionLog:
     response_at: datetime
     latency_ms: float | None
     question: str
+    standalone_question: str | None
     answer: str
     router_model: str | None
     synthesis_model: str | None
     embeddings_provider: str | None
     embeddings_model: str | None
+
+    incoming_last_topic: str | None
+    resolved_topic: str | None
+    topic_used_for_retrieval: bool | None
+    messages_count: int | None
+    retrieval_chunk_count: int | None
+    llm_context_messages: list[dict] | None
+
     ip_prefix: str | None
     ip_hash: str | None
     user_agent: str | None
@@ -129,11 +138,18 @@ def _write_interaction_log_once(row: InteractionLog) -> None:
                 response_at=row.response_at,
                 latency_ms=row.latency_ms,
                 question=row.question,
+                standalone_question=row.standalone_question,
                 answer=row.answer,
                 router_model=row.router_model,
                 synthesis_model=row.synthesis_model,
                 embeddings_provider=row.embeddings_provider,
                 embeddings_model=row.embeddings_model,
+                incoming_last_topic=row.incoming_last_topic,
+                resolved_topic=row.resolved_topic,
+                topic_used_for_retrieval=row.topic_used_for_retrieval,
+                messages_count=row.messages_count,
+                retrieval_chunk_count=row.retrieval_chunk_count,
+                llm_context_messages=row.llm_context_messages,
                 ip_prefix=row.ip_prefix,
                 ip_hash=row.ip_hash,
                 user_agent=row.user_agent,

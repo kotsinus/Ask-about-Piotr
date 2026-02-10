@@ -39,11 +39,18 @@ CREATE TABLE IF NOT EXISTS interaction_logs (
     response_at TIMESTAMPTZ NOT NULL,
     latency_ms DOUBLE PRECISION,
     question TEXT NOT NULL,
+    standalone_question TEXT,
     answer TEXT NOT NULL,
     router_model TEXT,
     synthesis_model TEXT,
     embeddings_provider TEXT,
     embeddings_model TEXT,
+    incoming_last_topic TEXT,
+    resolved_topic TEXT,
+    topic_used_for_retrieval BOOLEAN,
+    messages_count INTEGER,
+    retrieval_chunk_count INTEGER,
+    llm_context_messages JSONB,
     ip_prefix TEXT,
     ip_hash TEXT,
     user_agent TEXT,
@@ -58,6 +65,27 @@ ALTER TABLE interaction_logs
 
 ALTER TABLE interaction_logs
     ADD COLUMN IF NOT EXISTS conversation_id TEXT;
+
+ALTER TABLE interaction_logs
+    ADD COLUMN IF NOT EXISTS standalone_question TEXT;
+
+ALTER TABLE interaction_logs
+    ADD COLUMN IF NOT EXISTS incoming_last_topic TEXT;
+
+ALTER TABLE interaction_logs
+    ADD COLUMN IF NOT EXISTS resolved_topic TEXT;
+
+ALTER TABLE interaction_logs
+    ADD COLUMN IF NOT EXISTS topic_used_for_retrieval BOOLEAN;
+
+ALTER TABLE interaction_logs
+    ADD COLUMN IF NOT EXISTS messages_count INTEGER;
+
+ALTER TABLE interaction_logs
+    ADD COLUMN IF NOT EXISTS retrieval_chunk_count INTEGER;
+
+ALTER TABLE interaction_logs
+    ADD COLUMN IF NOT EXISTS llm_context_messages JSONB;
 
 CREATE INDEX IF NOT EXISTS interaction_logs_logged_at_idx
     ON interaction_logs (logged_at);
