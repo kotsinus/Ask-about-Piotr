@@ -57,12 +57,17 @@ RUN pip install --no-index --find-links=/wheels -r requirements.txt \
 # Copy backend source
 COPY . .
 
+# Startup hook (migrations + knowledge ingest) before starting the server
+RUN chmod +x /app/entrypoint.sh
+
 # Prepare mount points
 RUN mkdir -p /knowledge && chown -R app:app /app
 
 USER app
 
 EXPOSE 8000
+
+ENTRYPOINT ["/app/entrypoint.sh"]
 
 CMD ["gunicorn", "app.main:app", \
      "--worker-class", "uvicorn.workers.UvicornWorker", \

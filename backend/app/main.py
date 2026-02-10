@@ -442,18 +442,77 @@ def chat(
         },
     )
 
+    # Stage timing logs (diagnostics): helps pinpoint hangs/timeouts without
+    # logging raw user text.
+    t_stage = time.perf_counter()
+
+    logger.info(
+        "chat_stage",
+        extra={
+            "stage": "rewrite_question_start",
+            "messages_count": messages_count,
+        },
+    )
     standalone_question = rewrite_question(
         request.question,
         [message.model_dump() for message in request.messages]
         if request.messages
         else None,
     )
+    logger.info(
+        "chat_stage",
+        extra={
+            "stage": "rewrite_question_done",
+            "duration_ms": round((time.perf_counter() - t_stage) * 1000, 2),
+            "standalone_question_len": len(standalone_question or ""),
+        },
+    )
+    t_stage = time.perf_counter()
+    logger.info(
+        "chat_stage",
+        extra={
+            "stage": "route_category_start",
+        },
+    )
     try:
         category = route_category(standalone_question)
     except Exception:
         category = classify_question(standalone_question)
-    chunks = retrieve(standalone_question, conversation_topic=conversation_topic)
+    logger.info(
+        "chat_stage",
+        extra={
+            "stage": "route_category_done",
+            "duration_ms": round((time.perf_counter() - t_stage) * 1000, 2),
+            "category": str(category),
+        },
+    )
 
+    t_stage = time.perf_counter()
+    logger.info(
+        "chat_stage",
+        extra={
+            "stage": "retrieve_start",
+            "topic_used_for_retrieval": use_topic_for_retrieval,
+        },
+    )
+    chunks = retrieve(standalone_question, conversation_topic=conversation_topic)
+    logger.info(
+        "chat_stage",
+        extra={
+            "stage": "retrieve_done",
+            "duration_ms": round((time.perf_counter() - t_stage) * 1000, 2),
+            "retrieval_chunk_count": len(chunks),
+        },
+    )
+
+    t_stage = time.perf_counter()
+    logger.info(
+        "chat_stage",
+        extra={
+            "stage": "synthesize_start",
+            "retrieval_chunk_count": len(chunks),
+        },
+    )
     synthesis = synthesize_answer(
         standalone_question,
         chunks,
@@ -462,6 +521,15 @@ def chat(
         conversation_messages=[message.model_dump() for message in request.messages]
         if request.messages
         else None,
+    )
+    logger.info(
+        "chat_stage",
+        extra={
+            "stage": "synthesize_done",
+            "duration_ms": round((time.perf_counter() - t_stage) * 1000, 2),
+            "answer_len": len(synthesis.answer or ""),
+            "used_chunk_indices_count": len(synthesis.used_chunk_indices or []),
+        },
     )
 
     refusal = "I do not have enough evidence in the provided materials."

@@ -36,7 +36,11 @@ RUN pip install -r requirements-dev.txt
 # Copy code (in dev you'll usually override this with a volume mount)
 COPY . .
 
+# Startup hook (migrations + knowledge ingest) before starting the server
+RUN chmod +x /app/entrypoint.sh
+
 EXPOSE 8000
 
 # FastAPI dev server
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]

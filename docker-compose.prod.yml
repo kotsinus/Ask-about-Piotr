@@ -46,7 +46,8 @@ services:
     expose:
       - "8000"
     depends_on:
-      - db
+      db:
+        condition: service_started
     networks:
       - web
       - internal
