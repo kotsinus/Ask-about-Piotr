@@ -412,7 +412,7 @@ def chat(
 
     refusal = "I do not have enough evidence in the provided materials."
     if synthesis.answer == refusal:
-        logger.warning(
+        logger.info(
             "chat_refusal_no_evidence",
             extra={
                 "session_id": session_id,

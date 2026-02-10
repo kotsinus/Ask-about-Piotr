@@ -5,7 +5,7 @@ Leadership, Agile Delivery, and Cross-Functional Collaboration
 experience
 
 # Problem
-Senior roles require evidence of leadership scope and delivery methods.
+What leadership responsibilities and delivery methods are documented in the CV.
 
 # My role
 R&D leader and architect managing international teams and Agile processes, while remaining hands-on in system design.
@@ -14,13 +14,13 @@ R&D leader and architect managing international teams and Agile processes, while
 Managed international R&D teams and Agile processes (Scrum/Kanban) and implemented automated CI/CD pipelines; also served as Scrum Master for a database design group at Infobright.
 
 # Scale and impact
-Leadership experience spans over 7 years, with long-term delivery across cross-functional environments.
+More than 7 years of leadership experience in cross-functional environments, supporting long-term product and platform delivery.
 
 # Tech stack
-Agile (Scrum/Kanban); Jenkins CI/CD; cross-functional collaboration; roadmap ownership.
+Agile delivery frameworks (Scrum, Kanban); CI/CD tooling (e.g., Jenkins); software architecture and system design; roadmap ownership.
 
 # Key decisions and trade-offs
-Uses Agile as a delivery tool rather than dogma; balances process with engineering pragmatism and measurable outcomes.
+N/A
 
 # Links
 - CV: assets/cv/CV_Piotr_Synak.pdf
