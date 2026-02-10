@@ -58,7 +58,7 @@ from app.observability import (
 )
 from app.privacy import anonymize_ip_prefix, extract_client_ip, hash_ip
 from app.retrieval import (
-    merge_dedup_pin_and_cap,
+    merge_dedup_and_cap,
     merge_retrieval_results_by_category,
     retrieve,
     retrieve_for_category,
@@ -921,7 +921,7 @@ def chat(
         # Single-category retrieval (legacy behavior).
         chunks = retrieve(standalone_question, conversation_topic=conversation_topic)
     else:
-        # Multi-category retrieval: per-category runs + merge/dedup/pin/cap.
+        # Multi-category retrieval: per-category runs + merge/dedup/cap.
         per_category_selected = {}
         retrieval_by_category_payload = {
             "max_total_chunks": int(getattr(settings, "multi_category_max_total_chunks", 5) or 5),
@@ -970,8 +970,8 @@ def chat(
         post_dedup_count = int(len(merged_deduped))
         dedup_collisions = max(0, pre_dedup_count - post_dedup_count)
 
-        # Merge/dedup/pin/cap. This preserves provenance fields.
-        merged_final = merge_dedup_pin_and_cap(
+        # Merge/dedup/cap. This preserves provenance fields.
+        merged_final = merge_dedup_and_cap(
             question=standalone_question,
             per_category_selected=per_category_selected,
             routed_categories=[c.category for c in (routing.categories or [])],

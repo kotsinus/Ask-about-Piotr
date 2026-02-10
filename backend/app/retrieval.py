@@ -54,6 +54,7 @@ class RetrievedChunk(BaseModel):
     adjusted_distance: float | None = None
     origin_categories: list[str] | None = None
     best_origin_category: str | None = None
+    origin_budget: int | None = None
     pinned: bool = False
 
     # Optional ingestion-time chunk index (not currently stored in DB). This is
@@ -439,8 +440,12 @@ def retrieve_for_category(
     if budget <= 0:
         return []
 
-    return _retrieve_impl(
-        question=question,
+    # Per-category query: include category focus as a lightweight, deterministic
+    # rewrite (does not affect routing; helps retrieval separation).
+    query = f"{question}\n\nFocus category: {_norm_category(category)}"
+
+    out = _retrieve_impl(
+        question=query,
         limit=budget,
         conversation_topic=conversation_topic,
         routed_category=category,
@@ -448,6 +453,10 @@ def retrieve_for_category(
         card_id_filter=must_include_cards,
         oversample_factor=oversample_factor,
     )
+
+    for c in out:
+        c.origin_budget = int(budget)
+    return out
 
 
 def merge_retrieval_results_by_category(
@@ -607,50 +616,35 @@ def _cap_and_evict_with_category_coverage(
     return kept[:max_total_chunks]
 
 
-def merge_dedup_pin_and_cap(
+def merge_dedup_and_cap(
     *,
     question: str,
     per_category_selected: dict[str, list[RetrievedChunk]],
     routed_categories: list[str] | list[Category],
     max_total_chunks: int,
     conversation_topic: str | None = None,
-    ensure_education_facts: bool | None = None,
 ) -> list[RetrievedChunk]:
-    """Merge/dedup + optional education-facts pinning + cap/eviction.
+    """Merge + dedup + cap/eviction (with multi-category coverage).
 
-    This helper is intentionally retrieval-local (no changes to chat() orchestration yet).
+    IMPORTANT: this is a general mechanism without category-specific pinning.
     """
 
     routed_str = [_norm_category(c) for c in (routed_categories or [])]
     routed_str = [c for c in routed_str if c]
-    needs_pin = bool(ensure_education_facts) or any(_is_education_category(c) for c in routed_str)
 
     merged = merge_retrieval_results_by_category(per_category_selected)
-    has_edu_facts = any(c.card_id == "education-facts" for c in merged)
-    if needs_pin and not has_edu_facts:
-        pinned = retrieve_for_category(
-            question,
-            Category.education_and_formal_background,
-            budget=1,
-            conversation_topic=conversation_topic,
-            must_include_cards=["education-facts"],
-        )
-        if pinned:
-            for c in pinned:
-                c.pinned = True
-                c.origin_categories = [Category.education_and_formal_background.value]
-                c.best_origin_category = Category.education_and_formal_background.value
-            # Insert under education category and re-merge/dedup.
-            key = Category.education_and_formal_background.value
-            existing = list(per_category_selected.get(key, []))
-            per_category_selected = dict(per_category_selected)
-            per_category_selected[key] = [*pinned, *existing]
-            merged = merge_retrieval_results_by_category(per_category_selected)
 
-    # Apply final cap with category coverage.
+    # Coverage constraint (general): if routed categories == 2 and each category
+    # had at least one selected chunk, final evidence must include >=1 from each.
+    required: list[str] | None = None
+    if len(routed_str) == 2:
+        a, b = routed_str[0], routed_str[1]
+        if len(per_category_selected.get(a, []) or []) > 0 and len(per_category_selected.get(b, []) or []) > 0:
+            required = [a, b]
+
     capped = _cap_and_evict_with_category_coverage(
         merged,
         max_total_chunks=max_total_chunks,
-        required_categories=routed_str,
+        required_categories=required,
     )
     return capped

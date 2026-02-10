@@ -163,7 +163,7 @@ def test_merge_pin_education_facts_evicts_weakest_non_pinned_under_cap(
 
     monkeypatch.setattr(retrieval, "retrieve_for_category", _stub_pin)
 
-    merged = retrieval.merge_dedup_pin_and_cap(
+    merged = retrieval.merge_dedup_and_cap(
         question="Tell me about your education and one project.",
         per_category_selected=per_category,
         routed_categories=[
@@ -174,9 +174,8 @@ def test_merge_pin_education_facts_evicts_weakest_non_pinned_under_cap(
     )
 
     card_ids = [c.card_id for c in merged]
-    # The pinned facts chunk must be present.
-    assert "education-facts" in card_ids
+    # General mechanism: no special pinning, but multi-category coverage must hold.
     # Coverage: do not evict the only chunk for a routed category (engineering).
     assert "project-onprem-rag-platform" in card_ids
-    # Evict weakest non-pinned from the over-represented category (education).
-    assert "education-overview" not in card_ids
+    # Under cap=2, still keep at least one education chunk.
+    assert "education-overview" in card_ids
