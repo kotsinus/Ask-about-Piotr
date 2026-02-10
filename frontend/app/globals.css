@@ -349,9 +349,14 @@ main {
   font: inherit;
 }
 
-button.chat-bubble {
-  appearance: none;
-  -webkit-appearance: none;
+/* Chat bubbles are intentionally non-button elements so users can select/copy text. */
+.chat-bubble[role="button"] {
+  cursor: pointer;
+}
+
+.chat-bubble[role="button"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .chat-bubble.is-clickable {

@@ -368,6 +368,75 @@ export default function HomePage() {
     setDetailsExpanded((prev) => !prev);
   }, []);
 
+  const openDetailsForIndex = useCallback((index: number) => {
+    setActiveDetailsIndex(index);
+    setDetailsExpanded(true);
+  }, []);
+
+  const activateDetailsForIndex = useCallback(
+    (index: number) => {
+      // Flip/flop: clicking the currently-selected answer toggles RHS.
+      // Clicking a different answer always opens RHS and switches selection.
+      if (index === activeDetailsIndex) {
+        setDetailsExpanded((prev) => !prev);
+        return;
+      }
+      openDetailsForIndex(index);
+    },
+    [activeDetailsIndex, openDetailsForIndex]
+  );
+
+  const bubblePointerRef = useRef<{
+    isDown: boolean;
+    didMove: boolean;
+    startX: number;
+    startY: number;
+  }>({
+    isDown: false,
+    didMove: false,
+    startX: 0,
+    startY: 0
+  });
+
+  const startBubblePointerGesture = useCallback((event: React.PointerEvent) => {
+    bubblePointerRef.current.isDown = true;
+    bubblePointerRef.current.didMove = false;
+    bubblePointerRef.current.startX = event.clientX;
+    bubblePointerRef.current.startY = event.clientY;
+  }, []);
+
+  const trackBubblePointerGesture = useCallback((event: React.PointerEvent) => {
+    const ref = bubblePointerRef.current;
+    if (!ref.isDown || ref.didMove) {
+      return;
+    }
+    const dx = event.clientX - ref.startX;
+    const dy = event.clientY - ref.startY;
+    // Treat drag as text-selection intent; avoid opening RHS panel.
+    const thresholdPx = 6;
+    if (Math.hypot(dx, dy) >= thresholdPx) {
+      ref.didMove = true;
+    }
+  }, []);
+
+  const endBubblePointerGestureAndMaybeOpen = useCallback(
+    (index: number) => {
+      const ref = bubblePointerRef.current;
+      const shouldOpen = ref.isDown && !ref.didMove;
+      ref.isDown = false;
+      ref.didMove = false;
+      if (shouldOpen) {
+        activateDetailsForIndex(index);
+      }
+    },
+    [activateDetailsForIndex]
+  );
+
+  const cancelBubblePointerGesture = useCallback(() => {
+    bubblePointerRef.current.isDown = false;
+    bubblePointerRef.current.didMove = false;
+  }, []);
+
   // Debug/diagnostics: validate RHS panel expansion toggles as expected.
   useEffect(() => {
     if (process.env.NODE_ENV === "production") {
@@ -675,18 +744,28 @@ export default function HomePage() {
 
               if (selectable) {
                 return (
-                  <button
+                  <div
                     key={`${message.role}-${index}`}
-                    type="button"
                     className={bubbleClassName}
-                    onClick={() => {
-                      setActiveDetailsIndex(index);
-                      setDetailsExpanded(true);
+                    role="button"
+                    tabIndex={0}
+                    onPointerDown={startBubblePointerGesture}
+                    onPointerMove={trackBubblePointerGesture}
+                    onPointerUp={() => {
+                      endBubblePointerGestureAndMaybeOpen(index);
+                    }}
+                    onPointerCancel={cancelBubblePointerGesture}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") {
+                        return;
+                      }
+                      event.preventDefault();
+                      activateDetailsForIndex(index);
                     }}
                     aria-current={index === activeDetailsIndex ? "true" : undefined}
                   >
                     {bubbleBody}
-                  </button>
+                  </div>
                 );
               }
 
