@@ -20,10 +20,14 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from dataclasses import dataclass
 
 from app.config import get_settings
 from app.openai_client import get_openai_client
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -63,6 +67,16 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         embeddings: list[list[float]] = []
         for batch_start in range(0, len(cleaned), 64):
             batch = cleaned[batch_start : batch_start + 64]
+            started = time.perf_counter()
             response = client.embeddings.create(model=model, input=batch)
+            logger.info(
+                "openai_call",
+                extra={
+                    "openai_op": "embeddings.create",
+                    "model": model,
+                    "batch_size": len(batch),
+                    "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                },
+            )
             embeddings.extend([item.embedding for item in response.data])
         return embeddings

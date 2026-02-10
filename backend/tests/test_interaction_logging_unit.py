@@ -44,14 +44,12 @@ def _row() -> InteractionLog:
         synthesis_model=None,
         embeddings_provider=None,
         embeddings_model=None,
-
         incoming_last_topic=None,
         resolved_topic=None,
         topic_used_for_retrieval=None,
         messages_count=None,
         retrieval_chunk_count=None,
         llm_context_messages=None,
-
         ip_prefix=None,
         ip_hash=None,
         user_agent=None,

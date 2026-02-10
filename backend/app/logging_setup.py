@@ -52,8 +52,30 @@ class JsonFormatter(logging.Formatter):
         if request_id:
             payload["request_id"] = request_id
 
-        # Optional structured fields used by request logging middleware.
-        for key in ("method", "path", "status_code", "duration_ms"):
+        # Optional structured fields.
+        for key in (
+            # Request logging middleware.
+            "method",
+            "path",
+            "status_code",
+            "duration_ms",
+            # Chat stage diagnostics.
+            "stage",
+            "messages_count",
+            "standalone_question_len",
+            "category",
+            "topic_used_for_retrieval",
+            "retrieval_chunk_count",
+            "answer_len",
+            "used_chunk_indices_count",
+            # OpenAI call diagnostics.
+            "openai_op",
+            "model",
+            "batch_size",
+            "cache_hit",
+            "cache_namespace",
+            "error",
+        ):
             value = getattr(record, key, None)
             if value is not None:
                 payload[key] = value
@@ -75,7 +97,26 @@ class KeyValueFormatter(logging.Formatter):
         if request_id:
             parts.append(f"request_id={request_id}")
 
-        for key in ("method", "path", "status_code", "duration_ms"):
+        for key in (
+            "method",
+            "path",
+            "status_code",
+            "duration_ms",
+            "stage",
+            "messages_count",
+            "standalone_question_len",
+            "category",
+            "topic_used_for_retrieval",
+            "retrieval_chunk_count",
+            "answer_len",
+            "used_chunk_indices_count",
+            "openai_op",
+            "model",
+            "batch_size",
+            "cache_hit",
+            "cache_namespace",
+            "error",
+        ):
             value = getattr(record, key, None)
             if value is not None:
                 parts.append(f"{key}={value}")

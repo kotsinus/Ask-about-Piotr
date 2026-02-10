@@ -52,4 +52,3 @@ def test_compute_knowledge_hash_changes_when_content_changes(tmp_path: Path) -> 
     h2 = _compute_knowledge_hash(root)
 
     assert h1 != h2
-

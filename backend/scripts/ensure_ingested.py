@@ -180,7 +180,12 @@ def main() -> None:
 
     _wait_for_db(database_url)
 
-    force = (os.getenv("FORCE_REINGEST") or "").strip().lower() in {"1", "true", "yes", "on"}
+    force = (os.getenv("FORCE_REINGEST") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
     count = _get_count(database_url)
 
     embeddings_provider = (os.getenv("EMBEDDINGS_PROVIDER") or "").strip() or "stub"
@@ -209,7 +214,8 @@ def main() -> None:
             and previous_state.get("knowledge_hash_sha256") == current_hash
             and previous_state.get("embeddings_provider") == embeddings_provider
             and (previous_state.get("embeddings_model") or None) == embeddings_model
-            and int(previous_state.get("embeddings_dimensions")) == embeddings_dimensions
+            and int(previous_state.get("embeddings_dimensions"))
+            == embeddings_dimensions
         )
 
         if count > 0 and state_matches and not force:
@@ -239,7 +245,10 @@ def main() -> None:
                 embeddings_dimensions=embeddings_dimensions,
             )
         except Exception as exc:
-            print(f"Warning: failed to persist knowledge_ingestion_state: {exc}", flush=True)
+            print(
+                f"Warning: failed to persist knowledge_ingestion_state: {exc}",
+                flush=True,
+            )
     finally:
         try:
             with lock_conn.cursor() as cursor:
@@ -252,4 +261,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -76,6 +76,10 @@ class Settings:
     geoip_provider: str
     geoip_url: str | None
 
+    # OpenAI SDK behavior controls (keep defaults safe for local dev).
+    openai_timeout_s: float = 60.0
+    openai_max_retries: int = 2
+
 
 @dataclass(frozen=True)
 class WebSettings:
@@ -117,6 +121,15 @@ def get_settings() -> Settings:
     embeddings_model = os.getenv("EMBEDDINGS_MODEL")
     embeddings_dimensions = int(os.getenv("EMBEDDINGS_DIMENSIONS", "1536"))
     openai_api_key = os.getenv("OPENAI_API_KEY")
+    try:
+        openai_timeout_s = float(os.getenv("OPENAI_TIMEOUT_S", "60"))
+    except Exception:
+        openai_timeout_s = 60.0
+    try:
+        openai_max_retries = int(os.getenv("OPENAI_MAX_RETRIES", "2"))
+    except Exception:
+        openai_max_retries = 2
+    openai_max_retries = max(0, openai_max_retries)
     router_model = os.getenv("ROUTER_MODEL", "gpt-4.1-mini")
     synthesis_model = os.getenv("SYNTHESIS_MODEL", "gpt-4o-mini")
     synthesis_temperature = float(os.getenv("SYNTHESIS_TEMPERATURE", "0.1"))
@@ -183,6 +196,8 @@ def get_settings() -> Settings:
         embeddings_model=embeddings_model,
         embeddings_dimensions=embeddings_dimensions,
         openai_api_key=openai_api_key,
+        openai_timeout_s=openai_timeout_s,
+        openai_max_retries=openai_max_retries,
         router_model=router_model,
         synthesis_model=synthesis_model,
         synthesis_temperature=synthesis_temperature,

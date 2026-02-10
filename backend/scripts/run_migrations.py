@@ -116,8 +116,7 @@ def _split_sql_statements(sql_text: str) -> list[str]:
                     tag = sql_text[i : j + 1]
                     # Accept $$ or $name$ style.
                     if tag == "$$" or (
-                        len(tag) >= 3
-                        and tag[1:-1].replace("_", "a").isalnum()
+                        len(tag) >= 3 and tag[1:-1].replace("_", "a").isalnum()
                     ):
                         dollar_tag = tag
                         buf.append(tag)
@@ -205,7 +204,9 @@ def run_status(database_url: str) -> None:
     _wait_for_db(database_url)
     script_dir = Path(__file__).resolve().parent
     migrations_dir = script_dir.parent / "db" / "migrations"
-    migration_files = sorted(migrations_dir.glob("*.sql")) if migrations_dir.exists() else []
+    migration_files = (
+        sorted(migrations_dir.glob("*.sql")) if migrations_dir.exists() else []
+    )
 
     with psycopg.connect(database_url) as conn:
         _ensure_schema_migrations_table(conn)
@@ -216,7 +217,9 @@ def run_status(database_url: str) -> None:
         sql_text = path.read_text(encoding="utf-8")
         checksum = _sha256_text(sql_text)
         if path.name in applied:
-            marker = "APPLIED" if applied[path.name] == checksum else "CHECKSUM_MISMATCH"
+            marker = (
+                "APPLIED" if applied[path.name] == checksum else "CHECKSUM_MISMATCH"
+            )
         else:
             marker = "PENDING"
         print(f"- {path.name}: {marker}", flush=True)
@@ -227,7 +230,9 @@ def run_up(database_url: str) -> None:
     script_dir = Path(__file__).resolve().parent
     migrations_dir = script_dir.parent / "db" / "migrations"
     if not migrations_dir.exists():
-        print(f"No migrations directory found at {migrations_dir}. Skipping.", flush=True)
+        print(
+            f"No migrations directory found at {migrations_dir}. Skipping.", flush=True
+        )
         return
 
     migration_files = sorted(migrations_dir.glob("*.sql"))
@@ -297,4 +302,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

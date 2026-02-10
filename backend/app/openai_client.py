@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from types import SimpleNamespace
 
 from openai import OpenAI
@@ -49,7 +50,19 @@ def get_openai_client() -> OpenAI:
         settings = get_settings()
         if not settings.openai_api_key:
             raise RuntimeError("OPENAI_API_KEY missing")
-        _client = OpenAI(api_key=settings.openai_api_key)
+        timeout_s = float(getattr(settings, "openai_timeout_s", 60.0) or 60.0)
+        max_retries = int(getattr(settings, "openai_max_retries", 2) or 0)
+        max_retries = max(0, max_retries)
+        try:
+            _client = OpenAI(
+                api_key=settings.openai_api_key,
+                timeout=timeout_s,
+                max_retries=max_retries,
+            )
+        except TypeError:
+            # Tests often monkeypatch OpenAI with a simplified lambda that only
+            # accepts api_key. Keep this resilient.
+            _client = OpenAI(api_key=settings.openai_api_key)
     return _client
 
 
@@ -65,7 +78,30 @@ def chat_completions_create(**kwargs):
     """Create a chat completion with no local response caching."""
 
     client = get_openai_client()
-    return client.chat.completions.create(**kwargs)
+    model = kwargs.get("model")
+    started = time.perf_counter()
+    try:
+        response = client.chat.completions.create(**kwargs)
+    except Exception as exc:
+        logger.warning(
+            "openai_call_failed",
+            extra={
+                "openai_op": "chat.completions.create",
+                "model": str(model) if model else None,
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                "error": str(exc),
+            },
+        )
+        raise
+    logger.info(
+        "openai_call",
+        extra={
+            "openai_op": "chat.completions.create",
+            "model": str(model) if model else None,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+        },
+    )
+    return response
 
 
 def chat_completions_create_cached(*, cache_namespace: str, **kwargs):
@@ -98,6 +134,15 @@ def chat_completions_create_cached(*, cache_namespace: str, **kwargs):
 
     cached = _CHAT_COMPLETION_CACHE.get(key)
     if cached is not None:
+        logger.info(
+            "openai_cache_hit",
+            extra={
+                "openai_op": "chat.completions.create",
+                "model": str(kwargs.get("model")) if kwargs.get("model") else None,
+                "cache_hit": True,
+                "cache_namespace": cache_namespace,
+            },
+        )
         return _fake_chat_response(content=cached)
 
     response = chat_completions_create(**kwargs)
