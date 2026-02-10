@@ -164,12 +164,61 @@ def _derive_used_categories(
     return cats
 
 
+def _is_yes_no_question(question: str) -> bool:
+    q = " ".join((question or "").strip().split()).lower()
+    if not q:
+        return False
+    # Heuristic: starts with an auxiliary/modal. Ending with '?' is a weak signal,
+    # so we only use it when the start token looks yes/no-like.
+    starters = (
+        "is ",
+        "are ",
+        "am ",
+        "do ",
+        "does ",
+        "did ",
+        "can ",
+        "could ",
+        "would ",
+        "should ",
+        "has ",
+        "have ",
+        "had ",
+        "will ",
+        "won't ",
+        "isn't ",
+        "aren't ",
+        "doesn't ",
+        "don't ",
+        "didn't ",
+        "can't ",
+        "couldn't ",
+        "wouldn't ",
+        "shouldn't ",
+        "hasn't ",
+        "haven't ",
+        "hadn't ",
+    )
+    if any(q.startswith(s) for s in starters):
+        return True
+    return False
+
+
+def _answer_starts_with_yes_no(answer: str) -> bool:
+    first = (answer or "").lstrip()
+    if not first.startswith("-"):
+        return False
+    # First bullet begins with Yes/No.
+    return bool(re.match(r"^[-–—]\s*(yes|no)\b", first, flags=re.IGNORECASE))
+
+
 def _quality_gate_validate(
     *,
     synthesis,
     chunks,
     routed_categories: list[Category],
     per_category_provided_counts: dict[str, int],
+    is_yes_no_question: bool,
 ) -> tuple[bool, list[str]]:
     reasons: list[str] = []
     answer = str(getattr(synthesis, "answer", "") or "")
@@ -187,6 +236,12 @@ def _quality_gate_validate(
 
         if is_laconic_answer(answer, refusal=refusal):
             reasons.append("laconic_answer")
+
+        # Yes/No prefix correctness: if the question is NOT yes/no, the answer
+        # must not start with a Yes/No bullet.
+        if not bool(is_yes_no_question):
+            if _answer_starts_with_yes_no(answer):
+                reasons.append("unexpected_yes_no_prefix")
 
         # Category coverage: if exactly 2 routed cats and both had evidence provided,
         # require that used indices cover both.
@@ -815,6 +870,7 @@ def chat(
     )
     t_stage = time.perf_counter()
     multi_enabled = _is_multi_category_enabled(settings=settings, request_id=request_id)
+    is_yes_no = _is_yes_no_question(standalone_question)
     router_fallback_used = False
     if not multi_enabled:
         logger.info(
@@ -888,23 +944,24 @@ def chat(
             },
         )
 
-        # Structured routing event (multi-category mode only).
-        logger.info(
-            "chat_routing",
-            extra={
-                "categories": [
-                    {
-                        "category": str(c.category),
-                        "confidence": str(c.confidence),
-                        "budget": int(c.budget),
-                    }
-                    for c in (routing.categories or [])
-                ],
-                "max_categories": int(max_categories),
-                "max_total_chunks": int(max_total),
-                "router_fallback_used": bool(router_fallback_used),
-            },
-        )
+    # Structured routing event (always before retrieval).
+    logger.info(
+        "chat_routing",
+        extra={
+            "categories": [
+                {
+                    "category": str(c.category),
+                    "confidence": str(c.confidence),
+                    "budget": int(c.budget),
+                }
+                for c in (routing.categories or [])
+            ],
+            "max_categories": int(getattr(settings, "multi_category_max_categories", 2) or 2),
+            "max_total_chunks": int(getattr(settings, "multi_category_max_total_chunks", 5) or 5),
+            "router_fallback_used": bool(router_fallback_used),
+            "multi_enabled": bool(multi_enabled),
+        },
+    )
 
     t_stage = time.perf_counter()
     logger.info(
@@ -940,6 +997,7 @@ def chat(
                 conversation_topic=conversation_topic,
             )
             # Note: retrieve_for_category already applies per-card cap and section weighting.
+            # Invariant: per_category_selected keys are canonical category strings.
             per_category_selected[str(cat.value)] = list(selected)
 
             logger.info(
@@ -971,6 +1029,14 @@ def chat(
         dedup_collisions = max(0, pre_dedup_count - post_dedup_count)
 
         # Merge/dedup/cap. This preserves provenance fields.
+        routed_str = [str(c.category.value) for c in (routing.categories or [])]
+        required_categories = None
+        if len(routed_str) == 2:
+            a, b = routed_str[0], routed_str[1]
+            if len(per_category_selected.get(a, []) or []) > 0 and len(per_category_selected.get(b, []) or []) > 0:
+                if max_total_chunks >= 2:
+                    required_categories = [a, b]
+
         merged_final = merge_dedup_and_cap(
             question=standalone_question,
             per_category_selected=per_category_selected,
@@ -981,6 +1047,15 @@ def chat(
         chunks = list(merged_final)
         pinned_cards = sorted({str(c.card_id) for c in chunks if bool(getattr(c, "pinned", False))})
 
+        # Observability: coverage satisfaction + meta-ish chunks.
+        coverage_satisfied = True
+        if required_categories:
+            present = {str(getattr(c, "best_origin_category", "") or "") for c in chunks}
+            coverage_satisfied = all(c in present for c in required_categories)
+        from app.retrieval import _is_metaish_content as _metaish
+
+        meta_chunk_count = sum(1 for c in chunks if _metaish(str(getattr(c, "content", "") or "")))
+
         logger.info(
             "chat_retrieve_merge",
             extra={
@@ -989,6 +1064,9 @@ def chat(
                 "dedup_collisions": int(dedup_collisions),
                 "pinned_cards": list(pinned_cards),
                 "final_chunk_count": int(len(chunks)),
+                "required_categories": list(required_categories or []),
+                "coverage_satisfied": bool(coverage_satisfied),
+                "meta_chunk_count": int(meta_chunk_count),
             },
         )
     logger.info(
@@ -1025,12 +1103,14 @@ def chat(
         conversation_messages=[message.model_dump() for message in request.messages]
         if request.messages
         else None,
+        is_yes_no_question=is_yes_no,
     )
     passed, failure_reasons = _quality_gate_validate(
         synthesis=synthesis,
         chunks=chunks,
         routed_categories=routed_categories,
         per_category_provided_counts=per_category_provided_counts,
+        is_yes_no_question=is_yes_no,
     )
 
     retry_attempted = False
@@ -1046,12 +1126,14 @@ def chat(
             else None,
             temperature=0,
             strict=True,
+            is_yes_no_question=is_yes_no,
         )
         passed2, failure_reasons2 = _quality_gate_validate(
             synthesis=synthesis_retry,
             chunks=chunks,
             routed_categories=routed_categories,
             per_category_provided_counts=per_category_provided_counts,
+            is_yes_no_question=is_yes_no,
         )
         if passed2:
             synthesis = synthesis_retry

@@ -207,3 +207,58 @@ async def test_category_coverage_gate_enforced_when_two_categories_have_evidence
         payload = resp.json()
         assert calls["n"] == 2
         assert len(payload["evidence"]) == 2
+
+
+@pytest.mark.anyio
+async def test_non_yesno_question_starting_with_yes_triggers_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+
+        def _stub_retrieve(
+            question: str, limit: int = 25, conversation_topic: str | None = None
+        ) -> list[RetrievedChunk]:
+            return [
+                RetrievedChunk(
+                    card_id="c1",
+                    category="skills",
+                    section="Overview",
+                    source_url=None,
+                    content="Piotr programs in Python.",
+                    best_origin_category="Hands-on engineering",
+                )
+            ]
+
+        monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
+
+        calls: dict[str, int] = {"n": 0}
+
+        class _Bad:
+            answer = "- Yes: definitely.\n- Another bullet.\n\nSynthesis."
+            why_this_matters = "x"
+            confidence = Confidence.medium
+            confidence_reason = None
+            used_chunk_indices = [0]
+
+        class _Ok:
+            answer = "- Python: I program in Python.\n- Grounded fact.\n\nShort synthesis."
+            why_this_matters = "x"
+            confidence = Confidence.medium
+            confidence_reason = None
+            used_chunk_indices = [0]
+
+        def _stub_synthesize_answer(*args, **kwargs):
+            calls["n"] += 1
+            return _Bad() if calls["n"] == 1 else _Ok()
+
+        monkeypatch.setattr("app.main.synthesize_answer", _stub_synthesize_answer)
+
+        resp = await client.post(
+            "/chat",
+            json={"question": "What is your primary programming language?"},
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert calls["n"] == 2
+        assert not payload["answer"].lstrip().lower().startswith("- yes")

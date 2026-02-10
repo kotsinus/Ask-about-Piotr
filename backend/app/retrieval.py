@@ -78,6 +78,79 @@ def _is_education_category(category: str | Category | None) -> bool:
     return _norm_category(category).strip().lower() == Category.education_and_formal_background.value.lower()
 
 
+def _oversample_factor_for_category(
+    *, settings, routed_category: str | Category | None
+) -> int:
+    """General oversampling policy: category -> oversample factor.
+
+    No special-cases. Categories are keyed by their canonical string.
+    """
+
+    default = int(getattr(settings, "multi_category_oversample_default", 8) or 8)
+    default = max(1, default)
+    cat = _norm_category(routed_category)
+    mapping = getattr(settings, "multi_category_oversample_by_category", None) or {}
+    try:
+        if cat and cat in mapping:
+            return max(1, int(mapping.get(cat)))
+    except Exception:
+        return default
+    return default
+
+
+def _is_metaish_content(content: str) -> bool:
+    text = (content or "").strip().lower()
+    if not text:
+        return False
+    patterns = (
+        "single source of truth",
+        "should be answered",
+        "this assistant",
+        "system prompt",
+        "anti-hallucination",
+        "must ",
+        "never ",
+        "evidence:",
+        "sources:",
+        "confidence:",
+        "return json",
+        "do not",
+        "grounding rules",
+        "style rules",
+        "strict compliance",
+    )
+    return any(p in text for p in patterns)
+
+
+def _metaish_penalty(content: str) -> float:
+    """Soft penalty to reduce 'policy leakage' chunks being selected as evidence."""
+
+    text = (content or "").strip().lower()
+    if not text:
+        return 0.0
+    # Lightweight scoring: more matches => bigger penalty (capped).
+    signals = (
+        "single source of truth",
+        "return json",
+        "system prompt",
+        "grounding rules",
+        "style rules",
+        "strict compliance",
+        "evidence:",
+        "sources:",
+        "confidence:",
+        "anti-hallucination",
+        "this assistant",
+        "must ",
+        "never ",
+    )
+    hits = sum(1 for s in signals if s in text)
+    if hits <= 0:
+        return 0.0
+    # 1 hit -> 0.06, 2 -> 0.10, 3+ -> 0.14
+    return min(0.14, 0.04 + 0.02 * hits)
+
+
 def _normalize_content_for_hash(content: str) -> str:
     # Normalize whitespace so formatting-only differences do not break dedup.
     return " ".join((content or "").strip().split())
@@ -178,16 +251,18 @@ def _retrieve_impl(
     embedding_vector = [float(value) for value in embedding]
     embedding_param = Vector(embedding_vector)
 
-    # Candidate oversampling:
+    # Candidate oversampling policy:
     # - Legacy single-category path uses limit*8.
-    # - Per-category path uses budget*oversample_factor (default depends on category).
+    # - Per-category path uses a configured category->oversample mapping.
     if oversample_factor is None:
         if routed_category is None and not card_id_filter:
             candidate_limit = max(limit * 8, 30)
         else:
-            # Defaults tuned for multi-category (tie-breaker only; does not override similarity).
-            default = 10 if _is_education_category(routed_category) else 7
-            candidate_limit = max(limit * default, 30)
+            factor = _oversample_factor_for_category(
+                settings=settings,
+                routed_category=routed_category,
+            )
+            candidate_limit = max(limit * int(factor), 30)
     else:
         candidate_limit = max(limit * int(oversample_factor), 30)
 
@@ -320,6 +395,7 @@ def _retrieve_impl(
 
         penalty = section_penalty.get(section, 0.0)
         penalty += section_bonus.get(section, 0.0)
+        penalty += _metaish_penalty(str(row[5] or ""))
         if section not in low_signal_sections:
             if (
                 card_max_substantive_len.get(card_id, 0) >= long_section_len

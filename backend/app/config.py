@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 
@@ -40,6 +41,19 @@ def _parse_csv(value: str | None) -> list[str]:
         return []
     parts = [item.strip() for item in value.split(",")]
     return [item for item in parts if item]
+
+
+def _parse_json_object(value: str | None) -> dict:
+    if not value:
+        return {}
+    lowered = value.strip().lower()
+    if lowered in {"", "none", "null", "off", "false"}:
+        return {}
+    try:
+        payload = json.loads(value)
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 @dataclass(frozen=True)
@@ -85,6 +99,12 @@ class Settings:
     multi_category_allow_six_chunks: bool = False
     multi_category_intent_budget_policy: str = "intent_rules_v1"
     multi_category_rollout_percent: int = 0
+
+    # Retrieval oversampling policy (general mechanism):
+    # - default used for per-category retrieval when caller does not override.
+    # - optional per-category overrides by canonical category string.
+    multi_category_oversample_default: int = 8
+    multi_category_oversample_by_category: dict[str, int] | None = None
 
     # OpenAI SDK behavior controls (keep defaults safe for local dev).
     openai_timeout_s: float = 60.0
@@ -207,6 +227,31 @@ def get_settings() -> Settings:
         multi_category_rollout_percent = 0
     multi_category_rollout_percent = max(0, min(100, multi_category_rollout_percent))
 
+    # Retrieval oversampling policy (general mechanism).
+    try:
+        multi_category_oversample_default = int(
+            os.getenv("MULTI_CATEGORY_OVERSAMPLE_DEFAULT", "8")
+        )
+    except Exception:
+        multi_category_oversample_default = 8
+    multi_category_oversample_default = max(1, multi_category_oversample_default)
+
+    raw_oversample_by_category = _parse_json_object(
+        os.getenv("MULTI_CATEGORY_OVERSAMPLE_BY_CATEGORY")
+    )
+    multi_category_oversample_by_category: dict[str, int] | None = None
+    if raw_oversample_by_category:
+        parsed: dict[str, int] = {}
+        for k, v in raw_oversample_by_category.items():
+            key = str(k).strip()
+            if not key:
+                continue
+            try:
+                parsed[key] = max(1, int(v))
+            except Exception:
+                continue
+        multi_category_oversample_by_category = parsed or None
+
     # Logging metadata
     ip_hash_salt = os.getenv("IP_HASH_SALT", "")
     if app_env in {"prod", "production"} and not ip_hash_salt.strip():
@@ -260,6 +305,8 @@ def get_settings() -> Settings:
         multi_category_allow_six_chunks=multi_category_allow_six_chunks,
         multi_category_intent_budget_policy=multi_category_intent_budget_policy,
         multi_category_rollout_percent=multi_category_rollout_percent,
+        multi_category_oversample_default=multi_category_oversample_default,
+        multi_category_oversample_by_category=multi_category_oversample_by_category,
         ip_hash_salt=ip_hash_salt,
         trusted_proxy_cidrs=trusted_proxy_cidrs,
         interaction_log_include_llm_context=interaction_log_include_llm_context,

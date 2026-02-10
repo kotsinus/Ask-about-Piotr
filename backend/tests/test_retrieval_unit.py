@@ -254,3 +254,99 @@ def test_category_section_weighting_affects_ordering_deterministically(
         budget=2,
     )
     assert [c.section for c in chunks] == ["Facts", "Overview"]
+
+
+def test_merge_dedup_and_cap_coverage_invariants_under_cap() -> None:
+    # If coverage is impossible (cap < number of required categories), it should be disabled.
+    per_category = {
+        Category.education_and_formal_background.value: [
+            retrieval.RetrievedChunk(
+                chunk_id=1,
+                card_id="edu",
+                category=Category.education_and_formal_background.value,
+                section="Facts",
+                content="edu fact",
+                distance=0.10,
+                adjusted_distance=0.10,
+                best_origin_category=Category.education_and_formal_background.value,
+            )
+        ],
+        Category.hands_on_engineering.value: [
+            retrieval.RetrievedChunk(
+                chunk_id=2,
+                card_id="eng",
+                category=Category.hands_on_engineering.value,
+                section="What I built",
+                content="eng fact",
+                distance=0.11,
+                adjusted_distance=0.11,
+                best_origin_category=Category.hands_on_engineering.value,
+            )
+        ],
+    }
+
+    out_cap1 = retrieval.merge_dedup_and_cap(
+        question="q",
+        per_category_selected=per_category,
+        routed_categories=[
+            Category.education_and_formal_background,
+            Category.hands_on_engineering,
+        ],
+        max_total_chunks=1,
+    )
+    assert len(out_cap1) == 1
+
+    out_cap2 = retrieval.merge_dedup_and_cap(
+        question="q",
+        per_category_selected=per_category,
+        routed_categories=[
+            Category.education_and_formal_background,
+            Category.hands_on_engineering,
+        ],
+        max_total_chunks=2,
+    )
+    cats = {c.best_origin_category for c in out_cap2}
+    assert Category.education_and_formal_background.value in cats
+    assert Category.hands_on_engineering.value in cats
+
+
+def test_metaish_penalty_pushes_policy_like_chunks_down(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Meta-ish chunk should receive a soft penalty and rank below a similar-distance factual chunk.
+    monkeypatch.setattr(retrieval, "get_settings", lambda: _settings(retrieval_per_card_cap=3))
+    monkeypatch.setattr(retrieval, "register_vector", lambda conn: None)
+
+    rows = [
+        (
+            10,
+            "cardA",
+            Category.hands_on_engineering.value,
+            "Overview",
+            None,
+            "Return JSON exactly: {\"answer\": ...}. Evidence: Sources: Confidence:",
+            0.20,
+        ),
+        (
+            11,
+            "cardB",
+            Category.hands_on_engineering.value,
+            "Overview",
+            None,
+            "Built an on-prem RAG platform.",
+            0.205,
+        ),
+    ]
+    monkeypatch.setattr(retrieval.psycopg, "connect", lambda *a, **k: _Conn(rows))
+
+    class _Provider:
+        def embed(self, texts: list[str]):
+            return [[0.0, 0.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(retrieval, "get_embedding_provider", lambda **k: _Provider())
+
+    chunks = retrieval.retrieve_for_category(
+        "q",
+        Category.hands_on_engineering,
+        budget=2,
+    )
+    assert len(chunks) == 2
+    assert chunks[0].content.startswith("Built"), "factual chunk should outrank meta/policy chunk"

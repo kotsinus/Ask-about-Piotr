@@ -226,6 +226,7 @@ def synthesize_answer(
     *,
     temperature: float | None = None,
     strict: bool = False,
+    is_yes_no_question: bool | None = None,
 ) -> SynthesisResult:
     """Generate a strict, grounded answer from retrieved chunks."""
 
@@ -317,6 +318,8 @@ def synthesize_answer(
     if hint_block:
         hint_block += "\n"
 
+    yn = bool(is_yes_no_question)
+
     system_prompt = (
         "You are Piotr Synak. Answer in first person (I, my) as if speaking to a technical peer. "
         "Do not mention that you are an AI, a model, or that you were prompted.\n\n"
@@ -335,9 +338,9 @@ def synthesize_answer(
         "- Avoid meta-commentary such as: 'This highlights', 'This demonstrates', 'Understanding X is crucial', 'It is important to note'.\n"
         "- Do not restate the question. Do not introduce yourself.\n\n"
         "You may adapt depth to the style hint, but never change grounding rules.\n\n"
-        "Yes/No questions:\n"
-        "- The FIRST bullet must begin with 'Yes' or 'No'.\n"
-        "- Then provide the remaining fact bullets and the synthesis.\n\n"
+        "Yes/No prefix rule:\n"
+        "- If (and only if) the question is a yes/no question, the FIRST bullet must begin with 'Yes' or 'No'.\n"
+        "- If the question is NOT a yes/no question, do NOT start the answer with 'Yes' or 'No'.\n\n"
         "Length constraints:\n"
         "- The 'answer' field should be between 25 and 120 words unless the refusal message is used.\n\n"
         "Return JSON with the following fields only:\n"
@@ -349,6 +352,9 @@ def synthesize_answer(
         "The refusal message is exactly:\n"
         f'"{REFUSAL_MESSAGE}"'
     )
+
+    # Deterministic binding: keep the yes/no classification stable across retries.
+    system_prompt += f"\n\nQuestion yes/no classification (server): {'YES' if yn else 'NO'}\n"
 
     # Bind category hints at system level to reduce model guessing/drift.
     if style_hint:
