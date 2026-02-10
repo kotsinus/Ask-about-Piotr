@@ -50,3 +50,20 @@ This is an explicit reliability decision.
 
 References: [`backend/app/main.py`](backend/app/main.py:73), [`backend/app/interaction_logging.py`](backend/app/interaction_logging.py:61).
 
+## 7) Multi-category routing budgets are clamped server-side and versioned
+
+When multi-category mode is enabled, routing produces 1+ categories with per-category chunk budgets.
+
+Policy:
+
+- Max routed categories is clamped by `Settings.multi_category_max_categories` (default 2; allow 3 only when explicitly enabled).
+- Total chunk budget is clamped by `Settings.multi_category_max_total_chunks` (default 5). A 6-chunk ceiling is permitted only under an explicit config gate (`multi_category_allow_six_chunks`) for the 3-intent case.
+- Budget allocation is **server-side deterministic and versioned** via `Settings.multi_category_intent_budget_policy` (current: `intent_rules_v1`). If the router provides unusable budgets, the server applies the configured policy.
+
+Rationale:
+
+- Stable, versioned policy makes production behavior reproducible across releases.
+- Server-side clamps prevent LLM output from increasing cost or degrading answer precision.
+
+References: [`backend/app/main.py`](backend/app/main.py:511), [`plans/multi-category-routing-retrieval-implementation-plan.md`](plans/multi-category-routing-retrieval-implementation-plan.md:21).
+

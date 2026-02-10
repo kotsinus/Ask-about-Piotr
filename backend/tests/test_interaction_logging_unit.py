@@ -54,7 +54,36 @@ def _row() -> InteractionLog:
         ip_hash=None,
         user_agent=None,
         country=None,
+        routing={"categories": [{"category": "education", "budget": 2}]},
+        retrieval_by_category={"categories": [{"category": "education", "budget": 2, "selected_count": 2}]},
+        quality_gate={"passed": True, "failure_reasons": []},
     )
+
+
+def test_write_interaction_log_populates_new_json_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    class _Session:
+        def add(self, obj) -> None:
+            captured["obj"] = obj
+
+    class _Scope:
+        def __enter__(self):
+            return _Session()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(il, "session_scope", lambda: _Scope())
+
+    il._write_interaction_log_once(_row())
+
+    obj = captured["obj"]
+    assert getattr(obj, "routing") == {"categories": [{"category": "education", "budget": 2}]}
+    assert getattr(obj, "retrieval_by_category") == {
+        "categories": [{"category": "education", "budget": 2, "selected_count": 2}]
+    }
+    assert getattr(obj, "quality_gate") == {"passed": True, "failure_reasons": []}
 
 
 def _undefined_table_exc() -> ProgrammingError:

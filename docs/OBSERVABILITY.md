@@ -38,6 +38,52 @@ Per-request fields:
 
 Code reference: [`backend/app/logging_setup.py`](backend/app/logging_setup.py:98).
 
+## Chat routing + retrieval events (multi-category mode)
+
+These events are emitted **only when** multi-category mode is enabled (feature flag + rollout sampling). Existing `chat_stage` events remain unchanged.
+
+### `chat_routing`
+
+Emitted after server-side clamping/normalization of router output.
+
+Fields:
+
+- `categories`: list of `{category, confidence, budget}` (budgets embedded per category)
+- `max_categories`: server config clamp
+- `max_total_chunks`: server config clamp
+- `router_fallback_used`: boolean; true when the router failed and server fell back to a deterministic classifier
+
+Code reference: [`backend/app/main.py`](backend/app/main.py:838).
+
+### `chat_retrieve_category`
+
+Emitted once per routed category during per-category retrieval.
+
+Fields:
+
+- `category`
+- `budget`
+- `retrieved_count_raw` (currently equals `selected_count` because retrieval returns the post-processed list)
+- `selected_count`
+- `per_card_cap` (from settings)
+- `section_weighting_enabled` (boolean)
+
+Code reference: [`backend/app/main.py`](backend/app/main.py:889).
+
+### `chat_retrieve_merge`
+
+Emitted after merge/dedup + optional pinning + final cap.
+
+Fields:
+
+- `pre_dedup_count`
+- `post_dedup_count`
+- `dedup_collisions` (= `pre_dedup_count - post_dedup_count`)
+- `pinned_cards`: list of card ids pinned into the final evidence set
+- `final_chunk_count`
+
+Code reference: [`backend/app/main.py`](backend/app/main.py:913).
+
 ## What is logged vs. intentionally not logged
 
 Logged (high level):

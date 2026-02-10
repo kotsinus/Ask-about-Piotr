@@ -22,6 +22,8 @@ import httpx
 import pytest
 
 from app.main import app
+from app import retrieval
+from app.schemas import Category
 
 
 @pytest.mark.anyio
@@ -46,16 +48,18 @@ async def test_education_query_returns_sources_and_evidence_with_fallback(
     # filtered out by the strict cutoffs above.
     rows = [
         (
+            101,
             "education-overview",
-            "education",
+            Category.education_and_formal_background.value,
             "Overview",
             None,
             "Piotr's education includes formal study and continued learning.",
             0.45,
         ),
         (
+            102,
             "education-facts",
-            "education",
+            Category.education_and_formal_background.value,
             "Facts",
             None,
             "Selected education facts are captured as structured notes.",
@@ -109,3 +113,70 @@ async def test_education_query_returns_sources_and_evidence_with_fallback(
 
         assert any(card_id.startswith("education-") for card_id in source_card_ids)
         assert any(card_id.startswith("education-") for card_id in evidence_card_ids)
+
+
+def test_merge_pin_education_facts_evicts_weakest_non_pinned_under_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # No changes to main orchestration yet; test pinning at retrieval-utility level.
+    per_category = {
+        Category.education_and_formal_background.value: [
+            retrieval.RetrievedChunk(
+                chunk_id=1,
+                card_id="education-overview",
+                category=Category.education_and_formal_background.value,
+                section="Overview",
+                content="edu overview",
+                distance=0.10,
+                adjusted_distance=0.10,
+                best_origin_category=Category.education_and_formal_background.value,
+                origin_categories=[Category.education_and_formal_background.value],
+            )
+        ],
+        Category.hands_on_engineering.value: [
+            retrieval.RetrievedChunk(
+                chunk_id=2,
+                card_id="project-onprem-rag-platform",
+                category=Category.hands_on_engineering.value,
+                section="What I built",
+                content="eng chunk",
+                distance=0.11,
+                adjusted_distance=0.11,
+                best_origin_category=Category.hands_on_engineering.value,
+                origin_categories=[Category.hands_on_engineering.value],
+            )
+        ],
+    }
+
+    def _stub_pin(*args, **kwargs):
+        return [
+            retrieval.RetrievedChunk(
+                chunk_id=3,
+                card_id="education-facts",
+                category=Category.education_and_formal_background.value,
+                section="Facts",
+                content="edu facts",
+                distance=0.12,
+                adjusted_distance=0.12,
+            )
+        ]
+
+    monkeypatch.setattr(retrieval, "retrieve_for_category", _stub_pin)
+
+    merged = retrieval.merge_dedup_pin_and_cap(
+        question="Tell me about your education and one project.",
+        per_category_selected=per_category,
+        routed_categories=[
+            Category.education_and_formal_background,
+            Category.hands_on_engineering,
+        ],
+        max_total_chunks=2,
+    )
+
+    card_ids = [c.card_id for c in merged]
+    # The pinned facts chunk must be present.
+    assert "education-facts" in card_ids
+    # Coverage: do not evict the only chunk for a routed category (engineering).
+    assert "project-onprem-rag-platform" in card_ids
+    # Evict weakest non-pinned from the over-represented category (education).
+    assert "education-overview" not in card_ids

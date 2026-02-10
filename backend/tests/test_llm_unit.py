@@ -283,3 +283,25 @@ def test_parse_category_debug_branch_and_generic_fallbacks(
     }
     assert llm._fallback_why(category=None, seed="s") in generic
     assert llm.clean_why("It demonstrates.", category="Unknown") in generic
+
+
+def test_route_categories_parses_and_normalizes_unknown_category_string(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Unknown/free-form category should normalize via _parse_category() (default -> hands-on).
+    payload = {
+        "categories": [
+            {"category": "???", "confidence": "High", "budget": 2},
+        ]
+    }
+    monkeypatch.setattr(llm, "get_settings", lambda: _settings())
+    monkeypatch.setattr("app.openai_client.get_settings", lambda: _settings())
+    monkeypatch.setattr("app.openai_client._client", None)
+    monkeypatch.setattr(
+        "app.openai_client.OpenAI",
+        lambda api_key: _FakeOpenAI(content=json.dumps(payload)),
+    )
+
+    result = llm.route_categories("q")
+    assert result.categories
+    assert result.categories[0].category == Category.hands_on_engineering

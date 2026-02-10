@@ -73,6 +73,11 @@ class InteractionLogModel(Base):
         JSONB, nullable=True
     )
 
+    # Optional JSON context fields (multi-category rollout observability).
+    routing: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    retrieval_by_category: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    quality_gate: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     ip_prefix: Mapped[str | None] = mapped_column(Text, nullable=True)
     ip_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)

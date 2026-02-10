@@ -102,51 +102,53 @@ Mermaid diagrams below are intentionally “C4-style” (Context/Container/Compo
 ### C4 Context
 
 ```mermaid
-C4Context
-title Ask-about-Piotr - System Context
+flowchart LR
+  %% Note: GitHub Mermaid does not support Mermaid C4 macros like C4Context.
+  %% This is a C4-style diagram expressed as a standard flowchart for portability.
 
-Person(user, User, Asks questions about Piotr)
+  user[User\nAsks questions about Piotr]
 
-System_Boundary(s1, Ask-about-Piotr) {
-  System(web, Web UI, Next.js app)
-  System(api, RAG API, FastAPI service)
-  SystemDb(db, Knowledge and logs store, Postgres with pgvector)
-}
+  subgraph s1[Ask-about-Piotr]
+    web[Web UI\nNext.js app]
+    api[RAG API\nFastAPI service]
+    db[(Knowledge and logs store\nPostgres with pgvector)]
+  end
 
-System_Ext(llm, LLM and embeddings provider, Pluggable provider with OpenAI implementation)
-System_Ext(geoip, GeoIP provider, Optional external lookup)
+  llm[LLM and embeddings provider\nPluggable provider with OpenAI implementation]
+  geoip[GeoIP provider\nOptional external lookup]
 
-Rel(user, web, Uses browser)
-Rel(web, api, HTTPS REST, POST chat)
-Rel(api, db, SQL, retrieval and logging)
-Rel(api, llm, HTTPS API, embeddings and chat completions)
-Rel(api, geoip, HTTPS API, country lookup when enabled)
+  user -->|Uses browser| web
+  web -->|HTTPS REST\nPOST /chat| api
+  api -->|SQL\nretrieval and logging| db
+  api -->|HTTPS API\nembeddings and chat completions| llm
+  api -->|HTTPS API\ncountry lookup when enabled| geoip
 ```
 
 ### C4 Container
 
 ```mermaid
-C4Container
-title Ask-about-Piotr - Containers
+flowchart LR
+  %% Note: GitHub Mermaid does not support Mermaid C4 macros like C4Container.
+  %% This is a C4-style diagram expressed as a standard flowchart for portability.
 
-Person(user, User, Browser client)
+  user[User\nBrowser client]
 
-System_Boundary(s1, Ask-about-Piotr) {
-  Container(frontend, Frontend, Next.js 16, Renders chat UI and calls backend)
-  Container(backend, Backend API, FastAPI on Uvicorn, Orchestrates rewrite routing retrieval synthesis formatting logging)
-  ContainerDb(postgres, Database, Postgres 18 with pgvector, Stores knowledge_chunks and interaction_logs)
-  Container(knowledge, Knowledge base, Markdown files on disk, Source of truth ingested into pgvector)
-}
+  subgraph s1[Ask-about-Piotr]
+    frontend[Frontend\nNext.js 16\nRenders chat UI and calls backend]
+    backend[Backend API\nFastAPI on Uvicorn\nOrchestrates rewrite routing retrieval synthesis formatting logging]
+    postgres[(Database\nPostgres 18 with pgvector\nStores knowledge_chunks and interaction_logs)]
+    knowledge[Knowledge base\nMarkdown files on disk\nSource of truth ingested into pgvector]
+  end
 
-System_Ext(provider, External model provider, OpenAI implementation in repo, Pluggable design target)
-System_Ext(geoip, GeoIP provider, Optional)
+  provider[External model provider\nOpenAI implementation in repo\nPluggable design target]
+  geoip[GeoIP provider\nOptional]
 
-Rel(user, frontend, Uses)
-Rel(frontend, backend, HTTP, POST /chat with cookie session)
-Rel(backend, postgres, SQL, similarity search and best effort logging)
-Rel(backend, provider, HTTPS, embeddings and chat completions)
-Rel(backend, geoip, HTTPS, country lookup)
-Rel(knowledge, backend, Volume mount or local filesystem, read only for runtime)
+  user -->|Uses| frontend
+  frontend -->|HTTP\nPOST /chat with cookie session| backend
+  backend -->|SQL\nsimilarity search and best effort logging| postgres
+  backend -->|HTTPS\nembeddings and chat completions| provider
+  backend -->|HTTPS\ncountry lookup| geoip
+  knowledge -->|Volume mount or local filesystem\nread only for runtime| backend
 ```
 
 ### C4 Component — backend
@@ -154,30 +156,31 @@ Rel(knowledge, backend, Volume mount or local filesystem, read only for runtime)
 This view maps to the backend modules under [`backend/app/__init__.py`](backend/app/__init__.py:1).
 
 ```mermaid
-C4Component
-title Ask-about-Piotr - Backend Components
+flowchart LR
+  %% Note: GitHub Mermaid does not support Mermaid C4 macros like C4Component.
+  %% This is a C4-style diagram expressed as a standard flowchart for portability.
 
-Container_Boundary(api, Backend FastAPI app) {
-  Component(entry, API endpoints and middleware, FastAPI, Routes /healthz and /chat and request middleware)
-  Component(cfg, Runtime configuration, Python module, Reads env vars and enforces required settings)
-  Component(priv, Privacy helpers, Python module, Extracts client IP with trusted proxy model and anonymizes)
-  Component(obs, Request ID context, Python module, Contextvar based request id propagation)
-  Component(logs, Interaction logging, Python module, Best effort write to Postgres via SQLAlchemy)
-  Component(retr, Retrieval, Python module, pgvector similarity search using psycopg)
-  Component(embed, Embeddings provider, Python module, Provider interface with OpenAI implementation)
-  Component(synth, Synthesis and routing, Python module, Category routing and grounded answer synthesis)
-  Component(geo, GeoIP lookup, Python module, Optional country lookup)
-}
+  subgraph api[Backend FastAPI app]
+    entry[API endpoints and middleware\nFastAPI\nRoutes /healthz and /chat and request middleware]
+    cfg[Runtime configuration\nPython module\nReads env vars and enforces required settings]
+    priv[Privacy helpers\nPython module\nExtracts client IP with trusted proxy model and anonymizes]
+    obs[Request ID context\nPython module\nContextvar based request id propagation]
+    logs[Interaction logging\nPython module\nBest effort write to Postgres via SQLAlchemy]
+    retr[Retrieval\nPython module\npgvector similarity search using psycopg]
+    embed[Embeddings provider\nPython module\nProvider interface with OpenAI implementation]
+    synth[Synthesis and routing\nPython module\nCategory routing and grounded answer synthesis]
+    geo[GeoIP lookup\nPython module\nOptional country lookup]
+  end
 
-Rel(entry, cfg, Reads settings)
-Rel(entry, obs, Sets and propagates request id)
-Rel(entry, priv, Extracts and anonymizes metadata)
-Rel(entry, retr, Retrieves chunks)
-Rel(retr, embed, Computes query embedding)
-Rel(entry, synth, Routes category and synthesizes answer)
-Rel(synth, embed, May call provider depending on configured key)
-Rel(entry, logs, Writes interaction log)
-Rel(entry, geo, Looks up country when enabled)
+  entry -->|Reads settings| cfg
+  entry -->|Sets and propagates request id| obs
+  entry -->|Extracts and anonymizes metadata| priv
+  entry -->|Retrieves chunks| retr
+  retr -->|Computes query embedding| embed
+  entry -->|Routes category and synthesizes answer| synth
+  synth -->|May call provider depending on configured key| embed
+  entry -->|Writes interaction log| logs
+  entry -->|Looks up country when enabled| geo
 ```
 
 Code references:
@@ -915,3 +918,6 @@ Infra:
 
 * Compose: [`docker-compose.yml`](docker-compose.yml:1)
 * CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml:1)
+* Compose: [`docker-compose.yml`](docker-compose.yml:1)
+* CI: [`.github/workflows/ci.yml`](.github/workflows/ci.yml:1)
+

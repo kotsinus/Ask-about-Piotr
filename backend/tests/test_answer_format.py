@@ -210,3 +210,47 @@ async def test_evidence_and_sources_include_only_used_chunks(
             {"card_id": "c2", "section": "Details", "distance": 0.11},
             {"card_id": "c3", "section": "More", "distance": 0.12},
         ]
+
+
+@pytest.mark.anyio
+async def test_answer_starts_with_facts_bullets_when_non_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+
+        def _stub_retrieve(
+            question: str, limit: int = 5, conversation_topic: str | None = None
+        ) -> list[RetrievedChunk]:
+            return [
+                RetrievedChunk(
+                    card_id="c1",
+                    category="skills",
+                    section="Overview",
+                    source_url=None,
+                    content="Piotr programs primarily in Python and TypeScript.",
+                ),
+                RetrievedChunk(
+                    card_id="c2",
+                    category="skills",
+                    section="More",
+                    source_url=None,
+                    content="He also works with Postgres and Docker.",
+                ),
+            ]
+
+        class _StubSynthesis:
+            answer = "- Python and TypeScript\n- Postgres and Docker\n\nI focus on practical engineering work."
+            why_this_matters = "Test"
+            confidence = Confidence.medium
+            confidence_reason = None
+            used_chunk_indices = [0, 1]
+
+        monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
+        monkeypatch.setattr("app.main.synthesize_answer", lambda *a, **k: _StubSynthesis())
+
+        response = await client.post("/chat", json={"question": "What do you use?"})
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["answer"].lstrip().startswith("-")
+        assert "\n\n" in payload["answer"]

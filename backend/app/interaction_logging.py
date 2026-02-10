@@ -66,6 +66,11 @@ class InteractionLog:
     user_agent: str | None
     country: str | None
 
+    # Optional JSON context fields (multi-category rollout observability).
+    routing: dict | None = None
+    retrieval_by_category: dict | None = None
+    quality_gate: dict | None = None
+
 
 def write_interaction_log(row: InteractionLog) -> None:
     """Write one row; failures must not break the request path."""
@@ -150,6 +155,9 @@ def _write_interaction_log_once(row: InteractionLog) -> None:
                 messages_count=row.messages_count,
                 retrieval_chunk_count=row.retrieval_chunk_count,
                 llm_context_messages=row.llm_context_messages,
+                routing=row.routing,
+                retrieval_by_category=row.retrieval_by_category,
+                quality_gate=row.quality_gate,
                 ip_prefix=row.ip_prefix,
                 ip_hash=row.ip_hash,
                 user_agent=row.user_agent,

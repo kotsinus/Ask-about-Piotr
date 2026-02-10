@@ -24,7 +24,10 @@ import logging
 import re
 import time
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
+
+import hashlib
 
 from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,7 +37,18 @@ from openai import APIConnectionError, APIError, AuthenticationError, RateLimitE
 from app.config import get_settings, get_web_settings
 from app.geoip import lookup_country
 from app.interaction_logging import InteractionLog, write_interaction_log
-from app.llm import clean_why, rewrite_question, route_category, synthesize_answer
+from app.llm import (
+    RoutingCategory,
+    RoutingResult,
+    clean_why,
+    deterministic_fallback_synthesis,
+    is_laconic_answer,
+    REFUSAL_MESSAGE,
+    rewrite_question,
+    route_categories,
+    route_category,
+    synthesize_answer,
+)
 from app.logging_setup import configure_logging
 from app.observability import (
     REQUEST_ID_HEADER,
@@ -43,7 +57,12 @@ from app.observability import (
     set_request_id,
 )
 from app.privacy import anonymize_ip_prefix, extract_client_ip, hash_ip
-from app.retrieval import retrieve
+from app.retrieval import (
+    merge_dedup_pin_and_cap,
+    merge_retrieval_results_by_category,
+    retrieve,
+    retrieve_for_category,
+)
 from app.schemas import (
     Category,
     ChatRequest,
@@ -52,6 +71,8 @@ from app.schemas import (
     ConversationContext,
     DebugRetrievalItem,
     EvidenceItem,
+    RoutingCategoryItem,
+    RoutingResult as PublicRoutingResult,
     SourceRef,
 )
 
@@ -68,6 +89,131 @@ _WEB_SETTINGS = get_web_settings()
 
 SESSION_COOKIE_NAME = "ask_piotr_session_id"
 SESSION_ID_HEADER = "x-session-id"
+
+
+_EDUCATION_TOKENS = (
+    "university",
+    "bsc",
+    "msc",
+    "phd",
+    "degree",
+    "master",
+    "bachelor",
+    "engineering",
+    "faculty",
+    "institute",
+    "academy",
+    "course",
+    "studied",
+    "graduat",
+)
+
+
+_ACTION_VERBS = (
+    "built",
+    "designed",
+    "led",
+    "shipped",
+    "implemented",
+    "deployed",
+    "owned",
+    "delivered",
+)
+
+
+def _count_tokens(text: str, tokens: tuple[str, ...]) -> int:
+    lowered = (text or "").lower()
+    return sum(1 for t in tokens if t in lowered)
+
+
+def _count_named_examples(answer: str) -> int:
+    """Heuristic for "named examples" per plan.
+
+    Definition (stable): count bullet lines starting with "- <Label>:".
+    Optionally require action verb presence to reduce false positives.
+    """
+
+    lines = [ln.rstrip() for ln in (answer or "").splitlines()]
+    bullets = [ln.strip() for ln in lines if ln.strip().startswith("-")]
+    count = 0
+    for ln in bullets:
+        # Expect "- Label: ..."
+        m = re.match(r"^[-–—]\s*([A-Z][\w\-\s]{2,40}):\s+(.+)$", ln)
+        if not m:
+            continue
+        tail = m.group(2).lower()
+        if any(v in tail for v in _ACTION_VERBS):
+            count += 1
+    return count
+
+
+def _derive_used_categories(
+    *, used_indices: list[int], chunks: list
+) -> list[str]:
+    cats: list[str] = []
+    for idx in used_indices or []:
+        if not isinstance(idx, int) or idx < 0 or idx >= len(chunks):
+            continue
+        c = chunks[idx]
+        cat = str(getattr(c, "best_origin_category", "") or "").strip()
+        if not cat:
+            # Fallback: if provenance missing, use chunk.category (knowledge category)
+            cat = str(getattr(c, "category", "") or "").strip()
+        if cat and cat not in cats:
+            cats.append(cat)
+    return cats
+
+
+def _quality_gate_validate(
+    *,
+    synthesis,
+    chunks,
+    routed_categories: list[Category],
+    per_category_provided_counts: dict[str, int],
+) -> tuple[bool, list[str]]:
+    reasons: list[str] = []
+    answer = str(getattr(synthesis, "answer", "") or "")
+    refusal = REFUSAL_MESSAGE
+
+    has_provenance = any(
+        bool(getattr(c, "best_origin_category", None)) or bool(getattr(c, "origin_categories", None))
+        for c in (chunks or [])
+    )
+
+    if answer != refusal:
+        used = list(getattr(synthesis, "used_chunk_indices", []) or [])
+        if not used:
+            reasons.append("missing_used_chunk_indices")
+
+        if is_laconic_answer(answer, refusal=refusal):
+            reasons.append("laconic_answer")
+
+        # Category coverage: if exactly 2 routed cats and both had evidence provided,
+        # require that used indices cover both.
+        routed = [str(c.value) for c in (routed_categories or [])]
+        if has_provenance and len(routed) == 2:
+            provided_a = int(per_category_provided_counts.get(routed[0], 0) or 0)
+            provided_b = int(per_category_provided_counts.get(routed[1], 0) or 0)
+            if provided_a > 0 and provided_b > 0:
+                used_cats = set(_derive_used_categories(used_indices=used, chunks=chunks))
+                missing: list[str] = [c for c in routed if c not in used_cats]
+                if missing:
+                    reasons.append("missing_category_coverage")
+
+        # Token checks.
+        primary = routed_categories[0] if routed_categories else None
+        if has_provenance and primary == Category.education_and_formal_background:
+            if _count_tokens(answer, _EDUCATION_TOKENS) < 2:
+                reasons.append("education_token_check_failed")
+
+        # Experience/Production check: enforce when hands-on engineering is routed.
+        if has_provenance and any(
+            c == Category.hands_on_engineering for c in (routed_categories or [])
+        ):
+            if _count_named_examples(answer) < 2:
+                reasons.append("experience_named_examples_failed")
+
+    return (len(reasons) == 0, reasons)
 
 
 def _truncate_text(value: str, max_chars: int) -> str:
@@ -132,6 +278,9 @@ def _log_interaction_background(
     llm_context_messages: list[dict] | None,
     client_ip: str | None,
     user_agent: str | None,
+    routing: dict | None = None,
+    retrieval_by_category: dict | None = None,
+    quality_gate: dict | None = None,
 ) -> None:
     """Best-effort interaction logging.
 
@@ -173,6 +322,9 @@ def _log_interaction_background(
                 ip_hash=ip_hash,
                 user_agent=user_agent,
                 country=country,
+                routing=routing,
+                retrieval_by_category=retrieval_by_category,
+                quality_gate=quality_gate,
             )
         )
     except Exception:
@@ -335,6 +487,200 @@ def classify_question(question: str) -> Category:
     return Category.hands_on_engineering
 
 
+def _stable_hash(value: str) -> int:
+    digest = hashlib.sha256((value or "").encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big")
+
+
+def _is_multi_category_enabled(*, settings, request_id: str) -> bool:
+    flag_on = bool(getattr(settings, "multi_category_retrieval_enabled", False))
+    if not flag_on:
+        return False
+    rollout_percent = int(getattr(settings, "multi_category_rollout_percent", 0) or 0)
+    rollout_percent = max(0, min(100, rollout_percent))
+    if rollout_percent <= 0:
+        return False
+    rid = request_id or ""
+    return (_stable_hash(rid) % 100) < rollout_percent
+
+
+def _fallback_single_category_routing(
+    *, question: str, max_total_chunks: int
+) -> RoutingResult:
+    category = classify_question(question)
+    return RoutingResult(
+        categories=[
+            RoutingCategory(
+                category=category,
+                confidence="fallback",
+                budget=max_total_chunks,
+            )
+        ]
+    )
+
+
+def _intent_rules_v1_budgets(
+    *, question: str, categories: list[Category], max_total_chunks: int
+) -> dict[Category, int]:
+    # Deterministic server-side policy.
+    # - For 1 category: allocate full budget to it.
+    # - For 2 categories: if question signals education + hands-on engineering, allocate 2+3.
+    # - Otherwise default to 3+2 without positional bias: higher budget goes to the category
+    #   that matches engineering keywords if present.
+
+    if not categories:
+        return {}
+    if len(categories) == 1:
+        return {categories[0]: max_total_chunks}
+
+    q = (question or "").lower()
+    has_edu = any(k in q for k in ["education", "degree", "university", "background"])
+    has_eng = any(
+        k in q
+        for k in [
+            "build",
+            "built",
+            "engineer",
+            "engineering",
+            "system",
+            "architecture",
+            "production",
+            "deploy",
+            "debug",
+            "implement",
+            "implementation",
+            "experience",
+        ]
+    )
+
+    budgets: dict[Category, int] = {c: 1 for c in categories}
+    remaining = max_total_chunks - len(categories)
+    remaining = max(0, remaining)
+
+    # Prefer explicit mapping for the 2-intent education + hands-on case.
+    if (
+        len(categories) == 2
+        and has_edu
+        and Category.education_and_formal_background in categories
+        and Category.hands_on_engineering in categories
+    ):
+        budgets[Category.education_and_formal_background] = 2
+        budgets[Category.hands_on_engineering] = max_total_chunks - 2
+        return budgets
+
+    # Default: 3+2 total (when max_total_chunks==5).
+    if len(categories) == 2 and max_total_chunks >= 5:
+        high = 3
+        low = max_total_chunks - high
+        pick_high = None
+        if has_eng and Category.hands_on_engineering in categories:
+            pick_high = Category.hands_on_engineering
+        if pick_high is None:
+            pick_high = categories[0]
+        other = categories[1] if categories[0] == pick_high else categories[0]
+        budgets[pick_high] = high
+        budgets[other] = max(1, low)
+        return budgets
+
+    # Otherwise: spread remaining evenly.
+    idx = 0
+    cats = list(categories)
+    while remaining > 0 and cats:
+        budgets[cats[idx % len(cats)]] += 1
+        remaining -= 1
+        idx += 1
+    return budgets
+
+
+def _clamp_routing_result(
+    *,
+    question: str,
+    result: RoutingResult,
+    max_categories: int,
+    max_total_chunks: int,
+    allow_six_chunks: bool,
+    budget_policy: str,
+) -> RoutingResult:
+    max_categories = max(1, int(max_categories))
+    max_total_chunks = max(1, int(max_total_chunks))
+
+    # Normalize/dedup categories preserving order.
+    normalized: list[RoutingCategory] = []
+    seen: set[Category] = set()
+    for item in result.categories if result and result.categories else []:
+        cat = item.category
+        if cat in seen:
+            continue
+        seen.add(cat)
+        normalized.append(item)
+        if len(normalized) >= max_categories:
+            break
+
+    if not normalized:
+        return _fallback_single_category_routing(
+            question=question, max_total_chunks=max_total_chunks
+        )
+
+    # If router provided no usable budgets (<=0), use policy.
+    router_budget_ok = all((c.budget or 0) > 0 for c in normalized)
+    if router_budget_ok:
+        budgets = {c.category: max(1, int(c.budget)) for c in normalized}
+    else:
+        cats = [c.category for c in normalized]
+        if budget_policy != "intent_rules_v1":
+            budget_policy = "intent_rules_v1"
+        budgets = _intent_rules_v1_budgets(
+            question=question,
+            categories=cats,
+            max_total_chunks=max_total_chunks,
+        )
+        for cat in cats:
+            budgets.setdefault(cat, 1)
+
+    # Enforce per-category minimums
+    for cat in list(budgets.keys()):
+        budgets[cat] = max(1, int(budgets[cat]))
+
+    # Allow 6 only for 3-intent case (short-chunk case deferred).
+    cap = max_total_chunks
+    if allow_six_chunks and len(normalized) == 3:
+        cap = max(cap, 6)
+
+    # Clamp total budget.
+    total = sum(budgets.get(c.category, 1) for c in normalized)
+    if total > cap:
+        # Reduce budgets deterministically from the largest down, keeping >=1.
+        ordered = sorted(
+            [c.category for c in normalized],
+            key=lambda c: (budgets.get(c, 1), str(c)),
+            reverse=True,
+        )
+        over = total - cap
+        while over > 0:
+            changed = False
+            for cat in ordered:
+                if over <= 0:
+                    break
+                if budgets.get(cat, 1) > 1:
+                    budgets[cat] -= 1
+                    over -= 1
+                    changed = True
+            if not changed:
+                break
+
+    # Final materialization in the same order.
+    out_items: list[RoutingCategory] = []
+    for item in normalized:
+        out_items.append(
+            RoutingCategory(
+                category=item.category,
+                confidence=item.confidence,
+                budget=int(budgets.get(item.category, 1)),
+            )
+        )
+    return RoutingResult(categories=out_items)
+
+
 def format_answer(
     answer: str,
     why_this_matters: str,
@@ -468,24 +814,97 @@ def chat(
         },
     )
     t_stage = time.perf_counter()
-    logger.info(
-        "chat_stage",
-        extra={
-            "stage": "route_category_start",
-        },
-    )
-    try:
-        category = route_category(standalone_question)
-    except Exception:
-        category = classify_question(standalone_question)
-    logger.info(
-        "chat_stage",
-        extra={
-            "stage": "route_category_done",
-            "duration_ms": round((time.perf_counter() - t_stage) * 1000, 2),
-            "category": str(category),
-        },
-    )
+    multi_enabled = _is_multi_category_enabled(settings=settings, request_id=request_id)
+    router_fallback_used = False
+    if not multi_enabled:
+        logger.info(
+            "chat_stage",
+            extra={
+                "stage": "route_category_start",
+            },
+        )
+        try:
+            category = route_category(standalone_question)
+        except Exception:
+            category = classify_question(standalone_question)
+            router_fallback_used = True
+        routing = RoutingResult(
+            categories=[
+                RoutingCategory(
+                    category=category,
+                    confidence="single",
+                    budget=int(
+                        getattr(settings, "multi_category_max_total_chunks", 5) or 5
+                    ),
+                )
+            ]
+        )
+        logger.info(
+            "chat_stage",
+            extra={
+                "stage": "route_category_done",
+                "duration_ms": round((time.perf_counter() - t_stage) * 1000, 2),
+                "category": str(category),
+            },
+        )
+    else:
+        logger.info(
+            "chat_stage",
+            extra={
+                "stage": "route_categories_start",
+            },
+        )
+        # Route on original_question (raw user input), NOT rewritten.
+        try:
+            raw_routing = route_categories(request.question)
+        except Exception:
+            raw_routing = RoutingResult(categories=[])
+            router_fallback_used = True
+        max_categories = int(getattr(settings, "multi_category_max_categories", 2) or 2)
+        max_total = int(getattr(settings, "multi_category_max_total_chunks", 5) or 5)
+        allow_six = bool(getattr(settings, "multi_category_allow_six_chunks", False))
+        policy = str(
+            getattr(settings, "multi_category_intent_budget_policy", "intent_rules_v1")
+            or "intent_rules_v1"
+        )
+        routing = _clamp_routing_result(
+            question=request.question,
+            result=raw_routing,
+            max_categories=max_categories,
+            max_total_chunks=max_total,
+            allow_six_chunks=allow_six,
+            budget_policy=policy,
+        )
+        category = routing.categories[0].category
+        logger.info(
+            "chat_stage",
+            extra={
+                "stage": "route_categories_done",
+                "duration_ms": round((time.perf_counter() - t_stage) * 1000, 2),
+                "categories": [
+                    {"category": str(c.category), "budget": int(c.budget)}
+                    for c in routing.categories
+                ],
+            },
+        )
+
+        # Structured routing event (multi-category mode only).
+        logger.info(
+            "chat_routing",
+            extra={
+                "categories": [
+                    {
+                        "category": str(c.category),
+                        "confidence": str(c.confidence),
+                        "budget": int(c.budget),
+                    }
+                    for c in (routing.categories or [])
+                ],
+                "max_categories": int(max_categories),
+                "max_total_chunks": int(max_total),
+                "router_fallback_used": bool(router_fallback_used),
+            },
+        )
 
     t_stage = time.perf_counter()
     logger.info(
@@ -495,7 +914,83 @@ def chat(
             "topic_used_for_retrieval": use_topic_for_retrieval,
         },
     )
-    chunks = retrieve(standalone_question, conversation_topic=conversation_topic)
+
+    retrieval_by_category_payload: dict | None = None
+    per_category_selected: dict[str, list] | None = None
+    if not multi_enabled:
+        # Single-category retrieval (legacy behavior).
+        chunks = retrieve(standalone_question, conversation_topic=conversation_topic)
+    else:
+        # Multi-category retrieval: per-category runs + merge/dedup/pin/cap.
+        per_category_selected = {}
+        retrieval_by_category_payload = {
+            "max_total_chunks": int(getattr(settings, "multi_category_max_total_chunks", 5) or 5),
+            "categories": [],
+        }
+        per_card_cap = int(getattr(settings, "retrieval_per_card_cap", 2) or 2)
+        section_weighting_enabled = True
+
+        for item in routing.categories or []:
+            cat = item.category
+            budget = int(item.budget or 0)
+            selected = retrieve_for_category(
+                standalone_question,
+                cat,
+                budget=budget,
+                conversation_topic=conversation_topic,
+            )
+            # Note: retrieve_for_category already applies per-card cap and section weighting.
+            per_category_selected[str(cat.value)] = list(selected)
+
+            logger.info(
+                "chat_retrieve_category",
+                extra={
+                    "category": str(cat.value),
+                    "budget": int(budget),
+                    # Internal retrieve already returns the selected list.
+                    "retrieved_count_raw": int(len(selected)),
+                    "selected_count": int(len(selected)),
+                    "per_card_cap": int(per_card_cap),
+                    "section_weighting_enabled": bool(section_weighting_enabled),
+                },
+            )
+            retrieval_by_category_payload["categories"].append(
+                {
+                    "category": str(cat.value),
+                    "budget": int(budget),
+                    "selected_count": int(len(selected)),
+                }
+            )
+
+        max_total_chunks = int(getattr(settings, "multi_category_max_total_chunks", 5) or 5)
+        merged_pre = [c for chunks_ in per_category_selected.values() for c in (chunks_ or [])]
+        pre_dedup_count = int(len(merged_pre))
+
+        merged_deduped = merge_retrieval_results_by_category(per_category_selected)
+        post_dedup_count = int(len(merged_deduped))
+        dedup_collisions = max(0, pre_dedup_count - post_dedup_count)
+
+        # Merge/dedup/pin/cap. This preserves provenance fields.
+        merged_final = merge_dedup_pin_and_cap(
+            question=standalone_question,
+            per_category_selected=per_category_selected,
+            routed_categories=[c.category for c in (routing.categories or [])],
+            max_total_chunks=max_total_chunks,
+            conversation_topic=conversation_topic,
+        )
+        chunks = list(merged_final)
+        pinned_cards = sorted({str(c.card_id) for c in chunks if bool(getattr(c, "pinned", False))})
+
+        logger.info(
+            "chat_retrieve_merge",
+            extra={
+                "pre_dedup_count": int(pre_dedup_count),
+                "post_dedup_count": int(post_dedup_count),
+                "dedup_collisions": int(dedup_collisions),
+                "pinned_cards": list(pinned_cards),
+                "final_chunk_count": int(len(chunks)),
+            },
+        )
     logger.info(
         "chat_stage",
         extra={
@@ -513,6 +1008,15 @@ def chat(
             "retrieval_chunk_count": len(chunks),
         },
     )
+    # Quality-gated synthesis with one retry.
+    routed_categories = [item.category for item in routing.categories] if routing else [category]
+    routed_categories = [c for c in routed_categories if c]
+    per_category_provided_counts: dict[str, int] = {}
+    for c in chunks:
+        key = str(getattr(c, "best_origin_category", "") or "").strip()
+        if key:
+            per_category_provided_counts[key] = per_category_provided_counts.get(key, 0) + 1
+
     synthesis = synthesize_answer(
         standalone_question,
         chunks,
@@ -521,6 +1025,67 @@ def chat(
         conversation_messages=[message.model_dump() for message in request.messages]
         if request.messages
         else None,
+    )
+    passed, failure_reasons = _quality_gate_validate(
+        synthesis=synthesis,
+        chunks=chunks,
+        routed_categories=routed_categories,
+        per_category_provided_counts=per_category_provided_counts,
+    )
+
+    retry_attempted = False
+    if not passed and (synthesis.answer or "") != REFUSAL_MESSAGE and chunks:
+        retry_attempted = True
+        synthesis_retry = synthesize_answer(
+            standalone_question,
+            chunks,
+            category,
+            conversation_topic=conversation_topic,
+            conversation_messages=[message.model_dump() for message in request.messages]
+            if request.messages
+            else None,
+            temperature=0,
+            strict=True,
+        )
+        passed2, failure_reasons2 = _quality_gate_validate(
+            synthesis=synthesis_retry,
+            chunks=chunks,
+            routed_categories=routed_categories,
+            per_category_provided_counts=per_category_provided_counts,
+        )
+        if passed2:
+            synthesis = synthesis_retry
+            passed = True
+            failure_reasons = []
+        else:
+            failure_reasons = failure_reasons2
+            # Fall back to deterministic synthesis (never ungrounded).
+            synthesis = deterministic_fallback_synthesis(chunks)
+
+    used_count = len(getattr(synthesis, "used_chunk_indices", []) or [])
+    used_categories = _derive_used_categories(used_indices=getattr(synthesis, "used_chunk_indices", []) or [], chunks=chunks)
+    quality_gate_payload: dict | None = None
+    if multi_enabled:
+        quality_gate_payload = {
+            "passed": bool(passed),
+            "failure_reasons": list(failure_reasons),
+            "retry_attempted": bool(retry_attempted),
+            "used_chunk_indices_count": int(used_count),
+            "used_categories": list(used_categories),
+            "routed_categories": [str(c.value) for c in routed_categories],
+            "provided_chunks_by_category": dict(per_category_provided_counts),
+        }
+    logger.info(
+        "chat_synthesis_quality_gate",
+        extra={
+            "passed": bool(passed),
+            "failure_reasons": list(failure_reasons),
+            "retry_attempted": bool(retry_attempted),
+            "used_chunk_indices_count": int(used_count),
+            "used_categories": list(used_categories),
+            "routed_categories": [str(c.value) for c in routed_categories],
+            "provided_chunks_by_category": dict(per_category_provided_counts),
+        },
     )
     logger.info(
         "chat_stage",
@@ -588,6 +1153,18 @@ def chat(
         ),
         formatted_answer="",
     )
+
+    if debug_retrieval:
+        response.routing = PublicRoutingResult(
+            categories=[
+                RoutingCategoryItem(
+                    category=item.category,
+                    confidence=str(item.confidence),
+                    budget=int(item.budget),
+                )
+                for item in routing.categories
+            ]
+        )
     response.formatted_answer = format_answer(
         response.answer,
         response.why_this_matters,
@@ -643,6 +1220,23 @@ def chat(
             llm_context_messages=llm_context_messages,
             client_ip=client_ip,
             user_agent=user_agent,
+            routing={
+                "categories": [
+                    {
+                        "category": str(c.category.value),
+                        "confidence": str(c.confidence),
+                        "budget": int(c.budget),
+                    }
+                    for c in (routing.categories or [])
+                ],
+                "max_categories": int(getattr(settings, "multi_category_max_categories", 2) or 2),
+                "max_total_chunks": int(getattr(settings, "multi_category_max_total_chunks", 5) or 5),
+                "router_fallback_used": bool(router_fallback_used),
+            }
+            if multi_enabled
+            else None,
+            retrieval_by_category=retrieval_by_category_payload if multi_enabled else None,
+            quality_gate=quality_gate_payload if multi_enabled else None,
         )
     except Exception:
         logger.exception("interaction_log_schedule_failed")

@@ -59,6 +59,16 @@ class DebugRetrievalItem(BaseModel):
     distance: float
 
 
+class RoutingCategoryItem(BaseModel):
+    category: Category
+    confidence: str
+    budget: int
+
+
+class RoutingResult(BaseModel):
+    categories: list[RoutingCategoryItem]
+
+
 class ConversationContext(BaseModel):
     conversation_id: str | None = Field(
         None, description="Client-provided conversation identifier."
@@ -96,6 +106,7 @@ class ChatResponse(BaseModel):
     evidence: list[EvidenceItem]
     sources: list[SourceRef]
     debug_retrieval: list[DebugRetrievalItem] | None = None
+    routing: RoutingResult | None = None
     confidence: Confidence
     confidence_reason: str | None = None
     context: ConversationContext | None = None

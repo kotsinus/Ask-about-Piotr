@@ -73,9 +73,18 @@ Additional context columns (for debugging/analytics):
 - `topic_used_for_retrieval` (boolean, nullable) — whether `incoming_last_topic` was used to augment retrieval.
 - `messages_count` (integer, nullable) — number of conversation history messages received in the request.
 - `retrieval_chunk_count` (integer, nullable) — number of chunks returned by similarity search (`len(chunks)` from [`retrieve()`](backend/app/retrieval.py:48)).
-- `llm_context_messages` (jsonb, nullable) — last ~6 conversation messages actually used as LLM context.
+  - `llm_context_messages` (jsonb, nullable) — last ~6 conversation messages actually used as LLM context.
   This field is controlled by env var `INTERACTION_LOG_INCLUDE_LLM_CONTEXT` (see [`.env.example`](.env.example:1)).
   Each message `content` is truncated to 2000 characters before storage.
+
+Optional JSON context (multi-category routing/retrieval rollout):
+
+- `routing` (jsonb, nullable) — normalized routing payload after server clamping.
+  Shape: `{"categories": [{"category": str, "confidence": str, "budget": int}], "max_categories": int, "max_total_chunks": int, "router_fallback_used": bool}`.
+- `retrieval_by_category` (jsonb, nullable) — per-category budgets and selected counts.
+  Shape (v1): `{"max_total_chunks": int, "categories": [{"category": str, "budget": int, "selected_count": int}]}`.
+- `quality_gate` (jsonb, nullable) — summary of synthesis quality gate outcome.
+  Shape (v1): `{"passed": bool, "failure_reasons": [str], "retry_attempted": bool, "used_chunk_indices_count": int, "used_categories": [str]}`.
 
 Derived vs. persisted:
 

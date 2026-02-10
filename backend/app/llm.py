@@ -34,6 +34,9 @@ from app.schemas import Category, Confidence
 logger = logging.getLogger(__name__)
 
 
+REFUSAL_MESSAGE = "I do not have enough evidence in the provided materials."
+
+
 def rewrite_question(question: str, messages: list[dict] | None = None) -> str:
     """Rewrite a potentially ambiguous follow-up question into a standalone question.
 
@@ -100,6 +103,18 @@ class SynthesisResult:
     used_chunk_indices: list[int]
 
 
+@dataclass(frozen=True)
+class RoutingCategory:
+    category: Category
+    confidence: str
+    budget: int
+
+
+@dataclass(frozen=True)
+class RoutingResult:
+    categories: list[RoutingCategory]
+
+
 def route_category(question: str) -> Category:
     """Route a question into exactly one category using a low-cost model."""
 
@@ -137,18 +152,86 @@ def route_category(question: str) -> Category:
     return _parse_category(payload.get("category", ""))
 
 
+def route_categories(question: str) -> RoutingResult:
+    """Route a question into 1+ categories with optional per-category budgets.
+
+    Contract (LLM JSON):
+    {
+      "categories": [{"category": str, "confidence": str, "budget": int}]
+    }
+    """
+
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY is required for routing.")
+
+    system_prompt = (
+        "Classify the question into 1 to 3 categories from this list:\n"
+        "- Hands-on engineering\n"
+        "- Architecture and system design\n"
+        "- AI and ML practice\n"
+        "- Leadership and product strategy\n"
+        "- Research and academic credibility\n"
+        "- Education and formal background\n"
+        "- Personal interests and working style\n"
+        "- Career fit and role alignment\n\n"
+        "Return JSON exactly like:\n"
+        '{"categories": [{"category": "<one of the list items>", "confidence": "High|Medium|Low", "budget": 1}]}.\n'
+        "Do not add any other keys.\n"
+        "Budgets are optional hints; the server will clamp budgets and category count."
+    )
+
+    response = chat_completions_create_cached(
+        cache_namespace="route_categories",
+        model=settings.router_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": question},
+        ],
+        response_format={"type": "json_object"},
+        temperature=0,
+    )
+
+    content = response.choices[0].message.content or "{}"
+    payload = json.loads(content)
+    raw_items = payload.get("categories", [])
+    if not isinstance(raw_items, list):
+        raw_items = []
+
+    categories: list[RoutingCategory] = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        parsed_category = _parse_category(str(item.get("category", "")))
+        confidence = str(item.get("confidence", "")).strip() or ""
+        budget_value = item.get("budget", None)
+        budget: int
+        try:
+            budget = int(budget_value) if budget_value is not None else 0
+        except Exception:
+            budget = 0
+        categories.append(
+            RoutingCategory(category=parsed_category, confidence=confidence, budget=budget)
+        )
+
+    return RoutingResult(categories=categories)
+
+
 def synthesize_answer(
     question: str,
     chunks: list[RetrievedChunk],
     category: str | None = None,
     conversation_topic: str | None = None,
     conversation_messages: list[dict] | None = None,
+    *,
+    temperature: float | None = None,
+    strict: bool = False,
 ) -> SynthesisResult:
     """Generate a strict, grounded answer from retrieved chunks."""
 
     if not chunks:
         return SynthesisResult(
-            answer="I do not have enough evidence in the provided materials.",
+            answer=REFUSAL_MESSAGE,
             why_this_matters=(
                 "The system must cite retrieved knowledge cards, and none were found."
             ),
@@ -161,10 +244,7 @@ def synthesize_answer(
     if not settings.openai_api_key:
         return _fallback_synthesis(chunks)
 
-    evidence_lines = [
-        f"[{idx}] [{chunk.card_id}.{chunk.section}] {chunk.content}"
-        for idx, chunk in enumerate(chunks)
-    ]
+    evidence_block = _build_evidence_block(chunks)
 
     STYLE_HINTS = {
         "Hands-on engineering": (
@@ -247,16 +327,19 @@ def synthesize_answer(
         "- If you use evidence, you MUST list which evidence items were used via their indices.\n\n"
         "Style rules (important):\n"
         "- Write like a person speaking, not like a CV or an essay.\n"
-        "- Use 2 to 6 sentences in the 'answer' field.\n"
+        "- The 'answer' field must start with 2 to 6 short fact bullets.\n"
+        "  - Each bullet is one line starting with '- '.\n"
+        "  - Each bullet must be a concrete fact supported by evidence.\n"
+        "- After the bullets, add a blank line, then 1 to 2 short synthesis sentences.\n"
         "- Prefer short, direct sentences. Avoid fluff and generic phrases.\n"
         "- Avoid meta-commentary such as: 'This highlights', 'This demonstrates', 'Understanding X is crucial', 'It is important to note'.\n"
         "- Do not restate the question. Do not introduce yourself.\n\n"
         "You may adapt depth to the style hint, but never change grounding rules.\n\n"
         "Yes/No questions:\n"
-        "- Start with 'Yes' or 'No' in the answer field.\n"
-        "- Then justify using evidence.\n\n"
+        "- The FIRST bullet must begin with 'Yes' or 'No'.\n"
+        "- Then provide the remaining fact bullets and the synthesis.\n\n"
         "Length constraints:\n"
-        "- The 'answer' field should be between 25 and 90 words unless the refusal message is used.\n\n"
+        "- The 'answer' field should be between 25 and 120 words unless the refusal message is used.\n\n"
         "Return JSON with the following fields only:\n"
         '{"answer", "why_this_matters", "confidence", "confidence_reason", "used_chunk_indices"}.\n'
         "Use confidence values: High, Medium, or Low.\n"
@@ -264,7 +347,7 @@ def synthesize_answer(
         "- Avoid generic phrases in 'why_this_matters' such as: 'crucial', 'demonstrates', 'aligns with', 'highlights', 'enhances my ability', 'it is important to note'.\n"
         "- Keep 'why_this_matters' grounded in the same evidence. If evidence does not support a specific implication, keep it short and modest.\n"
         "The refusal message is exactly:\n"
-        '"I do not have enough evidence in the provided materials."'
+        f'"{REFUSAL_MESSAGE}"'
     )
 
     # Bind category hints at system level to reduce model guessing/drift.
@@ -272,6 +355,15 @@ def synthesize_answer(
         system_prompt += f"\n\nStyle hint:\n{style_hint}\n"
     if why_hint:
         system_prompt += f"\n\nWhy-this-matters hint:\n{why_hint}\n"
+
+    if strict:
+        system_prompt += (
+            "\n\nSTRICT COMPLIANCE (retry mode):\n"
+            "- Follow the facts-first bullet format exactly.\n"
+            "- Do NOT output generic statements; every bullet must tie to evidence.\n"
+            "- Ensure used_chunk_indices lists ONLY indices you actually relied on.\n"
+            "- If evidence groups are present, use at least one item from each relevant group when possible.\n"
+        )
     context_block = ""
     if conversation_messages:
         trimmed = conversation_messages[-6:]
@@ -294,7 +386,7 @@ def synthesize_answer(
         + context_block
         + topic_line
         + "Evidence:\n"
-        + "\n".join(evidence_lines)
+        + evidence_block
     )
     # NOTE: synthesize_answer is intentionally *not* routed through the local
     # response cache. We run it with a non-zero temperature by default, so
@@ -306,7 +398,7 @@ def synthesize_answer(
             {"role": "user", "content": user_prompt},
         ],
         response_format={"type": "json_object"},
-        temperature=settings.synthesis_temperature,
+        temperature=(settings.synthesis_temperature if temperature is None else float(temperature)),
     )
 
     content = response.choices[0].message.content or "{}"
@@ -316,15 +408,13 @@ def synthesize_answer(
     if not answer:
         return _fallback_synthesis(chunks)
 
-    refusal = "I do not have enough evidence in the provided materials."
+    refusal = REFUSAL_MESSAGE
 
     if answer != refusal:
-        normalized = answer.strip().lower()
-        word_count = len(answer.split())
-
         # Guardrail: prevent laconic answers that violate the contract
         # (e.g. "Yes", "No", "I don't know", etc.)
-        if normalized in {"yes", "no"} or word_count < 4:
+        word_count = len(answer.split())
+        if is_laconic_answer(answer, refusal=refusal):
             logger.warning(
                 "synthesis_answer_too_short_fallback",
                 extra={
@@ -398,7 +488,15 @@ def _fallback_synthesis(chunks: list[RetrievedChunk]) -> SynthesisResult:
 
     sentences = sentences[:max_sentences]
 
-    answer = " ".join(sentences) if sentences else chunks[0].content.strip()
+    facts, synthesis = _facts_first_from_sentences(sentences)
+    if facts:
+        answer = "\n".join([f"- {fact}" for fact in facts])
+        if synthesis:
+            answer += "\n\n" + " ".join(synthesis)
+    else:
+        # Ensure facts-first even in extreme edge cases.
+        raw = chunks[0].content.strip() if chunks else ""
+        answer = f"- {raw}" if raw else ""
     if not used_chunk_indices and chunks:
         used_chunk_indices = [0]
     return SynthesisResult(
@@ -408,6 +506,117 @@ def _fallback_synthesis(chunks: list[RetrievedChunk]) -> SynthesisResult:
         confidence_reason=None,
         used_chunk_indices=used_chunk_indices,
     )
+
+
+def deterministic_fallback_synthesis(chunks: list[RetrievedChunk]) -> SynthesisResult:
+    """Public wrapper for the deterministic fallback synthesis."""
+
+    return _fallback_synthesis(chunks)
+
+
+def is_laconic_answer(answer: str, *, refusal: str = REFUSAL_MESSAGE) -> bool:
+    """Reuse the existing laconic-answer guardrail logic.
+
+    This mirrors the in-function guardrail historically used in
+    [`python.synthesize_answer()`](backend/app/llm.py:217).
+    """
+
+    if not answer:
+        return True
+    if answer.strip() == refusal:
+        return False
+    normalized = answer.strip().lower()
+    word_count = len(answer.split())
+    return normalized in {"yes", "no"} or word_count < 4
+
+
+def _facts_first_from_sentences(sentences: list[str]) -> tuple[list[str], list[str]]:
+    """Build facts-first answer parts from a sentence list.
+
+    Returns (facts, synthesis_sentences).
+    """
+
+    pool = [s.strip() for s in (sentences or []) if (s or "").strip()]
+    if not pool:
+        return ([], [])
+
+    # Prefer 2-6 bullets.
+    facts = pool[:6]
+    if len(facts) < 2:
+        # Try to split the first sentence into additional clauses to reach 2 facts.
+        first = pool[0]
+        parts = [p.strip() for p in re.split(r"[;,:]\s+", first) if p.strip()]
+        if len(parts) >= 2:
+            facts = [parts[0], parts[1]] + pool[1:5]
+
+    facts = facts[:6]
+    # Remove very short bullets.
+    facts = [f for f in facts if len(f.split()) >= 3 or len(f) >= 18]
+    if len(facts) > 6:
+        facts = facts[:6]
+
+    # Synthesis: use 1-2 remaining sentences if available.
+    remaining = [s for s in pool if s not in facts]
+    synthesis = remaining[:2]
+    if not synthesis:
+        # Modest meta-synthesis (non-factual, but grounded as a summary marker).
+        synthesis = ["These points summarize what is stated in the retrieved notes."]
+    return (facts[:6], synthesis[:2])
+
+
+def _build_evidence_block(chunks: list[RetrievedChunk]) -> str:
+    """Pack evidence for synthesis.
+
+    - If provenance metadata exists (best_origin_category/origin_categories), group
+      by category while keeping global stable indices.
+    - Otherwise, preserve the legacy flat list formatting.
+    """
+
+    if not chunks:
+        return ""
+
+    has_provenance = any(
+        bool(getattr(c, "best_origin_category", None)) or bool(getattr(c, "origin_categories", None))
+        for c in chunks
+    )
+    if not has_provenance:
+        return "\n".join(
+            f"[{idx}] [{chunk.card_id}.{chunk.section}] {chunk.content}"
+            for idx, chunk in enumerate(chunks)
+        )
+
+    def _group_key(chunk: RetrievedChunk) -> str:
+        key = (getattr(chunk, "best_origin_category", None) or "").strip()
+        if key:
+            return key
+        origins = getattr(chunk, "origin_categories", None) or []
+        if origins:
+            return str(origins[0]).strip()
+        return "(unknown)"
+
+    groups: dict[str, list[tuple[int, RetrievedChunk]]] = {}
+    order: list[str] = []
+    for idx, chunk in enumerate(chunks):
+        key = _group_key(chunk)
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append((idx, chunk))
+
+    out_lines: list[str] = ["Evidence groups (global indices):", ""]
+    for cat in order:
+        items = sorted(groups.get(cat, []), key=lambda t: t[0])
+        out_lines.append(f"Category: {cat} | provided {len(items)}")
+        for idx, chunk in items:
+            provenance = ""
+            origins = getattr(chunk, "origin_categories", None) or []
+            if origins and len(origins) > 1:
+                provenance = f" (origins: {', '.join(str(o) for o in origins)})"
+            out_lines.append(
+                f"[{idx}] [{chunk.card_id}.{chunk.section}] {chunk.content}{provenance}"
+            )
+        out_lines.append("")
+    return "\n".join(out_lines).rstrip()
 
 
 def _parse_category(value: str) -> Category:
