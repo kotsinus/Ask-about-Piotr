@@ -361,6 +361,13 @@ def synthesize_answer(
         "- If you were given evidence groups for multiple categories, use at least one chunk index from each non-empty group in used_chunk_indices."
     )
 
+    # Multi-intent structuring instruction (general): when multiple routed categories
+    # are present (evidence groups), force explicit separation in the answer.
+    system_prompt += (
+        "\n\nMulti-intent structuring rule:\n"
+        "- The question contains multiple intents. You MUST explicitly structure the answer into clearly separated parts reflecting each routed category."
+    )
+
     # Deterministic binding: keep the yes/no classification stable across retries.
     system_prompt += f"\n\nQuestion yes/no classification (server): {'YES' if yn else 'NO'}\n"
 

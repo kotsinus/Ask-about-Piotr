@@ -274,13 +274,165 @@ def _derive_used_categories(
         if not isinstance(idx, int) or idx < 0 or idx >= len(chunks):
             continue
         c = chunks[idx]
-        cat = str(getattr(c, "best_origin_category", "") or "").strip()
+        cat = str(getattr(c, "origin_category", "") or "").strip()
+        if not cat:
+            cat = str(getattr(c, "best_origin_category", "") or "").strip()
         if not cat:
             # Fallback: if provenance missing, use chunk.category (knowledge category)
             cat = str(getattr(c, "category", "") or "").strip()
         if cat and cat not in cats:
             cats.append(cat)
     return cats
+
+
+def _is_skills_question(question: str) -> bool:
+    q = " ".join((question or "").strip().lower().split())
+    if not q:
+        return False
+    # Generic skill/tooling intent signals.
+    keywords = (
+        "skills",
+        "skill",
+        "tech stack",
+        "stack",
+        "tools",
+        "tooling",
+        "technologies",
+        "technology",
+        "languages",
+        "language",
+        "framework",
+        "frameworks",
+        "libraries",
+        "library",
+    )
+    return any(k in q for k in keywords)
+
+
+def _looks_like_skills_list(answer: str) -> bool:
+    """Detect noisy skills-dump patterns.
+
+    This is intentionally *format-based* rather than a brittle keyword list.
+    """
+
+    for ln in (answer or "").splitlines():
+        line = ln.strip()
+        if not line:
+            continue
+
+        # Many comma-separated items in one line is a typical skills dump.
+        if line.count(",") >= 5:
+            return True
+
+        lowered = line.lower()
+        # AI/ML-like shorthand lists.
+        if re.search(r"\b[A-Za-z]{2,5}/[A-Za-z]{2,5}\b", line) and (
+            line.count("/") >= 2 or line.count(",") >= 3
+        ):
+            return True
+
+        # Semicolon-separated "topic list".
+        if ";" in line and (line.count(",") >= 3 or line.count("/") >= 2):
+            return True
+
+        if "system design and deployment" in lowered and (
+            "/" in line or line.count(",") >= 2
+        ):
+            return True
+
+    return False
+
+
+def _extract_markers_from_text(text: str) -> list[str]:
+    """Extract 2–3 dynamic "markers" from evidence text.
+
+    Markers are meant to be names/titles/systems present in the evidence.
+    Heuristics:
+    - Proper-noun-like phrases (capitalized words)
+    - Acronyms (2–6 uppercase letters)
+    - CamelCase tokens
+    """
+
+    raw = text or ""
+    if not raw.strip():
+        return []
+
+    # Proper noun phrases: up to 4 tokens.
+    proper = re.findall(
+        r"\b[A-Z][\w\-]{2,}(?:\s+[A-Z][\w\-]{2,}){0,3}\b",
+        raw,
+    )
+    acronyms = re.findall(r"\b[A-Z]{2,6}\b", raw)
+    camel = re.findall(r"\b[A-Z][a-z]+[A-Z][A-Za-z0-9]+\b", raw)
+
+    candidates = [*proper, *camel, *acronyms]
+    if not candidates:
+        return []
+
+    # Dedup + score by frequency, then length.
+    stop = {
+        "I",
+        "My",
+        "This",
+        "That",
+        "The",
+        "And",
+        "For",
+        "With",
+        "On",
+        "In",
+        "To",
+    }
+    freq: dict[str, int] = {}
+    for c in candidates:
+        m = c.strip()
+        if not m:
+            continue
+        if m in stop:
+            continue
+        # Avoid very generic single words.
+        if len(m) < 3:
+            continue
+        freq[m] = freq.get(m, 0) + 1
+
+    ranked = sorted(freq.items(), key=lambda kv: (-kv[1], -len(kv[0]), kv[0]))
+    # Keep 2–3 markers when possible.
+    out = [m for m, _ in ranked[:3]]
+    return out
+
+
+def _extract_markers_by_category(*, chunks: list, required_categories: set[str]) -> dict[str, list[str]]:
+    by_cat: dict[str, list[str]] = {c: [] for c in required_categories}
+    if not chunks or not required_categories:
+        return by_cat
+
+    # Aggregate text per category.
+    text_by_cat: dict[str, list[str]] = {c: [] for c in required_categories}
+    for c in chunks:
+        origin = str(getattr(c, "origin_category", "") or "").strip()
+        if not origin:
+            origin = str(getattr(c, "best_origin_category", "") or "").strip()
+        if origin in required_categories:
+            text_by_cat[origin].append(str(getattr(c, "content", "") or ""))
+
+    for cat, texts in text_by_cat.items():
+        combined = "\n".join(texts)
+        by_cat[cat] = _extract_markers_from_text(combined)
+    return by_cat
+
+
+def _answer_mentions_any_marker(*, answer: str, markers: list[str]) -> bool:
+    if not answer or not markers:
+        return False
+    lowered = answer.lower()
+    for m in markers:
+        needle = (m or "").strip()
+        if not needle:
+            continue
+        # Case-insensitive substring match is sufficient for named entities.
+        if needle.lower() in lowered:
+            return True
+    return False
 
 
 def _is_yes_no_question(question: str) -> bool:
@@ -374,6 +526,7 @@ def _bullets_have_evidence_support(*, bullets: list[str], evidence_chunks: list)
 
 def _quality_gate_validate(
     *,
+    question: str,
     synthesis,
     chunks,
     routed_categories: list[Category],
@@ -439,14 +592,39 @@ def _quality_gate_validate(
         # Category coverage: if exactly 2 routed cats and both had evidence provided,
         # require that used indices cover both.
         routed = [str(c.value) for c in (routed_categories or [])]
-        if has_provenance and len(routed) == 2:
-            provided_a = int(per_category_provided_counts.get(routed[0], 0) or 0)
-            provided_b = int(per_category_provided_counts.get(routed[1], 0) or 0)
-            if provided_a > 0 and provided_b > 0:
+        if has_provenance and len(routed) >= 2:
+            # General rule (2 or 3 categories): if a routed category had any
+            # evidence provided, the model must use evidence from that category.
+            required = {
+                c for c in routed if int(per_category_provided_counts.get(c, 0) or 0) > 0
+            }
+            if len(required) >= 2:
                 used_cats = set(_derive_used_categories(used_indices=used, chunks=chunks))
-                missing: list[str] = [c for c in routed if c not in used_cats]
-                if missing:
+                if not required.issubset(used_cats):
                     reasons.append("missing_category_coverage")
+
+                # Reflection gate: answer must include at least one marker derived
+                # from evidence for each required category.
+                markers_by_cat = _extract_markers_by_category(
+                    chunks=chunks, required_categories=required
+                )
+                missing_reflection: list[str] = []
+                for cat in sorted(required):
+                    markers = markers_by_cat.get(cat) or []
+                    # If we couldn't extract any marker for a category, we can't
+                    # enforce reflection reliably.
+                    if not markers:
+                        continue
+                    if not _answer_mentions_any_marker(answer=answer, markers=markers):
+                        missing_reflection.append(cat)
+                if missing_reflection:
+                    reasons.append("missing_category_reflection")
+
+        # Skills list noise: when the question isn't about skills/tooling, block
+        # comma-heavy skills dumps.
+        if not _is_skills_question(question):
+            if _looks_like_skills_list(answer):
+                reasons.append("skills_list_noise")
 
         # Token checks.
         primary = routed_categories[0] if routed_categories else None
@@ -1331,6 +1509,7 @@ def chat(
         is_yes_no_question=is_yes_no,
     )
     passed, failure_reasons = _quality_gate_validate(
+        question=standalone_question,
         synthesis=synthesis,
         chunks=chunks,
         routed_categories=routed_categories,
@@ -1356,6 +1535,7 @@ def chat(
             is_yes_no_question=is_yes_no,
         )
         passed2, failure_reasons2 = _quality_gate_validate(
+            question=standalone_question,
             synthesis=synthesis_retry,
             chunks=chunks,
             routed_categories=routed_categories,
