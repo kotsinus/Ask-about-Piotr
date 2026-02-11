@@ -187,8 +187,12 @@ async def test_evidence_and_sources_include_only_used_chunks(
             return chunks
 
         class _StubSynthesis:
-            answer = "Uses only chunk 1"
-            why_this_matters = "Test"
+            answer = (
+                "- Chunk 1 (used)\n"
+                "- Chunk 1 is the only evidence I used\n\n"
+                "Short synthesis."
+            )
+            why_this_matters = "It matters because the chunk evidence supports this answer."
             confidence = Confidence.medium
             confidence_reason = None
             used_chunk_indices = [1]

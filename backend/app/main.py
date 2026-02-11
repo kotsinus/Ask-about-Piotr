@@ -121,6 +121,124 @@ _ACTION_VERBS = (
 )
 
 
+_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "been",
+    "but",
+    "by",
+    "did",
+    "do",
+    "does",
+    "for",
+    "from",
+    "had",
+    "has",
+    "have",
+    "how",
+    "i",
+    "if",
+    "in",
+    "is",
+    "it",
+    "its",
+    "my",
+    "of",
+    "on",
+    "or",
+    "our",
+    "she",
+    "so",
+    "that",
+    "the",
+    "their",
+    "them",
+    "then",
+    "there",
+    "these",
+    "they",
+    "this",
+    "to",
+    "was",
+    "were",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+    "why",
+    "with",
+    "you",
+    "your",
+}
+
+
+def _tokenize(text: str) -> set[str]:
+    # Keep it simple and deterministic: alphanumerics and apostrophes.
+    tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9'\-]{1,}", text or "")
+    out: set[str] = set()
+    for t in tokens:
+        lowered = t.lower().strip("-'")
+        if len(lowered) < 3:
+            continue
+        if lowered in _STOPWORDS:
+            continue
+        out.add(lowered)
+    return out
+
+
+def _intent_tokens(question: str) -> set[str]:
+    # Generic intent approximation: salient tokens in the question.
+    # (No domain logic; just a stable token set.)
+    return _tokenize(question)
+
+
+def _chunk_token_overlap(*, intent: set[str], chunk_text: str) -> int:
+    if not intent:
+        return 0
+    chunk_tokens = _tokenize(chunk_text)
+    return len(intent.intersection(chunk_tokens))
+
+
+def _filter_chunks_by_intent(*, chunks: list, intent: set[str]) -> tuple[list, dict]:
+    """Intent-aligned evidence filtering.
+
+    Generic policy:
+    - If we have any overlap>0 chunk, we demote/drop overlap==0 chunks.
+    - Never drop to zero; keep at least 2 chunks when available.
+    """
+
+    if not chunks or not intent:
+        return (list(chunks or []), {"intent_tokens_count": len(intent), "dropped": 0})
+
+    scored: list[tuple[int, int, object]] = []
+    for idx, c in enumerate(chunks):
+        overlap = _chunk_token_overlap(intent=intent, chunk_text=str(getattr(c, "content", "") or ""))
+        scored.append((idx, overlap, c))
+
+    max_overlap = max((ov for _, ov, _ in scored), default=0)
+    if max_overlap <= 0:
+        # Can't reliably filter; keep original.
+        return (list(chunks), {"intent_tokens_count": len(intent), "dropped": 0})
+
+    # Keep all overlap>0.
+    kept = [c for _, ov, c in scored if ov > 0]
+    dropped = len(chunks) - len(kept)
+
+    # If filtering is too aggressive, keep the best remaining chunks to reach 2.
+    if len(kept) < 2 and len(chunks) >= 2:
+        remaining = [c for _, ov, c in scored if ov <= 0]
+        kept = [*kept, *remaining[: (2 - len(kept))]]
+        dropped = len(chunks) - len(kept)
+
+    return (kept, {"intent_tokens_count": len(intent), "dropped": int(max(0, dropped))})
+
+
 def _count_tokens(text: str, tokens: tuple[str, ...]) -> int:
     lowered = (text or "").lower()
     return sum(1 for t in tokens if t in lowered)
@@ -212,6 +330,47 @@ def _answer_starts_with_yes_no(answer: str) -> bool:
     return bool(re.match(r"^[-–—]\s*(yes|no)\b", first, flags=re.IGNORECASE))
 
 
+def _parse_answer_bullets(answer: str) -> list[str]:
+    bullets: list[str] = []
+    for ln in (answer or "").splitlines():
+        stripped = ln.strip()
+        if stripped.startswith("-"):
+            bullet = re.sub(r"^[-–—]\s*", "", stripped).strip()
+            if bullet:
+                bullets.append(bullet)
+    return bullets
+
+
+def _why_off_topic(*, why: str, intent: set[str], bullets: list[str]) -> bool:
+    tokens = _tokenize(why)
+    if not tokens:
+        return True
+    anchor = set(intent)
+    for b in bullets or []:
+        anchor |= _tokenize(b)
+    if not anchor:
+        return False
+    return len(tokens.intersection(anchor)) <= 0
+
+
+def _bullets_have_evidence_support(*, bullets: list[str], evidence_chunks: list) -> bool:
+    if not bullets:
+        return False
+    if not evidence_chunks:
+        return False
+    chunk_tokens = [
+        _tokenize(str(getattr(c, "content", "") or "")) for c in (evidence_chunks or [])
+    ]
+    for b in bullets:
+        bt = _tokenize(b)
+        if not bt:
+            return False
+        # At least one evidence chunk must share a non-trivial token.
+        if not any(len(bt.intersection(ct)) > 0 for ct in chunk_tokens):
+            return False
+    return True
+
+
 def _quality_gate_validate(
     *,
     synthesis,
@@ -219,6 +378,7 @@ def _quality_gate_validate(
     routed_categories: list[Category],
     per_category_provided_counts: dict[str, int],
     is_yes_no_question: bool,
+    intent_tokens: set[str],
 ) -> tuple[bool, list[str]]:
     reasons: list[str] = []
     answer = str(getattr(synthesis, "answer", "") or "")
@@ -236,6 +396,38 @@ def _quality_gate_validate(
 
         if is_laconic_answer(answer, refusal=refusal):
             reasons.append("laconic_answer")
+
+        bullets = _parse_answer_bullets(answer)
+        if not bullets:
+            reasons.append("missing_fact_bullets")
+
+        # Global rule: never allow Yes/No bullets.
+        if _answer_starts_with_yes_no(answer):
+            reasons.append("yes_no_bullet_disallowed")
+
+        # Intent alignment: require that each bullet overlaps with intent tokens
+        # when we have an intent signal.
+        if intent_tokens:
+            for b in bullets:
+                if len(_tokenize(b).intersection(intent_tokens)) <= 0:
+                    reasons.append("bullet_off_intent")
+                    break
+
+        # Bidirectional grounding check: every bullet must be supported by at
+        # least one used evidence chunk.
+        used_chunks = []
+        for idx in used:
+            if isinstance(idx, int) and 0 <= idx < len(chunks):
+                used_chunks.append(chunks[idx])
+        if used_chunks and bullets:
+            if not _bullets_have_evidence_support(bullets=bullets, evidence_chunks=used_chunks):
+                reasons.append("bullet_not_justified_by_evidence")
+
+        # Why-this-matters alignment: must be a consequence of bullet facts and
+        # relevant to the question intent; must not drift into unrelated domains.
+        why = str(getattr(synthesis, "why_this_matters", "") or "")
+        if _why_off_topic(why=why, intent=intent_tokens, bullets=bullets):
+            reasons.append("why_off_topic")
 
         # Yes/No prefix correctness: if the question is NOT yes/no, the answer
         # must not start with a Yes/No bullet.
@@ -1095,6 +1287,18 @@ def chat(
         if key:
             per_category_provided_counts[key] = per_category_provided_counts.get(key, 0) + 1
 
+    intent = _intent_tokens(standalone_question)
+    chunks, intent_filter_meta = _filter_chunks_by_intent(chunks=list(chunks), intent=intent)
+    if multi_enabled:
+        logger.info(
+            "chat_evidence_intent_filter",
+            extra={
+                "intent_tokens_count": int(intent_filter_meta.get("intent_tokens_count", 0)),
+                "dropped": int(intent_filter_meta.get("dropped", 0)),
+                "final_chunk_count": int(len(chunks)),
+            },
+        )
+
     synthesis = synthesize_answer(
         standalone_question,
         chunks,
@@ -1111,6 +1315,7 @@ def chat(
         routed_categories=routed_categories,
         per_category_provided_counts=per_category_provided_counts,
         is_yes_no_question=is_yes_no,
+        intent_tokens=intent,
     )
 
     retry_attempted = False
@@ -1134,6 +1339,7 @@ def chat(
             routed_categories=routed_categories,
             per_category_provided_counts=per_category_provided_counts,
             is_yes_no_question=is_yes_no,
+            intent_tokens=intent,
         )
         if passed2:
             synthesis = synthesis_retry

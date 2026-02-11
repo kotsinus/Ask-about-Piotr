@@ -356,6 +356,26 @@ def synthesize_answer(
     # Deterministic binding: keep the yes/no classification stable across retries.
     system_prompt += f"\n\nQuestion yes/no classification (server): {'YES' if yn else 'NO'}\n"
 
+    # Evidence-first synthesis constraints (anti post-hoc grounding).
+    system_prompt += (
+        "\n\nEVIDENCE-FIRST ORDER (HARD RULE):\n"
+        "You MUST follow this order:\n"
+        "1) Read the evidence.\n"
+        "2) Extract ONLY explicit facts stated in the evidence.\n"
+        "3) Write answer bullets ONLY from those extracted facts.\n"
+        "4) Do NOT add inferred, generic, or career-summary facts.\n\n"
+        "SELF-CHECK (HARD RULE):\n"
+        "- If a fact cannot be directly pointed to in the evidence text, omit it.\n\n"
+        "DO NOT (HARD BANS):\n"
+        "- Restate generic career summaries or vague claims.\n"
+        "- Infer education from experience.\n"
+        "- Use phrases like 'my background includes' unless the evidence explicitly states it.\n"
+        "- Output 'Yes' or 'No' as a bullet.\n"
+        "- Output standalone 'Yes' or 'No'.\n\n"
+        "If the question is yes/no, answer it in the FINAL synthesis sentence (after the bullets) as 'Yes, ...' or 'No, ...'.\n"
+        "Do NOT use 'Yes'/'No' in bullets.\n"
+    )
+
     # Bind category hints at system level to reduce model guessing/drift.
     if style_hint:
         system_prompt += f"\n\nStyle hint:\n{style_hint}\n"
@@ -369,6 +389,7 @@ def synthesize_answer(
             "- Do NOT output generic statements; every bullet must tie to evidence.\n"
             "- Ensure used_chunk_indices lists ONLY indices you actually relied on.\n"
             "- If evidence groups are present, use at least one item from each relevant group when possible.\n"
+            "- If the evidence contains an explicit list of items, enumerate them in the bullets (up to 6).\n"
         )
     context_block = ""
     if conversation_messages:
