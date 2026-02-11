@@ -365,7 +365,17 @@ def _extract_markers_from_text(text: str) -> list[str]:
     acronyms = re.findall(r"\b[A-Z]{2,6}\b", raw)
     camel = re.findall(r"\b[A-Z][a-z]+[A-Z][A-Za-z0-9]+\b", raw)
 
-    candidates = [*proper, *camel, *acronyms]
+    # Mixed-case short tokens (often degrees like "MSc"/"PhD" or system nicknames).
+    # Heuristic: token contains both uppercase and lowercase and is short.
+    mixed = re.findall(r"\b[A-Za-z0-9]{2,8}\b", raw)
+    mixed_case: list[str] = []
+    for t in mixed:
+        if any(ch.isupper() for ch in t) and any(ch.islower() for ch in t):
+            # Avoid scooping up ordinary English words too aggressively.
+            if len(t) <= 5 or sum(1 for ch in t if ch.isupper()) >= 2:
+                mixed_case.append(t)
+
+    candidates = [*proper, *camel, *acronyms, *mixed_case]
     if not candidates:
         return []
 
@@ -433,6 +443,26 @@ def _answer_mentions_any_marker(*, answer: str, markers: list[str]) -> bool:
         if needle.lower() in lowered:
             return True
     return False
+
+
+def _drop_skills_core_chunks_if_offtopic(*, chunks: list, question: str) -> list:
+    """Prevent skills-only cards from polluting non-skills questions.
+
+    This is a coarse but effective filter; it is applied only when it would not
+    drop evidence to zero.
+    """
+
+    if not chunks:
+        return []
+    if _is_skills_question(question):
+        return list(chunks)
+
+    def _is_skills_card_id(card_id: str) -> bool:
+        cid = str(card_id or "").strip().lower()
+        return cid == "skills-core" or cid.startswith("skills-")
+
+    filtered = [c for c in chunks if not _is_skills_card_id(getattr(c, "card_id", ""))]
+    return filtered if filtered else list(chunks)
 
 
 def _is_yes_no_question(question: str) -> bool:
@@ -589,8 +619,8 @@ def _quality_gate_validate(
             if _answer_starts_with_yes_no(answer):
                 reasons.append("unexpected_yes_no_prefix")
 
-        # Category coverage: if exactly 2 routed cats and both had evidence provided,
-        # require that used indices cover both.
+        # Category coverage: for 2 or 3 routed categories, if a routed category
+        # had any evidence provided, require that used indices cover it.
         routed = [str(c.value) for c in (routed_categories or [])]
         if has_provenance and len(routed) >= 2:
             # General rule (2 or 3 categories): if a routed category had any
@@ -1487,6 +1517,9 @@ def chat(
 
     intent = _intent_tokens(standalone_question)
     chunks, intent_filter_meta = _filter_chunks_by_intent(chunks=list(chunks), intent=intent)
+
+    # Additional general guardrail: keep skills-only cards out of non-skills questions.
+    chunks = _drop_skills_core_chunks_if_offtopic(chunks=chunks, question=standalone_question)
     if multi_enabled:
         logger.info(
             "chat_evidence_intent_filter",
