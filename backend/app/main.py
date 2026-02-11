@@ -293,6 +293,10 @@ def _is_skills_question(question: str) -> bool:
     keywords = (
         "skills",
         "skill",
+        "competencies",
+        "competency",
+        "strengths",
+        "strength",
         "tech stack",
         "stack",
         "tools",
@@ -561,6 +565,7 @@ def _quality_gate_validate(
     chunks,
     routed_categories: list[Category],
     per_category_provided_counts: dict[str, int],
+    category_budgets: dict[str, int] | None,
     is_yes_no_question: bool,
     intent_tokens: set[str],
 ) -> tuple[bool, list[str]]:
@@ -619,36 +624,79 @@ def _quality_gate_validate(
             if _answer_starts_with_yes_no(answer):
                 reasons.append("unexpected_yes_no_prefix")
 
-        # Category coverage: for 2 or 3 routed categories, if a routed category
-        # had any evidence provided, require that used indices cover it.
+        # Category coverage enforcement (no exceptions):
+        # For multi-intent questions (2 or 3 routed categories), require that the
+        # set of categories implied by used evidence matches routed categories.
         routed = [str(c.value) for c in (routed_categories or [])]
         if has_provenance and len(routed) >= 2:
-            # General rule (2 or 3 categories): if a routed category had any
-            # evidence provided, the model must use evidence from that category.
-            required = {
-                c for c in routed if int(per_category_provided_counts.get(c, 0) or 0) > 0
-            }
-            if len(required) >= 2:
-                used_cats = set(_derive_used_categories(used_indices=used, chunks=chunks))
-                if not required.issubset(used_cats):
-                    reasons.append("missing_category_coverage")
+            routed_set = {c for c in routed if str(c).strip()}
+            used_cats = set(_derive_used_categories(used_indices=used, chunks=chunks))
 
-                # Reflection gate: answer must include at least one marker derived
-                # from evidence for each required category.
-                markers_by_cat = _extract_markers_by_category(
-                    chunks=chunks, required_categories=required
-                )
-                missing_reflection: list[str] = []
-                for cat in sorted(required):
-                    markers = markers_by_cat.get(cat) or []
-                    # If we couldn't extract any marker for a category, we can't
-                    # enforce reflection reliably.
-                    if not markers:
+            if used_cats != routed_set:
+                # Keep legacy reason name for logs/tests.
+                reasons.append("missing_category_coverage")
+
+            # Reflection gate (2nd level): for each routed category, require that
+            # the answer mentions at least one evidence-derived marker.
+            markers_by_cat = _extract_markers_by_category(
+                chunks=chunks, required_categories=routed_set
+            )
+            missing_reflection: list[str] = []
+            for cat in sorted(routed_set):
+                markers = markers_by_cat.get(cat) or []
+                # If we couldn't extract any marker for a category, we can't
+                # enforce reflection reliably.
+                if not markers:
+                    continue
+                if not _answer_mentions_any_marker(answer=answer, markers=markers):
+                    missing_reflection.append(cat)
+            if missing_reflection:
+                reasons.append("missing_category_reflection")
+
+            # Proportionality gate (3rd level): prevent one category from taking
+            # over almost all bullets in a multi-category answer.
+            bullets = _parse_answer_bullets(answer)
+            if bullets:
+                budgets = {str(k): int(v) for k, v in (category_budgets or {}).items()}
+                # Default missing budgets to 1 to keep the logic stable.
+                for cat in routed_set:
+                    budgets.setdefault(cat, 1)
+
+                def _bullet_category(bullet: str) -> str | None:
+                    best_cat = None
+                    best_hits = 0
+                    for cat in routed_set:
+                        markers = markers_by_cat.get(cat) or []
+                        hits = 0
+                        lowered = bullet.lower()
+                        for m in markers:
+                            mm = (m or "").strip()
+                            if not mm:
+                                continue
+                            if mm.lower() in lowered:
+                                hits += 1
+                        if hits > best_hits:
+                            best_hits = hits
+                            best_cat = cat
+                    return best_cat if best_hits > 0 else None
+
+                bullet_counts: dict[str, int] = {cat: 0 for cat in routed_set}
+                assigned_total = 0
+                for b in bullets:
+                    cat = _bullet_category(b)
+                    if not cat:
                         continue
-                    if not _answer_mentions_any_marker(answer=answer, markers=markers):
-                        missing_reflection.append(cat)
-                if missing_reflection:
-                    reasons.append("missing_category_reflection")
+                    bullet_counts[cat] = bullet_counts.get(cat, 0) + 1
+                    assigned_total += 1
+
+                if assigned_total >= 3 and len(routed_set) >= 2:
+                    dominant_cat = max(
+                        routed_set,
+                        key=lambda c: (bullet_counts.get(c, 0), budgets.get(c, 1), c),
+                    )
+                    dominant_share = (bullet_counts.get(dominant_cat, 0) / float(assigned_total or 1))
+                    if dominant_share > 0.80:
+                        reasons.append("proportionality_imbalance")
 
         # Skills list noise: when the question isn't about skills/tooling, block
         # comma-heavy skills dumps.
@@ -1547,6 +1595,7 @@ def chat(
         chunks=chunks,
         routed_categories=routed_categories,
         per_category_provided_counts=per_category_provided_counts,
+        category_budgets=category_budgets if multi_enabled else None,
         is_yes_no_question=is_yes_no,
         intent_tokens=intent,
     )
@@ -1573,6 +1622,7 @@ def chat(
             chunks=chunks,
             routed_categories=routed_categories,
             per_category_provided_counts=per_category_provided_counts,
+            category_budgets=category_budgets if multi_enabled else None,
             is_yes_no_question=is_yes_no,
             intent_tokens=intent,
         )
