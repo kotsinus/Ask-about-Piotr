@@ -382,19 +382,22 @@ def test_chat_multi_category_invalid_json_falls_back_to_classifier_and_uses_orig
     )
 
     # Retrieval must still use rewritten question (current behavior).
-    def _retrieve_for_category(
+    def _retrieve_candidates_for_category(
         question: str,
         category: str | Category,
+        *,
         budget: int,
+        oversample_factor: int,
         conversation_topic: str | None = None,
         preferred_sections=None,
         must_include_cards=None,
-        oversample_factor=None,
     ):
         assert question == "REWRITTEN"
         return []
 
-    monkeypatch.setattr("app.main.retrieve_for_category", _retrieve_for_category)
+    monkeypatch.setattr(
+        "app.main.retrieve_candidates_for_category", _retrieve_candidates_for_category
+    )
     monkeypatch.setattr("app.main.merge_dedup_and_cap", lambda **kwargs: [])
 
     monkeypatch.setattr(
@@ -448,7 +451,7 @@ def test_chat_multi_category_clamps_max_categories_and_total_budget_and_allows_s
     )
     monkeypatch.setattr("app.main.get_request_id", lambda: "req-1")
     monkeypatch.setattr("app.main.rewrite_question", lambda q, messages=None: q)
-    monkeypatch.setattr("app.main.retrieve_for_category", lambda *a, **k: [])
+    monkeypatch.setattr("app.main.retrieve_candidates_for_category", lambda *a, **k: [])
     monkeypatch.setattr("app.main.merge_dedup_and_cap", lambda **kwargs: [])
     monkeypatch.setattr(
         "app.main.synthesize_answer",

@@ -223,6 +223,7 @@ def synthesize_answer(
     category: str | None = None,
     conversation_topic: str | None = None,
     conversation_messages: list[dict] | None = None,
+    evidence_group_budgets: dict[str, int] | None = None,
     *,
     temperature: float | None = None,
     strict: bool = False,
@@ -245,7 +246,7 @@ def synthesize_answer(
     if not settings.openai_api_key:
         return _fallback_synthesis(chunks)
 
-    evidence_block = _build_evidence_block(chunks)
+    evidence_block = _build_evidence_block(chunks, group_budgets=evidence_group_budgets)
 
     STYLE_HINTS = {
         "Hands-on engineering": (
@@ -353,6 +354,13 @@ def synthesize_answer(
         f'"{REFUSAL_MESSAGE}"'
     )
 
+    # Multi-category constraint (general): if multiple evidence groups are provided,
+    # used_chunk_indices must include at least one index from each non-empty group.
+    system_prompt += (
+        "\n\nMulti-category evidence coverage rule:\n"
+        "- If you were given evidence groups for multiple categories, use at least one chunk index from each non-empty group in used_chunk_indices."
+    )
+
     # Deterministic binding: keep the yes/no classification stable across retries.
     system_prompt += f"\n\nQuestion yes/no classification (server): {'YES' if yn else 'NO'}\n"
 
@@ -388,7 +396,7 @@ def synthesize_answer(
             "- Follow the facts-first bullet format exactly.\n"
             "- Do NOT output generic statements; every bullet must tie to evidence.\n"
             "- Ensure used_chunk_indices lists ONLY indices you actually relied on.\n"
-            "- If evidence groups are present, use at least one item from each relevant group when possible.\n"
+            "- If evidence groups are present, you MUST use at least one item from each non-empty group in used_chunk_indices.\n"
             "- If the evidence contains an explicit list of items, enumerate them in the bullets (up to 6).\n"
         )
     context_block = ""
@@ -591,7 +599,9 @@ def _facts_first_from_sentences(sentences: list[str]) -> tuple[list[str], list[s
     return (facts[:6], synthesis[:2])
 
 
-def _build_evidence_block(chunks: list[RetrievedChunk]) -> str:
+def _build_evidence_block(
+    chunks: list[RetrievedChunk], *, group_budgets: dict[str, int] | None = None
+) -> str:
     """Pack evidence for synthesis.
 
     - If provenance metadata exists (best_origin_category/origin_categories), group
@@ -633,7 +643,26 @@ def _build_evidence_block(chunks: list[RetrievedChunk]) -> str:
     out_lines: list[str] = ["Evidence groups (global indices):", ""]
     for cat in order:
         items = sorted(groups.get(cat, []), key=lambda t: t[0])
-        out_lines.append(f"Category: {cat} | provided {len(items)}")
+
+        budget = None
+        if group_budgets and cat in group_budgets:
+            try:
+                budget = int(group_budgets.get(cat))
+            except Exception:
+                budget = None
+        if budget is None:
+            # Fallback: infer from chunk metadata when the caller didn't provide budgets.
+            inferred = [
+                int(getattr(chunk, "origin_budget", 0) or 0)
+                for _, chunk in items
+                if int(getattr(chunk, "origin_budget", 0) or 0) > 0
+            ]
+            budget = max(inferred) if inferred else None
+
+        budget_part = f"budget {budget}" if budget is not None else "budget ?"
+        out_lines.append(
+            f"Category: {cat} | {budget_part} | provided {len(items)}"
+        )
         for idx, chunk in items:
             provenance = ""
             origins = getattr(chunk, "origin_categories", None) or []

@@ -54,6 +54,9 @@ class RetrievedChunk(BaseModel):
     adjusted_distance: float | None = None
     origin_categories: list[str] | None = None
     best_origin_category: str | None = None
+    # Single-category provenance (general mechanism).
+    # This is the routed category that produced this chunk in the per-category loop.
+    origin_category: str | None = None
     origin_budget: int | None = None
     pinned: bool = False
 
@@ -469,6 +472,7 @@ def _retrieve_impl(
                 adjusted_distance=float(adjusted),
                 origin_categories=[routed_category_str] if routed_category_str else None,
                 best_origin_category=routed_category_str if routed_category_str else None,
+                origin_category=routed_category_str if routed_category_str else None,
             )
         )
     return out
@@ -520,16 +524,66 @@ def retrieve_for_category(
     # rewrite (does not affect routing; helps retrieval separation).
     query = f"{question}\n\nFocus category: {_norm_category(category)}"
 
-    out = _retrieve_impl(
+    # v1 behavior (plan): retrieve a larger candidate pool (budget * oversample_factor)
+    # and then select the top `budget` chunks from it.
+    settings = get_settings()
+    factor = int(oversample_factor) if oversample_factor is not None else _oversample_factor_for_category(
+        settings=settings,
+        routed_category=category,
+    )
+    factor = max(1, factor)
+    candidate_limit = max(budget * factor, budget)
+
+    candidates = _retrieve_impl(
         question=query,
-        limit=budget,
+        limit=candidate_limit,
         conversation_topic=conversation_topic,
         routed_category=category,
         preferred_sections=preferred_sections,
         card_id_filter=must_include_cards,
-        oversample_factor=oversample_factor,
+        # Candidate pool size already encodes the oversample factor.
+        oversample_factor=1,
     )
+    selected = candidates[:budget]
+    for c in selected:
+        c.origin_budget = int(budget)
+    return selected
 
+
+def retrieve_candidates_for_category(
+    question: str,
+    category: str | Category,
+    *,
+    budget: int,
+    oversample_factor: int,
+    conversation_topic: str | None = None,
+    preferred_sections: list[str] | None = None,
+    must_include_cards: list[str] | None = None,
+) -> list[RetrievedChunk]:
+    """Return the raw candidate pool for a category retrieval run.
+
+    This implements the plan's per-category retrieval loop semantics:
+    - candidate pool size = budget * oversample_factor
+    - caller then selects top `budget` chunks from the returned list
+    """
+
+    budget = max(0, int(budget))
+    if budget <= 0:
+        return []
+    oversample_factor = max(1, int(oversample_factor))
+    candidate_limit = max(budget * oversample_factor, budget)
+
+    query = f"{question}\n\nFocus category: {_norm_category(category)}"
+    out = _retrieve_impl(
+        question=query,
+        limit=candidate_limit,
+        conversation_topic=conversation_topic,
+        routed_category=category,
+        preferred_sections=preferred_sections,
+        card_id_filter=must_include_cards,
+        # Candidate pool size already encodes the oversample factor.
+        oversample_factor=1,
+    )
     for c in out:
         c.origin_budget = int(budget)
     return out
@@ -643,6 +697,16 @@ def _cap_and_evict_with_category_coverage(
 
     kept = list(chunks)
 
+    def _covers_category(c: RetrievedChunk, cat: str) -> bool:
+        if not cat:
+            return False
+        if str(getattr(c, "origin_category", "") or "") == cat:
+            return True
+        if str(getattr(c, "best_origin_category", "") or "") == cat:
+            return True
+        origins = getattr(c, "origin_categories", None) or []
+        return cat in {str(o) for o in origins}
+
     def _score(c: RetrievedChunk) -> float:
         return float(
             c.adjusted_distance
@@ -653,16 +717,30 @@ def _cap_and_evict_with_category_coverage(
     while len(kept) > max_total_chunks:
         counts: dict[str, int] = {}
         for c in kept:
-            cat = str(c.best_origin_category or "")
-            counts[cat] = counts.get(cat, 0) + 1
+            # A chunk may cover multiple categories (dedup collisions). Count it
+            # for each category it can cover so eviction does not break coverage.
+            if required_set:
+                for cat in required_set:
+                    if _covers_category(c, cat):
+                        counts[cat] = counts.get(cat, 0) + 1
+            else:
+                cat = str(c.best_origin_category or "")
+                counts[cat] = counts.get(cat, 0) + 1
 
         removable: list[RetrievedChunk] = []
         for c in kept:
             if c.pinned:
                 continue
-            cat = str(c.best_origin_category or "")
-            if cat in required_set and counts.get(cat, 0) <= 1:
-                continue
+            if required_set:
+                # Never remove the last remaining chunk that covers a required
+                # category.
+                would_break = False
+                for cat in required_set:
+                    if _covers_category(c, cat) and counts.get(cat, 0) <= 1:
+                        would_break = True
+                        break
+                if would_break:
+                    continue
             removable.append(c)
 
         if not removable:
@@ -671,7 +749,9 @@ def _cap_and_evict_with_category_coverage(
 
         # Prefer evicting from over-represented categories.
         def _evict_key(c: RetrievedChunk) -> tuple:
-            cat = str(c.best_origin_category or "")
+            # When coverage is required, approximate the chunk's "primary"
+            # category as its best_origin_category (stable tie-break).
+            cat = str(c.best_origin_category or getattr(c, "origin_category", "") or "")
             return (
                 -(counts.get(cat, 0)),  # higher count first
                 _score(c),  # weaker (higher distance) later; we reverse below
@@ -699,6 +779,8 @@ def merge_dedup_and_cap(
     routed_categories: list[str] | list[Category],
     max_total_chunks: int,
     conversation_topic: str | None = None,
+    per_category_candidates: dict[str, list[RetrievedChunk]] | None = None,
+    category_budgets: dict[str, int] | None = None,
 ) -> list[RetrievedChunk]:
     """Merge + dedup + cap/eviction (with multi-category coverage).
 
@@ -709,6 +791,56 @@ def merge_dedup_and_cap(
     routed_str = [c for c in routed_str if c]
 
     merged = merge_retrieval_results_by_category(per_category_selected)
+
+    # Optional refill step (general): if dedup collisions reduced a category below
+    # its intended budget, refill from that category's candidate pool.
+    if per_category_candidates:
+        budgets = {str(k): int(v) for k, v in (category_budgets or {}).items()}
+        if not budgets:
+            budgets = {
+                str(k): int(len(v or []))
+                for k, v in (per_category_selected or {}).items()
+                if str(k).strip()
+            }
+
+        present_keys = {_dedup_key(c) for c in merged}
+
+        def _cat_count(cat: str) -> int:
+            return sum(1 for c in merged if str(c.best_origin_category or "") == cat)
+
+        # Fill to the budget where possible, without exceeding max_total_chunks.
+        for cat in routed_str:
+            desired = int(budgets.get(cat, 0) or 0)
+            if desired <= 0:
+                continue
+            while _cat_count(cat) < desired and len(merged) < int(max_total_chunks):
+                pool = list(per_category_candidates.get(cat, []) or [])
+                added = False
+                for candidate in pool:
+                    key = _dedup_key(candidate)
+                    if key in present_keys:
+                        continue
+                    merged.append(candidate.model_copy(deep=True))
+                    present_keys.add(key)
+                    added = True
+                    break
+                if not added:
+                    break
+
+        # Keep deterministic ordering after refills.
+        merged.sort(
+            key=lambda c: (
+                float(
+                    c.adjusted_distance
+                    if c.adjusted_distance is not None
+                    else (c.distance if c.distance is not None else 1e9)
+                ),
+                float(c.distance if c.distance is not None else 1e9),
+                str(c.card_id),
+                _norm_section(c.section),
+                int(c.chunk_id or 0),
+            )
+        )
 
     # Coverage constraint (general): if routed categories == 2 and each category
     # had at least one selected chunk, final evidence must include >=1 from each.

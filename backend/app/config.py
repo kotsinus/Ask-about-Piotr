@@ -103,7 +103,9 @@ class Settings:
     # Retrieval oversampling policy (general mechanism):
     # - default used for per-category retrieval when caller does not override.
     # - optional per-category overrides by canonical category string.
-    multi_category_oversample_default: int = 8
+    # Default oversampling for per-category retrieval.
+    # Plan v1 target: keep it moderate to reduce noisy candidates.
+    multi_category_oversample_default: int = 5
     multi_category_oversample_by_category: dict[str, int] | None = None
 
     # OpenAI SDK behavior controls (keep defaults safe for local dev).
@@ -230,10 +232,10 @@ def get_settings() -> Settings:
     # Retrieval oversampling policy (general mechanism).
     try:
         multi_category_oversample_default = int(
-            os.getenv("MULTI_CATEGORY_OVERSAMPLE_DEFAULT", "8")
+            os.getenv("MULTI_CATEGORY_OVERSAMPLE_DEFAULT", "5")
         )
     except Exception:
-        multi_category_oversample_default = 8
+        multi_category_oversample_default = 5
     multi_category_oversample_default = max(1, multi_category_oversample_default)
 
     raw_oversample_by_category = _parse_json_object(

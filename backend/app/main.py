@@ -61,6 +61,7 @@ from app.retrieval import (
     merge_dedup_and_cap,
     merge_retrieval_results_by_category,
     retrieve,
+    retrieve_candidates_for_category,
     retrieve_for_category,
 )
 from app.schemas import (
@@ -1172,6 +1173,8 @@ def chat(
     else:
         # Multi-category retrieval: per-category runs + merge/dedup/cap.
         per_category_selected = {}
+        per_category_candidates: dict[str, list] = {}
+        category_budgets: dict[str, int] = {}
         retrieval_by_category_payload = {
             "max_total_chunks": int(getattr(settings, "multi_category_max_total_chunks", 5) or 5),
             "categories": [],
@@ -1182,15 +1185,29 @@ def chat(
         for item in routing.categories or []:
             cat = item.category
             budget = int(item.budget or 0)
-            selected = retrieve_for_category(
+            cat_key = str(cat.value)
+            category_budgets[cat_key] = int(budget)
+            oversample = int(getattr(settings, "multi_category_oversample_default", 5) or 5)
+            try:
+                mapping = getattr(settings, "multi_category_oversample_by_category", None) or {}
+                if cat_key in mapping:
+                    oversample = int(mapping.get(cat_key))
+            except Exception:
+                oversample = int(getattr(settings, "multi_category_oversample_default", 5) or 5)
+            oversample = max(1, int(oversample))
+
+            candidates = retrieve_candidates_for_category(
                 standalone_question,
                 cat,
-                budget=budget,
+                budget=int(budget),
+                oversample_factor=oversample,
                 conversation_topic=conversation_topic,
             )
+            per_category_candidates[cat_key] = list(candidates)
+            selected = list(candidates)[: max(0, int(budget))]
             # Note: retrieve_for_category already applies per-card cap and section weighting.
             # Invariant: per_category_selected keys are canonical category strings.
-            per_category_selected[str(cat.value)] = list(selected)
+            per_category_selected[cat_key] = list(selected)
 
             logger.info(
                 "chat_retrieve_category",
@@ -1198,7 +1215,7 @@ def chat(
                     "category": str(cat.value),
                     "budget": int(budget),
                     # Internal retrieve already returns the selected list.
-                    "retrieved_count_raw": int(len(selected)),
+                    "retrieved_count_raw": int(len(candidates)),
                     "selected_count": int(len(selected)),
                     "per_card_cap": int(per_card_cap),
                     "section_weighting_enabled": bool(section_weighting_enabled),
@@ -1209,6 +1226,7 @@ def chat(
                     "category": str(cat.value),
                     "budget": int(budget),
                     "selected_count": int(len(selected)),
+                    "retrieved_count_raw": int(len(candidates)),
                 }
             )
 
@@ -1235,6 +1253,8 @@ def chat(
             routed_categories=[c.category for c in (routing.categories or [])],
             max_total_chunks=max_total_chunks,
             conversation_topic=conversation_topic,
+            per_category_candidates=per_category_candidates,
+            category_budgets=category_budgets,
         )
         chunks = list(merged_final)
         pinned_cards = sorted({str(c.card_id) for c in chunks if bool(getattr(c, "pinned", False))})
@@ -1307,6 +1327,7 @@ def chat(
         conversation_messages=[message.model_dump() for message in request.messages]
         if request.messages
         else None,
+        evidence_group_budgets=category_budgets if multi_enabled else None,
         is_yes_no_question=is_yes_no,
     )
     passed, failure_reasons = _quality_gate_validate(
@@ -1329,6 +1350,7 @@ def chat(
             conversation_messages=[message.model_dump() for message in request.messages]
             if request.messages
             else None,
+            evidence_group_budgets=category_budgets if multi_enabled else None,
             temperature=0,
             strict=True,
             is_yes_no_question=is_yes_no,
