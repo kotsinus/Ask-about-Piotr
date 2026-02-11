@@ -59,6 +59,16 @@ class DebugRetrievalItem(BaseModel):
     distance: float
 
 
+class RoutingCategory(BaseModel):
+    category: str
+    confidence: Confidence
+    budget: int
+
+
+class RoutingDebug(BaseModel):
+    categories: list[RoutingCategory]
+
+
 class ConversationContext(BaseModel):
     conversation_id: str | None = Field(
         None, description="Client-provided conversation identifier."
@@ -96,6 +106,8 @@ class ChatResponse(BaseModel):
     evidence: list[EvidenceItem]
     sources: list[SourceRef]
     debug_retrieval: list[DebugRetrievalItem] | None = None
+    # Debug-only (flagged via query param); optional so existing clients don't break.
+    routing: RoutingDebug | None = None
     confidence: Confidence
     confidence_reason: str | None = None
     context: ConversationContext | None = None

@@ -76,6 +76,17 @@ class Settings:
     geoip_provider: str
     geoip_url: str | None
 
+    # Multi-category routing + per-category retrieval (flag-gated)
+    #
+    # Defaults are set here so unit tests can build Settings() directly without
+    # needing to specify these fields.
+    multi_category_retrieval_enabled: bool = False
+    multi_category_rollout_percent: int = 0
+    multi_category_max_categories: int = 2
+    multi_category_max_total_chunks: int = 5
+    multi_category_allow_six_chunks: bool = False
+    multi_category_intent_budget_policy: str = "intent_rules_v1"
+
     # OpenAI SDK behavior controls (keep defaults safe for local dev).
     openai_timeout_s: float = 60.0
     openai_max_retries: int = 2
@@ -158,6 +169,42 @@ def get_settings() -> Settings:
         retrieval_per_card_cap = 2
     retrieval_per_card_cap = max(1, retrieval_per_card_cap)
 
+    # Multi-category routing + per-category retrieval.
+    multi_category_retrieval_enabled = _parse_bool(
+        os.getenv("MULTI_CATEGORY_RETRIEVAL_ENABLED"), default=False
+    )
+    try:
+        multi_category_rollout_percent = int(
+            os.getenv("MULTI_CATEGORY_ROLLOUT_PERCENT", "0")
+        )
+    except Exception:
+        multi_category_rollout_percent = 0
+    multi_category_rollout_percent = max(0, min(100, multi_category_rollout_percent))
+
+    try:
+        multi_category_max_categories = int(
+            os.getenv("MULTI_CATEGORY_MAX_CATEGORIES", "2")
+        )
+    except Exception:
+        multi_category_max_categories = 2
+    multi_category_max_categories = max(1, min(3, multi_category_max_categories))
+
+    try:
+        multi_category_max_total_chunks = int(
+            os.getenv("MULTI_CATEGORY_MAX_TOTAL_CHUNKS", "5")
+        )
+    except Exception:
+        multi_category_max_total_chunks = 5
+    multi_category_max_total_chunks = max(1, min(10, multi_category_max_total_chunks))
+
+    multi_category_allow_six_chunks = _parse_bool(
+        os.getenv("MULTI_CATEGORY_ALLOW_SIX_CHUNKS"), default=False
+    )
+    multi_category_intent_budget_policy = (
+        os.getenv("MULTI_CATEGORY_INTENT_BUDGET_POLICY", "intent_rules_v1")
+        or "intent_rules_v1"
+    ).strip()
+
     # Logging metadata
     ip_hash_salt = os.getenv("IP_HASH_SALT", "")
     if app_env in {"prod", "production"} and not ip_hash_salt.strip():
@@ -205,6 +252,12 @@ def get_settings() -> Settings:
         retrieval_max_distance=retrieval_max_distance,
         retrieval_distance_delta=retrieval_distance_delta,
         retrieval_per_card_cap=retrieval_per_card_cap,
+        multi_category_retrieval_enabled=multi_category_retrieval_enabled,
+        multi_category_rollout_percent=multi_category_rollout_percent,
+        multi_category_max_categories=multi_category_max_categories,
+        multi_category_max_total_chunks=multi_category_max_total_chunks,
+        multi_category_allow_six_chunks=multi_category_allow_six_chunks,
+        multi_category_intent_budget_policy=multi_category_intent_budget_policy,
         ip_hash_salt=ip_hash_salt,
         trusted_proxy_cidrs=trusted_proxy_cidrs,
         interaction_log_include_llm_context=interaction_log_include_llm_context,

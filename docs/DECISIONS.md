@@ -50,3 +50,16 @@ This is an explicit reliability decision.
 
 References: [`backend/app/main.py`](backend/app/main.py:73), [`backend/app/interaction_logging.py`](backend/app/interaction_logging.py:61).
 
+## 7) Multi-category routing + per-category retrieval is flag-gated and budgeted deterministically
+
+When enabled, the system can route a single user question into multiple categories and retrieve evidence per category.
+
+Key decisions:
+
+- Routing is computed from the **original** user question (not the rewritten question).
+- Budgets are assigned server-side via a versioned deterministic policy (`intent_rules_v1`) and then clamped.
+- Retrieval runs per category with per-category per-card caps, then results are merged/deduped while preserving provenance.
+- If routing fails or returns invalid output, the system falls back to the existing heuristic classifier.
+
+References: [`backend/app/llm.py`](backend/app/llm.py:103), [`backend/app/main.py`](backend/app/main.py:373), [`backend/app/retrieval.py`](backend/app/retrieval.py:48).
+

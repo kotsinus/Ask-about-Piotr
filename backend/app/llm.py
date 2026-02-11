@@ -100,6 +100,95 @@ class SynthesisResult:
     used_chunk_indices: list[int]
 
 
+@dataclass(frozen=True)
+class RoutedCategory:
+    category: Category
+    confidence: Confidence
+    budget: int | None = None
+
+
+@dataclass(frozen=True)
+class RoutingResult:
+    categories: list[RoutedCategory]
+
+
+def route_categories(question: str) -> RoutingResult:
+    """Route a question into 1-3 categories.
+
+    NOTE: This function performs only minimal parsing/validation. Deterministic
+    clamping + budget policy is enforced server-side in `chat()`.
+
+    Contract (LLM JSON output):
+    {
+      "categories": [
+        {"category": "...", "confidence": "High|Medium|Low", "budget": 2},
+        ...
+      ]
+    }
+    """
+
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY is required for routing.")
+
+    allowed_categories = [str(c.value) for c in Category]
+    allowed_norm = {c.strip().lower() for c in allowed_categories}
+
+    system_prompt = (
+        "Classify the question into 1 to 3 categories from this list:\n"
+        + "\n".join(f"- {c}" for c in allowed_categories)
+        + "\n\n"
+        "Rules:\n"
+        "- Return 1 category for single-intent questions, 2 for two-part questions, and 3 only if clearly three-part.\n"
+        "- Confidence must be one of: High, Medium, Low.\n"
+        "- Provide an integer budget per category (>=1). If unsure, choose budgets that sum to 5 for two categories (2+3).\n\n"
+        'Return JSON exactly like: {"categories": [{"category": "...", "confidence": "High", "budget": 2}]}.\n'
+        "Do not add any other keys."
+    )
+
+    response = chat_completions_create_cached(
+        cache_namespace="route_categories",
+        model=settings.router_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": question},
+        ],
+        response_format={"type": "json_object"},
+        temperature=0,
+    )
+
+    content = response.choices[0].message.content or "{}"
+    payload = json.loads(content)
+    raw_categories = payload.get("categories")
+    if not isinstance(raw_categories, list) or not raw_categories:
+        raise ValueError("Router returned no categories")
+
+    parsed: list[RoutedCategory] = []
+    for item in raw_categories:
+        if not isinstance(item, dict):
+            continue
+        raw_category = str(item.get("category", "")).strip()
+        if raw_category.strip().lower() not in allowed_norm:
+            raise ValueError(f"Router returned unknown category: {raw_category}")
+        category = _parse_category(raw_category)
+        confidence = _parse_confidence(str(item.get("confidence", "")))
+        budget_value = item.get("budget")
+        budget: int | None = None
+        if budget_value is not None:
+            try:
+                budget = int(budget_value)
+            except Exception:
+                budget = None
+        parsed.append(
+            RoutedCategory(category=category, confidence=confidence, budget=budget)
+        )
+
+    if not parsed:
+        raise ValueError("Router returned no valid categories")
+
+    return RoutingResult(categories=parsed)
+
+
 def route_category(question: str) -> Category:
     """Route a question into exactly one category using a low-cost model."""
 
@@ -143,6 +232,10 @@ def synthesize_answer(
     category: str | None = None,
     conversation_topic: str | None = None,
     conversation_messages: list[dict] | None = None,
+    routing: RoutingResult | None = None,
+    *,
+    temperature_override: float | None = None,
+    strict_facts_first: bool = False,
 ) -> SynthesisResult:
     """Generate a strict, grounded answer from retrieved chunks."""
 
@@ -161,10 +254,54 @@ def synthesize_answer(
     if not settings.openai_api_key:
         return _fallback_synthesis(chunks)
 
-    evidence_lines = [
-        f"[{idx}] [{chunk.card_id}.{chunk.section}] {chunk.content}"
-        for idx, chunk in enumerate(chunks)
-    ]
+    def _chunk_origin(chunk: RetrievedChunk) -> str:
+        if getattr(chunk, "best_origin_category", None):
+            return str(chunk.best_origin_category)
+        origins = getattr(chunk, "origin_categories", None) or []
+        if origins:
+            return str(origins[0])
+        return ""
+
+    def _format_chunk_line(idx: int, chunk: RetrievedChunk) -> str:
+        origin_categories = getattr(chunk, "origin_categories", None) or []
+        origin_hint = ""
+        if origin_categories:
+            origin_hint = f" | origin_categories={','.join(origin_categories)}"
+        return f"[{idx}] [{chunk.card_id}.{chunk.section}]{origin_hint} {chunk.content}"
+
+    evidence_block: str
+    if routing is not None and len(getattr(routing, "categories", []) or []) > 1:
+        # Group evidence by routed category while preserving global indices.
+        by_category: dict[str, list[tuple[int, RetrievedChunk]]] = {}
+        for idx, chunk in enumerate(chunks):
+            group = _chunk_origin(chunk) or str(chunk.category)
+            by_category.setdefault(group, []).append((idx, chunk))
+
+        routing_order = [str(item.category.value) for item in routing.categories]
+        ordered_categories = [c for c in routing_order if c in by_category]
+        # Append any categories that appear only via dedup/provenance.
+        for cat in sorted(by_category.keys()):
+            if cat not in ordered_categories:
+                ordered_categories.append(cat)
+
+        lines: list[str] = ["Evidence groups (global indices):", ""]
+        budget_by_category = {
+            str(item.category.value): int(item.budget or 0) for item in routing.categories
+        }
+        for cat in ordered_categories:
+            items = by_category.get(cat, [])
+            budget = budget_by_category.get(cat)
+            header = f"Category: {cat}"
+            if budget is not None:
+                header += f" | budget {budget} | provided {len(items)}"
+            lines.append(header)
+            for idx, chunk in items:
+                lines.append(_format_chunk_line(idx, chunk))
+            lines.append("")
+        evidence_block = "\n".join(lines).strip()
+    else:
+        evidence_lines = [_format_chunk_line(idx, chunk) for idx, chunk in enumerate(chunks)]
+        evidence_block = "Evidence:\n" + "\n".join(evidence_lines)
 
     STYLE_HINTS = {
         "Hands-on engineering": (
@@ -247,7 +384,10 @@ def synthesize_answer(
         "- If you use evidence, you MUST list which evidence items were used via their indices.\n\n"
         "Style rules (important):\n"
         "- Write like a person speaking, not like a CV or an essay.\n"
-        "- Use 2 to 6 sentences in the 'answer' field.\n"
+        "- The 'answer' field MUST be facts-first.\n"
+        "  - Start with 'Facts:' on the first line.\n"
+        "  - Then 2 to 6 short bullet points, each starting with '- '.\n"
+        "  - Then one short 'Synthesis:' line (1–2 sentences) that answers the question directly.\n"
         "- Prefer short, direct sentences. Avoid fluff and generic phrases.\n"
         "- Avoid meta-commentary such as: 'This highlights', 'This demonstrates', 'Understanding X is crucial', 'It is important to note'.\n"
         "- Do not restate the question. Do not introduce yourself.\n\n"
@@ -256,7 +396,7 @@ def synthesize_answer(
         "- Start with 'Yes' or 'No' in the answer field.\n"
         "- Then justify using evidence.\n\n"
         "Length constraints:\n"
-        "- The 'answer' field should be between 25 and 90 words unless the refusal message is used.\n\n"
+        "- The 'answer' field should be between 25 and 130 words unless the refusal message is used.\n\n"
         "Return JSON with the following fields only:\n"
         '{"answer", "why_this_matters", "confidence", "confidence_reason", "used_chunk_indices"}.\n'
         "Use confidence values: High, Medium, or Low.\n"
@@ -266,6 +406,14 @@ def synthesize_answer(
         "The refusal message is exactly:\n"
         '"I do not have enough evidence in the provided materials."'
     )
+
+    if strict_facts_first:
+        system_prompt += (
+            "\n\nSTRICT MODE (retry):\n"
+            "- Follow the Facts/Synthesis structure exactly.\n"
+            "- Facts must be concrete and attributable to evidence items.\n"
+            "- Do not output generic filler.\n"
+        )
 
     # Bind category hints at system level to reduce model guessing/drift.
     if style_hint:
@@ -293,8 +441,7 @@ def synthesize_answer(
         + hint_block
         + context_block
         + topic_line
-        + "Evidence:\n"
-        + "\n".join(evidence_lines)
+        + evidence_block
     )
     # NOTE: synthesize_answer is intentionally *not* routed through the local
     # response cache. We run it with a non-zero temperature by default, so
@@ -306,7 +453,9 @@ def synthesize_answer(
             {"role": "user", "content": user_prompt},
         ],
         response_format={"type": "json_object"},
-        temperature=settings.synthesis_temperature,
+        temperature=settings.synthesis_temperature
+        if temperature_override is None
+        else float(temperature_override),
     )
 
     content = response.choices[0].message.content or "{}"

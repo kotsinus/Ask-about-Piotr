@@ -161,3 +161,82 @@ def test_retrieve_postprocesses_sections_and_diversifies(
     # Ensure we didn't return only low-signal sections when substantive exists.
     sections = {c.section.lower() for c in chunks}
     assert "what i built" in sections or "overview" in sections
+
+
+def test_merge_dedup_preserves_provenance_and_keeps_best_distance() -> None:
+    chunk_a = retrieval.RetrievedChunk(
+        card_id="c1",
+        category="cat",
+        section="Overview",
+        source_url=None,
+        content="Same content",
+        distance=0.20,
+        origin_categories=["Education and formal background"],
+        best_origin_category="Education and formal background",
+    )
+    chunk_b = retrieval.RetrievedChunk(
+        card_id="c1",
+        category="cat",
+        section="Overview",
+        source_url=None,
+        content="Same content",
+        distance=0.10,
+        origin_categories=["Hands-on engineering"],
+        best_origin_category="Hands-on engineering",
+    )
+
+    merged, collisions = retrieval.merge_dedup_preserve_provenance(
+        {
+            "Education and formal background": [chunk_a],
+            "Hands-on engineering": [chunk_b],
+        }
+    )
+
+    assert collisions == 1
+    assert len(merged) == 1
+    assert merged[0].distance == 0.10
+    assert set(merged[0].origin_categories or []) == {
+        "Education and formal background",
+        "Hands-on engineering",
+    }
+
+
+def test_cap_chunks_with_coverage_prefers_eviction_from_overrepresented_category() -> None:
+    chunks = [
+        retrieval.RetrievedChunk(
+            card_id="a1",
+            category="x",
+            section="S",
+            content="A1",
+            distance=0.10,
+            origin_categories=["Education and formal background"],
+            best_origin_category="Education and formal background",
+        ),
+        retrieval.RetrievedChunk(
+            card_id="a2",
+            category="x",
+            section="S",
+            content="A2",
+            distance=0.20,
+            origin_categories=["Education and formal background"],
+            best_origin_category="Education and formal background",
+        ),
+        retrieval.RetrievedChunk(
+            card_id="b1",
+            category="y",
+            section="S",
+            content="B1",
+            distance=0.15,
+            origin_categories=["Hands-on engineering"],
+            best_origin_category="Hands-on engineering",
+        ),
+    ]
+
+    capped = retrieval.cap_chunks_with_coverage(
+        chunks=chunks,
+        routed_categories=["Education and formal background", "Hands-on engineering"],
+        max_total_chunks=2,
+    )
+    assert len(capped) == 2
+    best_origins = {c.best_origin_category for c in capped}
+    assert best_origins == {"Education and formal background", "Hands-on engineering"}

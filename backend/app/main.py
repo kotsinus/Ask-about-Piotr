@@ -20,6 +20,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import time
@@ -34,7 +35,15 @@ from openai import APIConnectionError, APIError, AuthenticationError, RateLimitE
 from app.config import get_settings, get_web_settings
 from app.geoip import lookup_country
 from app.interaction_logging import InteractionLog, write_interaction_log
-from app.llm import clean_why, rewrite_question, route_category, synthesize_answer
+from app.llm import (
+    RoutingResult,
+    RoutedCategory,
+    clean_why,
+    rewrite_question,
+    route_categories,
+    route_category,
+    synthesize_answer,
+)
 from app.logging_setup import configure_logging
 from app.observability import (
     REQUEST_ID_HEADER,
@@ -44,6 +53,12 @@ from app.observability import (
 )
 from app.privacy import anonymize_ip_prefix, extract_client_ip, hash_ip
 from app.retrieval import retrieve
+from app.retrieval import (
+    cap_chunks_with_coverage,
+    merge_dedup_preserve_provenance,
+    retrieve_for_card,
+    retrieve_for_category,
+)
 from app.schemas import (
     Category,
     ChatRequest,
@@ -52,6 +67,8 @@ from app.schemas import (
     ConversationContext,
     DebugRetrievalItem,
     EvidenceItem,
+    RoutingCategory,
+    RoutingDebug,
     SourceRef,
 )
 
@@ -335,6 +352,156 @@ def classify_question(question: str) -> Category:
     return Category.hands_on_engineering
 
 
+def _stable_request_percent(request_id: str) -> int:
+    """Map request_id -> stable [0, 99] bucket."""
+
+    if not request_id:
+        return 0
+    digest = hashlib.sha256(request_id.encode("utf-8")).digest()
+    return int.from_bytes(digest[:4], "big") % 100
+
+
+def _multi_category_enabled(settings, request_id: str) -> bool:
+    enabled = bool(getattr(settings, "multi_category_retrieval_enabled", False))
+    if not enabled:
+        return False
+    rollout_percent = int(getattr(settings, "multi_category_rollout_percent", 0) or 0)
+    rollout_percent = max(0, min(100, rollout_percent))
+    if rollout_percent >= 100:
+        return True
+    if rollout_percent <= 0:
+        return False
+    return _stable_request_percent(request_id) < rollout_percent
+
+
+def _confidence_rank(confidence: Confidence) -> int:
+    if confidence == Confidence.high:
+        return 2
+    if confidence == Confidence.medium:
+        return 1
+    return 0
+
+
+def _intent_rules_v1_budget_policy(
+    *, question: str, categories: list[RoutedCategory], max_total_chunks: int
+) -> list[int]:
+    """Intent-based, deterministic budgets (v1).
+
+    Returns budgets aligned with `categories` order.
+    """
+
+    q = (question or "").strip().lower()
+    is_education_intent = any(
+        token in q
+        for token in (
+            "education",
+            "educational",
+            "degree",
+            "degrees",
+            "university",
+            "college",
+            "bachelor",
+            "master",
+            "phd",
+            "school",
+            "studied",
+            "background",
+        )
+    )
+    is_career_intent = any(
+        token in q
+        for token in (
+            "career",
+            "experience",
+            "shaped",
+            "impact",
+            "built",
+            "designed",
+            "engineer",
+            "engineering",
+            "systems",
+        )
+    )
+
+    budgets: list[int | None] = [None for _ in categories]
+
+    if len(categories) == 1:
+        return [max(1, max_total_chunks)]
+
+    if len(categories) == 2:
+        # Default total for 2 categories.
+        total = max(2, max_total_chunks)
+
+        # Rule: education intent -> Education budget 2.
+        if is_education_intent:
+            for idx, item in enumerate(categories):
+                if item.category == Category.education_and_formal_background:
+                    budgets[idx] = 2
+
+        # Rule: career/impact intent -> Hands-on engineering budget 3.
+        if is_career_intent:
+            for idx, item in enumerate(categories):
+                if item.category == Category.hands_on_engineering:
+                    budgets[idx] = 3
+
+        # Fill remaining budget deterministically.
+        if budgets[0] is None and budgets[1] is None:
+            # Deterministic default without assuming the first category is the 3:
+            # give 3 to the higher-confidence category, tie-break on category name.
+            left, right = categories
+            if _confidence_rank(left.confidence) > _confidence_rank(right.confidence):
+                budgets[0], budgets[1] = 3, total - 3
+            elif _confidence_rank(left.confidence) < _confidence_rank(right.confidence):
+                budgets[0], budgets[1] = total - 3, 3
+            else:
+                if str(left.category.value) <= str(right.category.value):
+                    budgets[0], budgets[1] = 3, total - 3
+                else:
+                    budgets[0], budgets[1] = total - 3, 3
+        elif budgets[0] is None and budgets[1] is not None:
+            budgets[0] = max(1, total - int(budgets[1]))
+        elif budgets[1] is None and budgets[0] is not None:
+            budgets[1] = max(1, total - int(budgets[0]))
+
+        return [int(budgets[0] or 1), int(budgets[1] or 1)]
+
+    # 3 categories: start with 2 each (total 6) then clamp later.
+    return [2 for _ in categories]
+
+
+def _clamp_budgets(
+    *, categories: list[RoutedCategory], budgets: list[int], max_total_chunks: int
+) -> list[int]:
+    budgets = [max(1, int(b)) for b in budgets]
+    max_total_chunks = max(1, int(max_total_chunks))
+
+    def _score(idx: int) -> tuple[int, int, str]:
+        # Lower score = reduce earlier.
+        return (
+            _confidence_rank(categories[idx].confidence),
+            budgets[idx],
+            str(categories[idx].category.value),
+        )
+
+    while sum(budgets) > max_total_chunks:
+        reducible = [i for i, b in enumerate(budgets) if b > 1]
+        if not reducible:
+            break
+        # Reduce lowest confidence first; for ties, reduce larger budgets first.
+        reducible_sorted = sorted(
+            reducible,
+            key=lambda i: (_score(i)[0], -_score(i)[1], _score(i)[2]),
+        )
+        budgets[reducible_sorted[0]] -= 1
+
+    # Final safety: if still above cap due to pathological inputs, hard-trim.
+    if sum(budgets) > max_total_chunks:
+        budgets = budgets[:]
+        budgets[-1] = max(1, budgets[-1] - (sum(budgets) - max_total_chunks))
+
+    return budgets
+
+
 def format_answer(
     answer: str,
     why_this_matters: str,
@@ -474,10 +641,90 @@ def chat(
             "stage": "route_category_start",
         },
     )
-    try:
-        category = route_category(standalone_question)
-    except Exception:
-        category = classify_question(standalone_question)
+    use_multi_category = _multi_category_enabled(settings, request_id)
+
+    routing: RoutingResult | None = None
+    router_fallback_used = False
+    category: Category
+
+    if use_multi_category:
+        # IMPORTANT: route on the original user question (not rewritten).
+        routing_question = request.question
+        try:
+            routing = route_categories(routing_question)
+        except Exception:
+            routing = None
+
+        # Validate routing result minimally; any invalid output triggers fallback.
+        routed_categories = list(routing.categories) if routing else []
+        max_categories = int(getattr(settings, "multi_category_max_categories", 2) or 2)
+        max_categories = max(1, min(3, max_categories))
+
+        if not routed_categories:
+            router_fallback_used = True
+        else:
+            # Deduplicate categories while preserving order (first occurrence wins).
+            seen: set[str] = set()
+            deduped: list[RoutedCategory] = []
+            for item in routed_categories:
+                key = str(item.category.value)
+                if key in seen:
+                    continue
+                seen.add(key)
+                deduped.append(item)
+                if len(deduped) >= max_categories:
+                    break
+            routed_categories = deduped
+
+        if not routed_categories:
+            # Deterministic fallback: single-category heuristic.
+            fallback_category = classify_question(routing_question)
+            routing = RoutingResult(
+                categories=[
+                    RoutedCategory(
+                        category=fallback_category,
+                        confidence=Confidence.medium,
+                        budget=None,
+                    )
+                ]
+            )
+            routed_categories = list(routing.categories)
+
+        # Apply deterministic intent-based budgets (policy selected by config).
+        max_total = int(getattr(settings, "multi_category_max_total_chunks", 5) or 5)
+        max_total = max(1, max_total)
+        policy = str(getattr(settings, "multi_category_intent_budget_policy", "") or "")
+        if policy.strip() != "intent_rules_v1":
+            # Unknown policy version -> safest fallback.
+            budgets = [max_total] + [1 for _ in routed_categories[1:]]
+        else:
+            budgets = _intent_rules_v1_budget_policy(
+                question=routing_question,
+                categories=routed_categories,
+                max_total_chunks=max_total,
+            )
+        budgets = _clamp_budgets(
+            categories=routed_categories,
+            budgets=budgets,
+            max_total_chunks=max_total,
+        )
+
+        routing = RoutingResult(
+            categories=[
+                RoutedCategory(
+                    category=item.category,
+                    confidence=item.confidence,
+                    budget=budgets[idx],
+                )
+                for idx, item in enumerate(routed_categories)
+            ]
+        )
+        category = routing.categories[0].category
+    else:
+        try:
+            category = route_category(standalone_question)
+        except Exception:
+            category = classify_question(standalone_question)
     logger.info(
         "chat_stage",
         extra={
@@ -487,6 +734,28 @@ def chat(
         },
     )
 
+    if use_multi_category and routing is not None:
+        logger.info(
+            "chat_routing",
+            extra={
+                "categories": [
+                    {
+                        "category": str(item.category.value),
+                        "confidence": str(item.confidence.value),
+                        "budget": int(item.budget or 0),
+                    }
+                    for item in routing.categories
+                ],
+                "max_categories": int(
+                    getattr(settings, "multi_category_max_categories", 2) or 2
+                ),
+                "max_total_chunks": int(
+                    getattr(settings, "multi_category_max_total_chunks", 5) or 5
+                ),
+                "router_fallback_used": bool(router_fallback_used),
+            },
+        )
+
     t_stage = time.perf_counter()
     logger.info(
         "chat_stage",
@@ -495,7 +764,77 @@ def chat(
             "topic_used_for_retrieval": use_topic_for_retrieval,
         },
     )
-    chunks = retrieve(standalone_question, conversation_topic=conversation_topic)
+    if use_multi_category and routing is not None:
+        chunks_by_category: dict[str, list] = {}
+        for item in routing.categories:
+            budget = int(item.budget or 1)
+            category_label = str(item.category.value)
+            t_cat = time.perf_counter()
+            selected = retrieve_for_category(
+                standalone_question,
+                category=category_label,
+                budget=budget,
+                conversation_topic=conversation_topic,
+            )
+            chunks_by_category[category_label] = selected
+            logger.info(
+                "chat_retrieve_category",
+                extra={
+                    "category": category_label,
+                    "budget": budget,
+                    "selected_count": len(selected),
+                    "per_card_cap": int(getattr(settings, "retrieval_per_card_cap", 2) or 2),
+                    "duration_ms": round((time.perf_counter() - t_cat) * 1000, 2),
+                    "section_weighting_enabled": True,
+                },
+            )
+
+        merged, dedup_collisions = merge_dedup_preserve_provenance(chunks_by_category)
+
+        # Pin education facts when any routed category is education.
+        pinned_cards: list[str] = []
+        if any(
+            item.category == Category.education_and_formal_background
+            for item in routing.categories
+        ):
+            if not any(chunk.card_id == "education-facts" for chunk in merged):
+                pinned = retrieve_for_card(
+                    standalone_question,
+                    card_id="education-facts",
+                    limit=1,
+                    origin_category=Category.education_and_formal_background.value,
+                    conversation_topic=conversation_topic,
+                )
+                if pinned:
+                    pinned_cards.append("education-facts")
+                    # Insert then re-dedup.
+                    chunks_by_category.setdefault(
+                        Category.education_and_formal_background.value, []
+                    ).extend(pinned)
+                    merged, dedup_collisions = merge_dedup_preserve_provenance(
+                        chunks_by_category
+                    )
+
+        max_total = int(getattr(settings, "multi_category_max_total_chunks", 5) or 5)
+        max_total = max(1, max_total)
+        chunks = cap_chunks_with_coverage(
+            chunks=merged,
+            routed_categories=[str(i.category.value) for i in routing.categories],
+            max_total_chunks=max_total,
+        )
+
+        logger.info(
+            "chat_retrieve_merge",
+            extra={
+                "pre_dedup_count": sum(len(v) for v in chunks_by_category.values()),
+                "post_dedup_count": len(merged),
+                "dedup_collisions": dedup_collisions,
+                "pinned_cards": pinned_cards,
+                "final_chunk_count": len(chunks),
+            },
+        )
+    else:
+        chunks = retrieve(standalone_question, conversation_topic=conversation_topic)
     logger.info(
         "chat_stage",
         extra={
@@ -521,7 +860,87 @@ def chat(
         conversation_messages=[message.model_dump() for message in request.messages]
         if request.messages
         else None,
+        routing=routing if use_multi_category else None,
     )
+
+    # Quality gate + one retry (temperature=0) for multi-category answers.
+    if use_multi_category and routing is not None:
+        failure_reasons: list[str] = []
+        refusal = "I do not have enough evidence in the provided materials."
+        if synthesis.answer != refusal:
+            if not synthesis.used_chunk_indices:
+                failure_reasons.append("missing_used_chunk_indices")
+            if len((synthesis.answer or "").split()) < 8:
+                failure_reasons.append("answer_too_short")
+
+            # Category coverage: for 2 categories, must use at least one chunk from each.
+            if len(routing.categories) == 2 and synthesis.used_chunk_indices:
+                used = [
+                    chunks[idx]
+                    for idx in synthesis.used_chunk_indices
+                    if isinstance(idx, int) and 0 <= idx < len(chunks)
+                ]
+                used_origins: set[str] = set()
+                for ch in used:
+                    if ch.best_origin_category:
+                        used_origins.add(ch.best_origin_category)
+                    for origin in ch.origin_categories or []:
+                        used_origins.add(origin)
+                expected = {str(i.category.value) for i in routing.categories}
+                if expected and not expected.issubset(used_origins):
+                    failure_reasons.append("missing_category_coverage")
+
+            # Education-specific token check.
+            if any(
+                i.category == Category.education_and_formal_background
+                for i in routing.categories
+            ):
+                lowered = (synthesis.answer or "").lower()
+                edu_tokens = sum(
+                    1
+                    for token in (
+                        "university",
+                        "degree",
+                        "bachelor",
+                        "master",
+                        "phd",
+                        "studied",
+                        "education",
+                    )
+                    if token in lowered
+                )
+                if edu_tokens < 2:
+                    failure_reasons.append("education_token_coverage")
+
+        passed = not failure_reasons
+        retry_attempted = False
+        if not passed:
+            retry_attempted = True
+            synthesis_retry = synthesize_answer(
+                standalone_question,
+                chunks,
+                category,
+                conversation_topic=conversation_topic,
+                conversation_messages=[
+                    message.model_dump() for message in request.messages
+                ]
+                if request.messages
+                else None,
+                routing=routing if use_multi_category else None,
+                temperature_override=0,
+                strict_facts_first=True,
+            )
+            synthesis = synthesis_retry
+
+        logger.info(
+            "chat_synthesis_quality_gate",
+            extra={
+                "passed": bool(passed),
+                "failure_reasons": failure_reasons,
+                "retry_attempted": bool(retry_attempted),
+                "used_chunk_indices_count": len(synthesis.used_chunk_indices or []),
+            },
+        )
     logger.info(
         "chat_stage",
         extra={
@@ -582,6 +1001,18 @@ def chat(
         or None,
         confidence=synthesis.confidence,
         confidence_reason=synthesis.confidence_reason,
+        routing=RoutingDebug(
+            categories=[
+                RoutingCategory(
+                    category=str(item.category.value),
+                    confidence=item.confidence,
+                    budget=int(item.budget or 0),
+                )
+                for item in (routing.categories if routing else [])
+            ]
+        )
+        if (debug_retrieval and use_multi_category and routing is not None)
+        else None,
         context=ConversationContext(
             conversation_id=conversation_id,
             last_topic=resolved_topic,

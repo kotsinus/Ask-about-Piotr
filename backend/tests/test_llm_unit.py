@@ -283,3 +283,88 @@ def test_parse_category_debug_branch_and_generic_fallbacks(
     }
     assert llm._fallback_why(category=None, seed="s") in generic
     assert llm.clean_why("It demonstrates.", category="Unknown") in generic
+
+
+def test_route_categories_parses_multi_category_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(llm, "get_settings", lambda: _settings())
+
+    class _Resp:
+        class _Msg:
+            def __init__(self, content: str) -> None:
+                self.content = content
+
+        class _Choice:
+            def __init__(self, content: str) -> None:
+                self.message = _Resp._Msg(content)
+
+        def __init__(self, content: str) -> None:
+            self.choices = [_Resp._Choice(content)]
+
+    payload = {
+        "categories": [
+            {
+                "category": Category.education_and_formal_background.value,
+                "confidence": "High",
+                "budget": 2,
+            },
+            {
+                "category": Category.hands_on_engineering.value,
+                "confidence": "Medium",
+                "budget": 3,
+            },
+        ]
+    }
+
+    monkeypatch.setattr(
+        llm,
+        "chat_completions_create_cached",
+        lambda **kwargs: _Resp(json.dumps(payload)),
+    )
+
+    out = llm.route_categories("q")
+    assert len(out.categories) == 2
+    assert out.categories[0].category == Category.education_and_formal_background
+    assert out.categories[0].confidence == Confidence.high
+    assert out.categories[0].budget == 2
+    assert out.categories[1].category == Category.hands_on_engineering
+    assert out.categories[1].confidence == Confidence.medium
+    assert out.categories[1].budget == 3
+
+
+def test_route_categories_rejects_unknown_category(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(llm, "get_settings", lambda: _settings())
+
+    class _Resp:
+        class _Msg:
+            def __init__(self, content: str) -> None:
+                self.content = content
+
+        class _Choice:
+            def __init__(self, content: str) -> None:
+                self.message = _Resp._Msg(content)
+
+        def __init__(self, content: str) -> None:
+            self.choices = [_Resp._Choice(content)]
+
+    payload = {
+        "categories": [
+            {
+                "category": "Not a real category",
+                "confidence": "High",
+                "budget": 2,
+            }
+        ]
+    }
+
+    monkeypatch.setattr(
+        llm,
+        "chat_completions_create_cached",
+        lambda **kwargs: _Resp(json.dumps(payload)),
+    )
+
+    with pytest.raises(ValueError):
+        llm.route_categories("q")
