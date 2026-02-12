@@ -23,5 +23,4 @@ Frontend: Next.js (React). Backend: FastAPI (Python 3.12) with Pydantic and SQLA
 The key trade-off is that strict grounding can feel less “chatty,” but it improves trust and reduces hallucinations. Refusal is treated as a feature, not a failure, and the demo makes that explicit to users and evaluators.
 
 # Links
-knowledge/README.md
-knowledge/sample_questions.md
+- AI projects overview: assets/ai-projects/AI_Projects_Piotr_Synak.pdf

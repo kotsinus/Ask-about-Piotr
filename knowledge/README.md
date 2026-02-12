@@ -5,6 +5,12 @@ Knowledge cards are the only source of truth used by the AI system.
 Source documents (CV, PDFs, certificates) stored in `assets/` are not
 ingested directly and serve only as reference material.
 
+## Directory contents
+- Cards live in `knowledge/cards/` (one Markdown file per card).
+- [`knowledge/CARD_REGISTRY.md`](knowledge/CARD_REGISTRY.md) is the canonical list of card IDs → file paths.
+- [`knowledge/KNOWLEDGE_INDEX.md`](knowledge/KNOWLEDGE_INDEX.md) maps the demo question set to cards that provide evidence.
+- [`knowledge/sample_questions.md`](knowledge/sample_questions.md) contains the demo questions.
+
 ## Knowledge Card Schema (Required)
 Each card is a standalone Markdown file that MUST include the following sections
 in this exact order and with these exact headings.

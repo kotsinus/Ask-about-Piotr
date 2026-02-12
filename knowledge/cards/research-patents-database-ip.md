@@ -1,11 +1,11 @@
 # Title
-Patents: database compression and approximate/granular analytics engines
+Patents: Database Compression and Approximate Analytics
 
 # Category
 research
 
 # Problem
-Database engines and analytics platforms require innovations in storage, compression, scalability, and query execution to meet performance and cost targets. Protecting core inventions via patents is common when creating differentiated engine internals.
+Which patents and patent applications are listed in the materials.
 
 # My role
 I am a co-inventor on multiple database-related patents and a patent application. These patents reflect applied systems invention in areas such as compression, storage organization, and summary-based/approximate processing.
@@ -25,13 +25,13 @@ Patents and filings listed in my materials (authoritative registry for counting 
 These cover methods and systems for data compression, storing/organizing/processing data in relational databases, and intelligent capture/transformations of granulated data summaries for analytical processing.
 
 # Scale and impact
-The impact is durable IP tied to production-grade database engineering and scalable analytics. This work reinforces credibility in database internals, approximation-aware execution, and performance engineering.
+Patents relate to production-oriented database engine design and scalable analytical systems.
 
 # Tech stack
-Database engine internals and analytical processing architectures; innovations connected to rough/granular computation ideas and scalable summaries.
+Database engine internals; relational storage; compression; approximate query processing.
 
 # Key decisions and trade-offs
-Patenting trades open disclosure for protection and commercialization leverage. From an engineering standpoint, encoding approximation into an engine requires explicit semantics so users can trust results and understand error bounds.
+N/A
 
 # Links
 - Publications list: assets/publications/Publications_Piotr_Synak.pdf

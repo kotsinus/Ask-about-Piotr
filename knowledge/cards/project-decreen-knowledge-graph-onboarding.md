@@ -11,7 +11,7 @@ Teams operating in complex Jira/Confluence/GitHub environments face fragmented k
 End-to-end engineer on the monorepo. I defined service boundaries and the data model, designed the AI-assisted pipelines, and implemented backend APIs, background processing, and core UI workflows. I designed the multi-service architecture and the AI-assisted extraction/enrichment approach, and I contributed hands-on across backend services and pipelines. I focused on making LLM usage constrained and pipeline-driven so the system remains dependable.
 
 # What I built
-I built a platform that synchronizes knowledge from Jira, Confluence, and GitHub, extracts entities and relations, and assembles them into a graph-backed model that can be queried via REST and GraphQL. The product includes a diagramming layer that automatically generates and maintains living architecture diagrams (systems, APIs, teams, flows) and a React-based UI for exploration and dashboards.
+Together with Alina Powała, I built a platform that synchronizes knowledge from Jira, Confluence, and GitHub, extracts entities and relations, and assembles them into a graph-backed model that can be queried via REST and GraphQL. The product includes a diagramming layer that automatically generates and maintains living architecture diagrams (systems, APIs, teams, flows) and a React-based UI for exploration and dashboards.
 
 # Scale and impact
 The core impact is reducing time-to-understand for engineers and leaders by making system knowledge queryable, connected, and continuously updated. By generating diagrams from live sources and highlighting gaps, Decreen is designed to reduce documentation drift and improve onboarding quality without relying on manual upkeep.

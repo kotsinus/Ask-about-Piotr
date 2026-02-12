@@ -5,10 +5,10 @@ Selected Publications (Three Most Impactful)
 research
 
 # Problem
-Interviewers often want concrete examples of high-impact publications rather than a long bibliography.
+Which specific publications are highlighted in the publications list.
 
 # My role
-Author/co-author; selected these as the three most impactful publications (as stated in the publications list).
+Author/co-author; selected these as the three most impactful publications based on the number of citations (as stated in the publications list).
 
 # What I built
 Highlights: (1) Rough Set Algorithms in Classification Problems (book chapter, 2000); (2) Dynamic Reducts as a Tool for Extracting Laws from Decision Tables (conference proceedings, 1994); (3) Approximation Spaces and Information Granulation (LNCS 3400, 2005).
@@ -20,7 +20,7 @@ These works cover rough sets, reducts, and information granulation—concepts th
 Rough sets; classification; dynamic reducts; information granulation.
 
 # Key decisions and trade-offs
-Keeps the list limited to what is explicitly named as “most impactful” in the source document.
+N/A
 
 # Links
 - Publications list: assets/publications/Publications_Piotr_Synak.pdf

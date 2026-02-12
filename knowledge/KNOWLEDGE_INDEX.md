@@ -56,7 +56,7 @@ Below is a practical mapping from the 100 demo questions to the cards that provi
 ## 61-70 Certifications
 - `certification-xmba-agile-business-startup-skills`
 - `certifications-facts`
-- `education-overview`
+- `education-facts`
 - `experience-leadership-and-ways-of-working`
 
 ## 71-80 Leadership
@@ -66,7 +66,6 @@ Below is a practical mapping from the 100 demo questions to the cards that provi
 - `project-decreen-knowledge-graph-onboarding`
 
 ## 81-90 Education & development
-- `education-overview`
 - `education-facts`
 - `experience-academic-teaching`
 - `research-publications-and-topics`
