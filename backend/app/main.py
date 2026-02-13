@@ -150,6 +150,10 @@ def _log_interaction_background(
     llm_context_messages: list[dict] | None,
     client_ip: str | None,
     user_agent: str | None,
+    # Multi-category routing diagnostics
+    routing: dict | None = None,
+    retrieval_by_category: dict | None = None,
+    quality_gate: dict | None = None,
 ) -> None:
     """Best-effort interaction logging.
 
@@ -191,6 +195,10 @@ def _log_interaction_background(
                 ip_hash=ip_hash,
                 user_agent=user_agent,
                 country=country,
+                # Multi-category routing diagnostics
+                routing=routing,
+                retrieval_by_category=retrieval_by_category,
+                quality_gate=quality_gate,
             )
         )
     except Exception:
@@ -997,6 +1005,53 @@ def chat(
             max_messages=6,
             max_content_chars=2000,
         )
+
+        # Build multi-category diagnostics for persistence.
+        routing_dict: dict | None = None
+        retrieval_by_category_dict: dict | None = None
+        quality_gate_dict: dict | None = None
+
+        if use_multi_category and routing is not None:
+            routing_dict = {
+                "categories": [
+                    {
+                        "category": str(item.category.value),
+                        "confidence": str(item.confidence.value),
+                        "budget": int(item.budget or 0),
+                    }
+                    for item in routing.categories
+                ],
+                "router_fallback_used": bool(router_fallback_used),
+            }
+
+        if use_multi_category and "chunks_by_category" in dir():
+            retrieval_by_category_dict = {
+                category: {
+                    "selected_count": len(chunks),
+                    "budget": int(
+                        next(
+                            (
+                                item.budget
+                                for item in (routing.categories if routing else [])
+                                if str(item.category.value) == category
+                            ),
+                            0,
+                        )
+                        or 0
+                    ),
+                }
+                for category, chunks in chunks_by_category.items()
+            }
+
+        if use_multi_category and routing is not None:
+            quality_gate_dict = {
+                "passed": bool(passed) if "passed" in dir() else None,
+                "failure_reasons": failure_reasons if "failure_reasons" in dir() else [],
+                "retry_attempted": bool(retry_attempted)
+                if "retry_attempted" in dir()
+                else False,
+            }
+
         tasks.add_task(
             _log_interaction_background,
             settings=settings,
@@ -1021,6 +1076,9 @@ def chat(
             llm_context_messages=llm_context_messages,
             client_ip=client_ip,
             user_agent=user_agent,
+            routing=routing_dict,
+            retrieval_by_category=retrieval_by_category_dict,
+            quality_gate=quality_gate_dict,
         )
     except Exception:
         logger.exception("interaction_log_schedule_failed")
