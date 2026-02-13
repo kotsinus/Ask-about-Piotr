@@ -64,34 +64,6 @@ def _dedup_key(chunk: RetrievedChunk) -> tuple[str, str, str]:
     return (chunk.card_id, _norm_section(chunk.section), digest)
 
 
-# Category-aware tie-breakers for section selection.
-#
-# Numbers are small (0.05–0.25) so they behave like existing penalties.
-CATEGORY_SECTION_BONUS: dict[str, dict[str, float]] = {
-    "Education and formal background": {
-        "degrees": 0.22,
-        "education": 0.18,
-        "certifications": 0.18,
-        "timeline": 0.12,
-        "summary": 0.08,
-        "overview": 0.06,
-    },
-    "Research and academic credibility": {
-        "publications": 0.22,
-        "patents": 0.18,
-        "research": 0.16,
-        "overview": 0.06,
-    },
-}
-
-
-def _category_section_bonus(category: str | None, section: str) -> float:
-    if not category:
-        return 0.0
-    bonus_map = CATEGORY_SECTION_BONUS.get(str(category).strip(), {})
-    return float(bonus_map.get(_norm_section(section), 0.0))
-
-
 def retrieve(
     question: str, limit: int = 25, conversation_topic: str | None = None
 ) -> list[RetrievedChunk]:
@@ -339,17 +311,14 @@ def retrieve_for_category(
     """Retrieve up to `budget` chunks for a specific routed category.
 
     Notes:
-    - Uses a category-specific oversample factor for the DB candidate limit.
+    - Uses a fixed oversample factor for the DB candidate limit.
     - Applies the standard per-card cap semantics within this category run.
-    - Applies category-aware section weighting bonuses as tie-breakers.
     """
 
     budget = max(1, int(budget))
     settings = get_settings()
 
     oversample_factor = 7
-    if str(category).strip() == "Education and formal background":
-        oversample_factor = 10
 
     retrieval_query = (
         f"{question}\n\nConversation topic: {conversation_topic}"
@@ -468,8 +437,7 @@ def retrieve_for_category(
             ):
                 penalty += short_substantive_penalty
 
-        bonus = _category_section_bonus(category, row[2])
-        return (distance + penalty - bonus, distance)
+        return (distance + penalty, distance)
 
     rows_ranked = sorted(rows, key=_adjusted_distance)
 
@@ -581,10 +549,7 @@ def retrieve_for_card(
 
     rows_ranked = sorted(
         rows,
-        key=lambda row: (
-            float(row[5]) - _category_section_bonus(origin_category, row[2]),
-            float(row[5]),
-        ),
+        key=lambda row: (float(row[5]), float(row[5])),
     )
     filtered = rows_ranked[:limit]
     return [

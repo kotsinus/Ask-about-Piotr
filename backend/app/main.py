@@ -382,46 +382,13 @@ def _confidence_rank(confidence: Confidence) -> int:
     return 0
 
 
-def _intent_rules_v1_budget_policy(
+def _deterministic_budget_policy(
     *, question: str, categories: list[RoutedCategory], max_total_chunks: int
 ) -> list[int]:
-    """Intent-based, deterministic budgets (v1).
+    """Deterministic budget allocation based on confidence ranking.
 
     Returns budgets aligned with `categories` order.
     """
-
-    q = (question or "").strip().lower()
-    is_education_intent = any(
-        token in q
-        for token in (
-            "education",
-            "educational",
-            "degree",
-            "degrees",
-            "university",
-            "college",
-            "bachelor",
-            "master",
-            "phd",
-            "school",
-            "studied",
-            "background",
-        )
-    )
-    is_career_intent = any(
-        token in q
-        for token in (
-            "career",
-            "experience",
-            "shaped",
-            "impact",
-            "built",
-            "designed",
-            "engineer",
-            "engineering",
-            "systems",
-        )
-    )
 
     budgets: list[int | None] = [None for _ in categories]
 
@@ -432,36 +399,18 @@ def _intent_rules_v1_budget_policy(
         # Default total for 2 categories.
         total = max(2, max_total_chunks)
 
-        # Rule: education intent -> Education budget 2.
-        if is_education_intent:
-            for idx, item in enumerate(categories):
-                if item.category == Category.education_and_formal_background:
-                    budgets[idx] = 2
-
-        # Rule: career/impact intent -> Hands-on engineering budget 3.
-        if is_career_intent:
-            for idx, item in enumerate(categories):
-                if item.category == Category.hands_on_engineering:
-                    budgets[idx] = 3
-
-        # Fill remaining budget deterministically.
-        if budgets[0] is None and budgets[1] is None:
-            # Deterministic default without assuming the first category is the 3:
-            # give 3 to the higher-confidence category, tie-break on category name.
-            left, right = categories
-            if _confidence_rank(left.confidence) > _confidence_rank(right.confidence):
+        # Deterministic default: give 3 to the higher-confidence category,
+        # tie-break on category name.
+        left, right = categories
+        if _confidence_rank(left.confidence) > _confidence_rank(right.confidence):
+            budgets[0], budgets[1] = 3, total - 3
+        elif _confidence_rank(left.confidence) < _confidence_rank(right.confidence):
+            budgets[0], budgets[1] = total - 3, 3
+        else:
+            if str(left.category.value) <= str(right.category.value):
                 budgets[0], budgets[1] = 3, total - 3
-            elif _confidence_rank(left.confidence) < _confidence_rank(right.confidence):
-                budgets[0], budgets[1] = total - 3, 3
             else:
-                if str(left.category.value) <= str(right.category.value):
-                    budgets[0], budgets[1] = 3, total - 3
-                else:
-                    budgets[0], budgets[1] = total - 3, 3
-        elif budgets[0] is None and budgets[1] is not None:
-            budgets[0] = max(1, total - int(budgets[1]))
-        elif budgets[1] is None and budgets[0] is not None:
-            budgets[1] = max(1, total - int(budgets[0]))
+                budgets[0], budgets[1] = total - 3, 3
 
         return [int(budgets[0] or 1), int(budgets[1] or 1)]
 
@@ -693,12 +642,12 @@ def chat(
         # Apply deterministic intent-based budgets (policy selected by config).
         max_total = int(getattr(settings, "multi_category_max_total_chunks", 5) or 5)
         max_total = max(1, max_total)
-        policy = str(getattr(settings, "multi_category_intent_budget_policy", "") or "")
-        if policy.strip() != "intent_rules_v1":
+        policy = str(getattr(settings, "multi_category_budget_policy", "") or "")
+        if policy.strip() != "deterministic":
             # Unknown policy version -> safest fallback.
             budgets = [max_total] + [1 for _ in routed_categories[1:]]
         else:
-            budgets = _intent_rules_v1_budget_policy(
+            budgets = _deterministic_budget_policy(
                 question=routing_question,
                 categories=routed_categories,
                 max_total_chunks=max_total,
@@ -791,30 +740,6 @@ def chat(
 
         merged, dedup_collisions = merge_dedup_preserve_provenance(chunks_by_category)
 
-        # Pin education facts when any routed category is education.
-        pinned_cards: list[str] = []
-        if any(
-            item.category == Category.education_and_formal_background
-            for item in routing.categories
-        ):
-            if not any(chunk.card_id == "education-facts" for chunk in merged):
-                pinned = retrieve_for_card(
-                    standalone_question,
-                    card_id="education-facts",
-                    limit=1,
-                    origin_category=Category.education_and_formal_background.value,
-                    conversation_topic=conversation_topic,
-                )
-                if pinned:
-                    pinned_cards.append("education-facts")
-                    # Insert then re-dedup.
-                    chunks_by_category.setdefault(
-                        Category.education_and_formal_background.value, []
-                    ).extend(pinned)
-                    merged, dedup_collisions = merge_dedup_preserve_provenance(
-                        chunks_by_category
-                    )
-
         max_total = int(getattr(settings, "multi_category_max_total_chunks", 5) or 5)
         max_total = max(1, max_total)
         chunks = cap_chunks_with_coverage(
@@ -829,7 +754,6 @@ def chat(
                 "pre_dedup_count": sum(len(v) for v in chunks_by_category.values()),
                 "post_dedup_count": len(merged),
                 "dedup_collisions": dedup_collisions,
-                "pinned_cards": pinned_cards,
                 "final_chunk_count": len(chunks),
             },
         )
@@ -889,28 +813,6 @@ def chat(
                 expected = {str(i.category.value) for i in routing.categories}
                 if expected and not expected.issubset(used_origins):
                     failure_reasons.append("missing_category_coverage")
-
-            # Education-specific token check.
-            if any(
-                i.category == Category.education_and_formal_background
-                for i in routing.categories
-            ):
-                lowered = (synthesis.answer or "").lower()
-                edu_tokens = sum(
-                    1
-                    for token in (
-                        "university",
-                        "degree",
-                        "bachelor",
-                        "master",
-                        "phd",
-                        "studied",
-                        "education",
-                    )
-                    if token in lowered
-                )
-                if edu_tokens < 2:
-                    failure_reasons.append("education_token_coverage")
 
         passed = not failure_reasons
         retry_attempted = False

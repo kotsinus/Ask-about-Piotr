@@ -85,7 +85,7 @@ class Settings:
     multi_category_max_categories: int = 2
     multi_category_max_total_chunks: int = 5
     multi_category_allow_six_chunks: bool = False
-    multi_category_intent_budget_policy: str = "intent_rules_v1"
+    multi_category_budget_policy: str = "deterministic"
 
     # OpenAI SDK behavior controls (keep defaults safe for local dev).
     openai_timeout_s: float = 60.0
@@ -200,9 +200,9 @@ def get_settings() -> Settings:
     multi_category_allow_six_chunks = _parse_bool(
         os.getenv("MULTI_CATEGORY_ALLOW_SIX_CHUNKS"), default=False
     )
-    multi_category_intent_budget_policy = (
-        os.getenv("MULTI_CATEGORY_INTENT_BUDGET_POLICY", "intent_rules_v1")
-        or "intent_rules_v1"
+    multi_category_budget_policy = (
+        os.getenv("MULTI_CATEGORY_BUDGET_POLICY", "deterministic")
+        or "deterministic"
     ).strip()
 
     # Logging metadata
@@ -257,7 +257,7 @@ def get_settings() -> Settings:
         multi_category_max_categories=multi_category_max_categories,
         multi_category_max_total_chunks=multi_category_max_total_chunks,
         multi_category_allow_six_chunks=multi_category_allow_six_chunks,
-        multi_category_intent_budget_policy=multi_category_intent_budget_policy,
+        multi_category_budget_policy=multi_category_budget_policy,
         ip_hash_salt=ip_hash_salt,
         trusted_proxy_cidrs=trusted_proxy_cidrs,
         interaction_log_include_llm_context=interaction_log_include_llm_context,

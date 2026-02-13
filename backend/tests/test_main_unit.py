@@ -338,7 +338,7 @@ def test_chat_swallow_background_task_scheduling_failure(
     assert response.answer == "ok"
 
 
-def test_chat_multi_category_routes_on_original_question_and_pins_education_facts(
+def test_chat_multi_category_routes_on_original_question(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, object] = {}
@@ -388,30 +388,7 @@ def test_chat_multi_category_routes_on_original_question_and_pins_education_fact
             )
         ]
 
-    def _retrieve_for_card(
-        question: str,
-        *,
-        card_id: str,
-        limit: int,
-        origin_category: str,
-        conversation_topic: str | None = None,
-    ):
-        return [
-            RetrievedChunk(
-                card_id=card_id,
-                category="education",
-                section="Facts",
-                source_url=None,
-                content="pinned education facts",
-                distance=0.05,
-                origin_categories=[origin_category],
-                best_origin_category=origin_category,
-                pinned=True,
-            )
-        ]
-
     monkeypatch.setattr("app.main.retrieve_for_category", _retrieve_for_category)
-    monkeypatch.setattr("app.main.retrieve_for_card", _retrieve_for_card)
 
     monkeypatch.setattr(
         "app.main.synthesize_answer",
@@ -463,5 +440,4 @@ def test_chat_multi_category_routes_on_original_question_and_pins_education_fact
 
     assert captured["routing_input"] == chat_request.question
     assert response.routing is not None
-    assert any(item.card_id == "education-facts" for item in response.debug_retrieval or [])
     assert calls, "Expected per-category retrieval calls"
