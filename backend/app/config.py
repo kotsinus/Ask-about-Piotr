@@ -98,11 +98,56 @@ def _parse_section_weights(value: str | None) -> dict[str, dict[str, float]]:
                                 # Clamp weight to reasonable range [0.0, 0.5]
                                 # This prevents extreme values from distorting ranking
                                 raw_weight = float(weight)
-                                section_weights[section] = max(0.0, min(0.5, raw_weight))
+                                section_weights[section] = max(
+                                    0.0, min(0.5, raw_weight)
+                                )
                             except (ValueError, TypeError):
                                 pass
                     if section_weights:
                         result[category] = section_weights
+            return result
+    except json.JSONDecodeError:
+        pass
+    return {}
+
+
+def _parse_quality_rules(value: str | None) -> dict[str, dict[str, list[str] | int]]:
+    """Parse quality rules from JSON environment variable.
+
+    Args:
+        value: JSON string mapping category names to quality rule configs.
+            Example: '{"Education and formal background": {"min_tokens": ["degree", "university"], "min_token_count": 1}}'
+
+    Returns:
+        Dict mapping category names to quality rule configs. Empty dict if not set.
+        Each rule config can contain:
+        - min_tokens: list of required tokens (any must be present)
+        - min_token_count: minimum number of tokens that must be present (default 1)
+    """
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, dict):
+            # Validate structure: dict[str, dict]
+            result: dict[str, dict[str, list[str] | int]] = {}
+            for category, rules in parsed.items():
+                if isinstance(category, str) and isinstance(rules, dict):
+                    validated_rules: dict[str, list[str] | int] = {}
+                    # Validate min_tokens
+                    min_tokens = rules.get("min_tokens")
+                    if isinstance(min_tokens, list):
+                        validated_rules["min_tokens"] = [
+                            str(t) for t in min_tokens if t
+                        ]
+                    # Validate min_token_count
+                    min_token_count = rules.get("min_token_count")
+                    if isinstance(min_token_count, (int, float)):
+                        validated_rules["min_token_count"] = max(
+                            1, int(min_token_count)
+                        )
+                    if validated_rules:
+                        result[category] = validated_rules
             return result
     except json.JSONDecodeError:
         pass
@@ -195,6 +240,31 @@ class Settings:
     # - Boost "publications" sections for Research category
     # - Improve precision for category-specific retrieval
     multi_category_section_weights: dict[str, dict[str, float]] = field(
+        default_factory=dict
+    )
+
+    # Multi-category quality rules.
+    #
+    # Quality rules allow category-specific validation of synthesized answers.
+    # This is a general mechanism applicable to any category.
+    #
+    # Configuration:
+    # - Map category names to quality rule configs
+    # - Set via MULTI_CATEGORY_QUALITY_RULES environment variable (JSON format)
+    # - Example: '{"Education and formal background": {"min_tokens": ["degree", "university"], "min_token_count": 1}}'
+    #
+    # How it works:
+    # - min_tokens: list of required tokens (at least min_token_count must be present)
+    # - min_token_count: minimum number of tokens that must be present (default 1)
+    #
+    # Use cases:
+    # - Ensure education answers contain education-related terms
+    # - Ensure production answers contain named examples
+    # - Detect generic/low-quality answers for retry
+    #
+    # NOTE: In v1, quality rules are LOG-ONLY (no retry trigger).
+    # This allows monitoring false positives before enabling enforcement.
+    multi_category_quality_rules: dict[str, dict[str, list[str] | int]] = field(
         default_factory=dict
     )
 
@@ -332,6 +402,12 @@ def get_settings() -> Settings:
         os.getenv("MULTI_CATEGORY_SECTION_WEIGHTS")
     )
 
+    # Multi-category quality rules (parsed from JSON env var).
+    # Empty by default - no quality validation unless explicitly configured.
+    multi_category_quality_rules = _parse_quality_rules(
+        os.getenv("MULTI_CATEGORY_QUALITY_RULES")
+    )
+
     # Logging metadata
     ip_hash_salt = os.getenv("IP_HASH_SALT", "")
     if app_env in {"prod", "production"} and not ip_hash_salt.strip():
@@ -387,6 +463,7 @@ def get_settings() -> Settings:
         multi_category_budget_policy=multi_category_budget_policy,
         multi_category_pinning_rules=multi_category_pinning_rules,
         multi_category_section_weights=multi_category_section_weights,
+        multi_category_quality_rules=multi_category_quality_rules,
         ip_hash_salt=ip_hash_salt,
         trusted_proxy_cidrs=trusted_proxy_cidrs,
         interaction_log_include_llm_context=interaction_log_include_llm_context,

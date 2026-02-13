@@ -52,6 +52,7 @@ from app.observability import (
     set_request_id,
 )
 from app.privacy import anonymize_ip_prefix, extract_client_ip, hash_ip
+from app.quality import validate_answer_quality
 from app.retrieval import (
     apply_pinning,
     cap_chunks_with_coverage,
@@ -725,7 +726,9 @@ def chat(
     if use_multi_category and routing is not None:
         chunks_by_category: dict[str, list] = {}
         # Get all section weights from settings
-        all_section_weights = getattr(settings, "multi_category_section_weights", {}) or {}
+        all_section_weights = (
+            getattr(settings, "multi_category_section_weights", {}) or {}
+        )
 
         for item in routing.categories:
             budget = int(item.budget or 1)
@@ -904,6 +907,35 @@ def chat(
                 "used_chunk_indices_count": len(synthesis.used_chunk_indices or []),
             },
         )
+
+        # Quality rules validation (log-only in v1, no retry trigger).
+        # Validates answer against category-specific quality rules.
+        quality_rules = getattr(settings, "multi_category_quality_rules", {}) or {}
+        if quality_rules and synthesis.answer != refusal:
+            category_validation_failures: list[dict] = []
+            for item in routing.categories:
+                category_label = str(item.category.value)
+                result = validate_answer_quality(
+                    answer=synthesis.answer or "",
+                    category=category_label,
+                    quality_rules=quality_rules,
+                )
+                if not result.passed:
+                    category_validation_failures.append(
+                        {
+                            "category": category_label,
+                            "failures": result.failure_reasons,
+                        }
+                    )
+
+            if category_validation_failures:
+                logger.info(
+                    "chat_quality_rules_log_only",
+                    extra={
+                        "category_validation_failures": category_validation_failures,
+                        "note": "v1 log-only mode, no retry triggered",
+                    },
+                )
     logger.info(
         "chat_stage",
         extra={
@@ -1054,7 +1086,9 @@ def chat(
         if use_multi_category and routing is not None:
             quality_gate_dict = {
                 "passed": bool(passed) if "passed" in dir() else None,
-                "failure_reasons": failure_reasons if "failure_reasons" in dir() else [],
+                "failure_reasons": failure_reasons
+                if "failure_reasons" in dir()
+                else [],
                 "retry_attempted": bool(retry_attempted)
                 if "retry_attempted" in dir()
                 else False,
