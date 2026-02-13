@@ -463,3 +463,172 @@ def test_apply_pinning_no_matching_category() -> None:
     assert len(result) == 1
     assert len(pinned_ids) == 0
     assert result[0].card_id == "some-card"
+
+
+def test_section_weights_empty_no_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Empty section weights = identical ranking to None weights."""
+    monkeypatch.setattr(retrieval, "get_settings", lambda: _settings())
+    monkeypatch.setattr(retrieval, "register_vector", lambda conn: None)
+
+    # Two chunks from different cards with different sections
+    rows = [
+        ("cardA", "x", "Degrees", None, "Education content", 0.20),
+        ("cardB", "x", "Overview", None, "General content", 0.10),
+    ]
+
+    monkeypatch.setattr(retrieval.psycopg, "connect", lambda *a, **k: _Conn(rows))
+
+    class _Provider:
+        def embed(self, texts: list[str]):
+            return [[0.0, 0.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(retrieval, "get_embedding_provider", lambda **k: _Provider())
+
+    # Get results with no weights
+    chunks_none = retrieval.retrieve_for_category(
+        "test",
+        category="Education",
+        budget=2,
+        section_weights=None,
+    )
+
+    # Get results with empty weights
+    chunks_empty = retrieval.retrieve_for_category(
+        "test",
+        category="Education",
+        budget=2,
+        section_weights={},
+    )
+
+    # Should produce identical ordering
+    assert [c.card_id for c in chunks_none] == [c.card_id for c in chunks_empty]
+
+
+def test_section_weights_affect_ranking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Section weights should boost matching sections in ranking."""
+    monkeypatch.setattr(retrieval, "get_settings", lambda: _settings())
+    monkeypatch.setattr(retrieval, "register_vector", lambda conn: None)
+
+    # Two chunks: "Degrees" section has higher distance but should be boosted
+    # "Overview" section has lower distance but no boost
+    rows = [
+        ("cardA", "x", "Degrees", None, "Education content about degrees", 0.25),
+        ("cardB", "x", "Overview", None, "General overview content", 0.10),
+    ]
+
+    monkeypatch.setattr(retrieval.psycopg, "connect", lambda *a, **k: _Conn(rows))
+
+    class _Provider:
+        def embed(self, texts: list[str]):
+            return [[0.0, 0.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(retrieval, "get_embedding_provider", lambda **k: _Provider())
+
+    # Without weights, Overview (distance 0.10) should come first
+    chunks_no_weights = retrieval.retrieve_for_category(
+        "test",
+        category="Education",
+        budget=2,
+        section_weights=None,
+    )
+    assert chunks_no_weights[0].section == "Overview"
+
+    # With weights boosting "degrees" by 0.20, Degrees should come first
+    # Adjusted distance for Degrees: 0.25 - 0.20 = 0.05 (better than 0.10)
+    chunks_with_weights = retrieval.retrieve_for_category(
+        "test",
+        category="Education",
+        budget=2,
+        section_weights={"degrees": 0.20},
+    )
+    assert chunks_with_weights[0].section == "Degrees"
+
+
+def test_section_weights_bonus_capped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Section weight bonus should be capped at MAX_SECTION_BONUS (0.25)."""
+    monkeypatch.setattr(retrieval, "get_settings", lambda: _settings())
+    monkeypatch.setattr(retrieval, "register_vector", lambda conn: None)
+
+    # Two chunks: "Degrees" has much higher distance
+    # Even with extreme weight (1.0), bonus should be capped at 0.25
+    rows = [
+        ("cardA", "x", "Degrees", None, "Education content", 0.50),
+        ("cardB", "x", "Overview", None, "General content", 0.10),
+    ]
+
+    monkeypatch.setattr(retrieval.psycopg, "connect", lambda *a, **k: _Conn(rows))
+
+    class _Provider:
+        def embed(self, texts: list[str]):
+            return [[0.0, 0.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(retrieval, "get_embedding_provider", lambda **k: _Provider())
+
+    # With extreme weight (1.0), bonus should be capped at 0.25
+    # Adjusted distance for Degrees: 0.50 - 0.25 = 0.25 (still worse than 0.10)
+    chunks = retrieval.retrieve_for_category(
+        "test",
+        category="Education",
+        budget=2,
+        section_weights={"degrees": 1.0},  # Extreme weight, should be capped
+    )
+
+    # Overview should still come first because bonus is capped
+    assert chunks[0].section == "Overview"
+
+
+def test_section_weights_with_penalty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Section weights should work correctly with existing penalties."""
+    monkeypatch.setattr(retrieval, "get_settings", lambda: _settings())
+    monkeypatch.setattr(retrieval, "register_vector", lambda conn: None)
+
+    # "Title" is a low-signal section with penalty 0.25
+    # "Degrees" is a substantive section
+    # Both sections from the SAME card so penalty is applied (card has substantive alternative)
+    rows = [
+        ("cardA", "x", "Title", None, "Short title", 0.10),
+        ("cardA", "x", "Degrees", None, "Education content about degrees", 0.20),
+    ]
+
+    monkeypatch.setattr(retrieval.psycopg, "connect", lambda *a, **k: _Conn(rows))
+
+    class _Provider:
+        def embed(self, texts: list[str]):
+            return [[0.0, 0.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(retrieval, "get_embedding_provider", lambda **k: _Provider())
+
+    # Without weights:
+    # Title: 0.10 + 0.25 penalty = 0.35 (card has substantive alternative "Degrees")
+    # Degrees: 0.20 (no penalty, substantive section)
+    # Degrees should come first
+    chunks_no_weights = retrieval.retrieve_for_category(
+        "test",
+        category="Education",
+        budget=2,
+        section_weights=None,
+    )
+    assert chunks_no_weights[0].section == "Degrees"
+
+    # With weights boosting "title" by 0.15:
+    # Title: 0.10 + 0.25 penalty - 0.15 bonus = 0.20
+    # Degrees: 0.20 (no penalty, no bonus)
+    # Both are equal, stable sort keeps original order (Title first in rows)
+    chunks_with_weights = retrieval.retrieve_for_category(
+        "test",
+        category="Education",
+        budget=2,
+        section_weights={"title": 0.15},
+    )
+    # Title adjusted: 0.10 + 0.25 - 0.15 = 0.20
+    # Degrees adjusted: 0.20
+    # They're equal, so order depends on stable sort (Title came first in rows)
+    assert chunks_with_weights[0].section in ["Degrees", "Title"]

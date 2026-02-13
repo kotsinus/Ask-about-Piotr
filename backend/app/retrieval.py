@@ -308,12 +308,14 @@ def retrieve_for_category(
     category: str,
     budget: int,
     conversation_topic: str | None = None,
+    section_weights: dict[str, float] | None = None,
 ) -> list[RetrievedChunk]:
     """Retrieve up to `budget` chunks for a specific routed category.
 
     Notes:
     - Uses a fixed oversample factor for the DB candidate limit.
     - Applies the standard per-card cap semantics within this category run.
+    - Section weights are POSITIVE values that BOOST section ranking (subtract from distance).
     """
 
     budget = max(1, int(budget))
@@ -394,6 +396,9 @@ def retrieve_for_category(
         "tech stack",
     }
 
+    # Maximum bonus cap to prevent weak chunks from jumping strong ones
+    MAX_SECTION_BONUS = 0.25
+
     card_has_substantive: dict[str, bool] = {}
     card_max_substantive_len: dict[str, int] = {}
     for row in rows:
@@ -424,21 +429,40 @@ def retrieve_for_category(
     short_substantive_penalty = 0.18
 
     def _adjusted_distance(row: tuple) -> tuple[float, float]:
+        """
+        Returns (adjusted_distance, raw_distance).
+
+        Formula: adjusted = distance + penalty - bonus
+
+        Where:
+        - penalty >= 0 (for low-signal sections)
+        - bonus >= 0 (for category-specific section weights)
+        - bonus is capped at MAX_SECTION_BONUS
+        """
         distance = float(row[5])
         card_id = row[0]
         section = _norm_section(row[2])
-        if not card_has_substantive.get(card_id, False):
-            return (distance, distance)
 
-        penalty = section_penalty.get(section, 0.0)
-        if section not in low_signal_sections:
-            if (
-                card_max_substantive_len.get(card_id, 0) >= long_section_len
-                and len(row[4] or "") < short_section_len
-            ):
-                penalty += short_substantive_penalty
+        # Calculate penalty (only when card has substantive alternatives)
+        penalty = 0.0
+        if card_has_substantive.get(card_id, False):
+            penalty = section_penalty.get(section, 0.0)
+            if section not in low_signal_sections:
+                if (
+                    card_max_substantive_len.get(card_id, 0) >= long_section_len
+                    and len(row[4] or "") < short_section_len
+                ):
+                    penalty += short_substantive_penalty
 
-        return (distance + penalty, distance)
+        # Calculate bonus (only when weights provided)
+        bonus = 0.0
+        if section_weights:
+            raw_weight = section_weights.get(section, 0.0)
+            # Cap bonus to prevent weak chunks from jumping strong ones
+            bonus = min(max(0.0, raw_weight), MAX_SECTION_BONUS)
+
+        adjusted = distance + penalty - bonus
+        return (adjusted, distance)
 
     rows_ranked = sorted(rows, key=_adjusted_distance)
 

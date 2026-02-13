@@ -724,15 +724,23 @@ def chat(
     )
     if use_multi_category and routing is not None:
         chunks_by_category: dict[str, list] = {}
+        # Get all section weights from settings
+        all_section_weights = getattr(settings, "multi_category_section_weights", {}) or {}
+
         for item in routing.categories:
             budget = int(item.budget or 1)
             category_label = str(item.category.value)
             t_cat = time.perf_counter()
+
+            # Get category-specific section weights (if any)
+            category_section_weights = all_section_weights.get(category_label)
+
             selected = retrieve_for_category(
                 standalone_question,
                 category=category_label,
                 budget=budget,
                 conversation_topic=conversation_topic,
+                section_weights=category_section_weights,
             )
             chunks_by_category[category_label] = selected
             logger.info(
@@ -745,7 +753,7 @@ def chat(
                         getattr(settings, "retrieval_per_card_cap", 2) or 2
                     ),
                     "duration_ms": round((time.perf_counter() - t_cat) * 1000, 2),
-                    "section_weighting_enabled": True,
+                    "section_weighting_enabled": bool(category_section_weights),
                 },
             )
 

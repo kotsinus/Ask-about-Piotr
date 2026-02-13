@@ -70,6 +70,45 @@ def _parse_pinning_rules(value: str | None) -> dict[str, list[str]]:
     return {}
 
 
+def _parse_section_weights(value: str | None) -> dict[str, dict[str, float]]:
+    """Parse section weights from JSON environment variable.
+
+    Args:
+        value: JSON string mapping category names to section weight maps.
+            Example: '{"Education and formal background": {"degrees": 0.15, "education": 0.12}}'
+
+    Returns:
+        Dict mapping category names to section weight maps. Empty dict if not set.
+        Section weights are positive floats that BOOST section ranking (subtract from distance).
+    """
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, dict):
+            # Validate structure: dict[str, dict[str, float]]
+            result: dict[str, dict[str, float]] = {}
+            for category, weights in parsed.items():
+                if isinstance(category, str) and isinstance(weights, dict):
+                    # Ensure all weights are floats
+                    section_weights: dict[str, float] = {}
+                    for section, weight in weights.items():
+                        if isinstance(section, str):
+                            try:
+                                # Clamp weight to reasonable range [0.0, 0.5]
+                                # This prevents extreme values from distorting ranking
+                                raw_weight = float(weight)
+                                section_weights[section] = max(0.0, min(0.5, raw_weight))
+                            except (ValueError, TypeError):
+                                pass
+                    if section_weights:
+                        result[category] = section_weights
+            return result
+    except json.JSONDecodeError:
+        pass
+    return {}
+
+
 @dataclass(frozen=True)
 class Settings:
     # Deployment environment (used for safety checks)
@@ -134,6 +173,29 @@ class Settings:
         default_factory=lambda: {
             "Education and formal background": ["education-facts"],
         }
+    )
+
+    # Multi-category section weights.
+    #
+    # Section weights allow category-specific boosting of certain sections during
+    # retrieval. This is a general mechanism applicable to any category.
+    #
+    # Configuration:
+    # - Map category names to section weight maps (section name -> weight)
+    # - Set via MULTI_CATEGORY_SECTION_WEIGHTS environment variable (JSON format)
+    # - Example: '{"Education and formal background": {"degrees": 0.15, "education": 0.12}}'
+    #
+    # How it works:
+    # - Weights are POSITIVE values that BOOST section ranking (subtract from distance)
+    # - Formula: adjusted_distance = distance + penalty - bonus
+    # - Maximum bonus is capped at 0.25 to prevent weak chunks from jumping strong ones
+    #
+    # Use cases:
+    # - Boost "degrees" sections for Education category
+    # - Boost "publications" sections for Research category
+    # - Improve precision for category-specific retrieval
+    multi_category_section_weights: dict[str, dict[str, float]] = field(
+        default_factory=dict
     )
 
     # OpenAI SDK behavior controls (keep defaults safe for local dev).
@@ -264,6 +326,12 @@ def get_settings() -> Settings:
         }
     )
 
+    # Multi-category section weights (parsed from JSON env var).
+    # Empty by default - no section boosting unless explicitly configured.
+    multi_category_section_weights = _parse_section_weights(
+        os.getenv("MULTI_CATEGORY_SECTION_WEIGHTS")
+    )
+
     # Logging metadata
     ip_hash_salt = os.getenv("IP_HASH_SALT", "")
     if app_env in {"prod", "production"} and not ip_hash_salt.strip():
@@ -318,6 +386,7 @@ def get_settings() -> Settings:
         multi_category_allow_six_chunks=multi_category_allow_six_chunks,
         multi_category_budget_policy=multi_category_budget_policy,
         multi_category_pinning_rules=multi_category_pinning_rules,
+        multi_category_section_weights=multi_category_section_weights,
         ip_hash_salt=ip_hash_salt,
         trusted_proxy_cidrs=trusted_proxy_cidrs,
         interaction_log_include_llm_context=interaction_log_include_llm_context,

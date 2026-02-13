@@ -374,6 +374,7 @@ def test_chat_multi_category_routes_on_original_question(
         category: str,
         budget: int,
         conversation_topic: str | None = None,
+        section_weights: dict[str, float] | None = None,
     ):
         calls.append((category, budget))
         return [
@@ -421,6 +422,7 @@ def test_chat_multi_category_routes_on_original_question(
             multi_category_allow_six_chunks=False,
             multi_category_intent_budget_policy="intent_rules_v1",
             multi_category_pinning_rules={},
+            multi_category_section_weights={},
         ),
     )
     monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
@@ -488,6 +490,7 @@ def test_chat_multi_category_empty_pinning_rules_no_change(
         category: str,
         budget: int,
         conversation_topic: str | None = None,
+        section_weights: dict[str, float] | None = None,
     ):
         calls.append((category, budget))
         return [
@@ -562,6 +565,7 @@ def test_chat_multi_category_empty_pinning_rules_no_change(
             multi_category_allow_six_chunks=False,
             multi_category_intent_budget_policy="intent_rules_v1",
             multi_category_pinning_rules={},  # EMPTY pinning rules
+            multi_category_section_weights={},  # EMPTY section weights
         ),
     )
     monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
