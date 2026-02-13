@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from collections.abc import Callable
 
 import psycopg
 from pgvector import Vector
@@ -568,6 +569,104 @@ def retrieve_for_card(
     ]
 
 
+def apply_pinning(
+    chunks: list[RetrievedChunk],
+    pinning_rules: dict[str, list[str]],
+    routed_categories: list[str],
+    retrieve_for_card_fn: Callable[[str, int], list[RetrievedChunk]],
+    max_total_chunks: int = 5,
+) -> tuple[list[RetrievedChunk], list[str]]:
+    """Apply pinning rules to ensure required cards are included.
+
+    Args:
+        chunks: Current merged/deduped chunks from retrieval
+        pinning_rules: Dict mapping category names to lists of card IDs to pin
+        routed_categories: Categories returned by the router
+        retrieve_for_card_fn: Function to retrieve chunks for a specific card (card_id, limit)
+        max_total_chunks: Maximum chunks allowed in result
+
+    Returns:
+        Tuple of (updated chunks list, list of pinned card IDs)
+    """
+    pinned_card_ids: list[str] = []
+
+    if not pinning_rules or not routed_categories:
+        return chunks, pinned_card_ids
+
+    # Track which card IDs are already present in results
+    existing_card_ids: set[str] = {chunk.card_id for chunk in chunks}
+
+    # Process each routed category
+    for category in routed_categories:
+        category = str(category).strip()
+        if not category:
+            continue
+
+        # Check if pinning rules exist for this category
+        cards_to_pin = pinning_rules.get(category, [])
+        if not cards_to_pin:
+            continue
+
+        # Process each card ID in the pinning rules for this category
+        for card_id in cards_to_pin:
+            card_id = str(card_id).strip()
+            if not card_id:
+                continue
+
+            # Check if any chunk from this card is already in results
+            if card_id in existing_card_ids:
+                logger.debug(
+                    "pinning_chunk_already_present",
+                    extra={
+                        "card_id": card_id,
+                        "category": category,
+                    },
+                )
+                continue
+
+            # Retrieve the best chunk for this card
+            retrieved_chunks = retrieve_for_card_fn(card_id, 1)
+
+            if not retrieved_chunks:
+                logger.warning(
+                    "pinning_retrieval_empty",
+                    extra={
+                        "card_id": card_id,
+                        "category": category,
+                    },
+                )
+                continue
+
+            # Mark the chunk as pinned and add to results
+            pinned_chunk = retrieved_chunks[0]
+            pinned_chunk.pinned = True
+
+            # Set origin categories if not already set
+            if not pinned_chunk.origin_categories:
+                pinned_chunk.origin_categories = [category]
+            elif category not in pinned_chunk.origin_categories:
+                pinned_chunk.origin_categories.append(category)
+
+            if not pinned_chunk.best_origin_category:
+                pinned_chunk.best_origin_category = category
+
+            chunks.append(pinned_chunk)
+            existing_card_ids.add(card_id)
+            pinned_card_ids.append(card_id)
+
+            logger.info(
+                "pinning_applied",
+                extra={
+                    "card_id": card_id,
+                    "category": category,
+                    "total_chunks": len(chunks),
+                    "max_total_chunks": max_total_chunks,
+                },
+            )
+
+    return chunks, pinned_card_ids
+
+
 def merge_dedup_preserve_provenance(
     chunks_by_category: dict[str, list[RetrievedChunk]],
 ) -> tuple[list[RetrievedChunk], int]:
@@ -648,7 +747,9 @@ def cap_chunks_with_coverage(
     # Only require coverage for categories that are present in the current set.
     present_categories: set[str] = set()
     for chunk in chunks:
-        for origin in chunk.origin_categories or ([] if not chunk.best_origin_category else [chunk.best_origin_category]):
+        for origin in chunk.origin_categories or (
+            [] if not chunk.best_origin_category else [chunk.best_origin_category]
+        ):
             if origin in routed_set:
                 present_categories.add(origin)
 

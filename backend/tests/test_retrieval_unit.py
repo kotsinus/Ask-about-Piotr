@@ -201,7 +201,9 @@ def test_merge_dedup_preserves_provenance_and_keeps_best_distance() -> None:
     }
 
 
-def test_cap_chunks_with_coverage_prefers_eviction_from_overrepresented_category() -> None:
+def test_cap_chunks_with_coverage_prefers_eviction_from_overrepresented_category() -> (
+    None
+):
     chunks = [
         retrieval.RetrievedChunk(
             card_id="a1",
@@ -240,3 +242,224 @@ def test_cap_chunks_with_coverage_prefers_eviction_from_overrepresented_category
     assert len(capped) == 2
     best_origins = {c.best_origin_category for c in capped}
     assert best_origins == {"Education and formal background", "Hands-on engineering"}
+
+
+def test_apply_pinning_adds_missing_card() -> None:
+    """Given chunks without the pinned card, when pinning rules require a specific
+    card for a category, then the card is added to chunks with pinned=True."""
+    existing_chunk = retrieval.RetrievedChunk(
+        card_id="other-card",
+        category="Other",
+        section="Summary",
+        content="Some content",
+        distance=0.2,
+        origin_categories=["Other category"],
+        best_origin_category="Other category",
+    )
+    chunks = [existing_chunk]
+
+    pinning_rules = {"Education and formal background": ["education-facts"]}
+    routed_categories = ["Education and formal background"]
+
+    def mock_retrieve_for_card(
+        card_id: str, limit: int
+    ) -> list[retrieval.RetrievedChunk]:
+        return [
+            retrieval.RetrievedChunk(
+                card_id=card_id,
+                category="Education",
+                section="Degrees",
+                content="Education content",
+                distance=0.3,
+                origin_categories=["Education and formal background"],
+                best_origin_category="Education and formal background",
+            )
+        ]
+
+    result, pinned_ids = retrieval.apply_pinning(
+        chunks=chunks,
+        pinning_rules=pinning_rules,
+        routed_categories=routed_categories,
+        retrieve_for_card_fn=mock_retrieve_for_card,
+    )
+
+    assert len(result) == 2
+    assert "education-facts" in pinned_ids
+    assert any(c.pinned for c in result)
+    pinned_chunk = next(c for c in result if c.card_id == "education-facts")
+    assert pinned_chunk.pinned is True
+
+
+def test_apply_pinning_skips_if_card_already_present() -> None:
+    """Given chunks already contain a chunk from the pinned card, when pinning
+    rules require that card, then no duplicate is added, existing chunk is not modified."""
+    existing_chunk = retrieval.RetrievedChunk(
+        card_id="education-facts",
+        category="Education",
+        section="Degrees",
+        content="Existing education content",
+        distance=0.15,
+        origin_categories=["Education and formal background"],
+        best_origin_category="Education and formal background",
+        pinned=False,
+    )
+    chunks = [existing_chunk]
+
+    pinning_rules = {"Education and formal background": ["education-facts"]}
+    routed_categories = ["Education and formal background"]
+
+    call_count = 0
+
+    def mock_retrieve_for_card(
+        card_id: str, limit: int
+    ) -> list[retrieval.RetrievedChunk]:
+        nonlocal call_count
+        call_count += 1
+        return [
+            retrieval.RetrievedChunk(
+                card_id=card_id,
+                category="Education",
+                section="Other",
+                content="Should not be added",
+                distance=0.5,
+                origin_categories=["Education and formal background"],
+                best_origin_category="Education and formal background",
+            )
+        ]
+
+    result, pinned_ids = retrieval.apply_pinning(
+        chunks=chunks,
+        pinning_rules=pinning_rules,
+        routed_categories=routed_categories,
+        retrieve_for_card_fn=mock_retrieve_for_card,
+    )
+
+    assert len(result) == 1
+    assert len(pinned_ids) == 0
+    assert call_count == 0  # retrieve_for_card should not be called
+    assert result[0].pinned is False  # existing chunk should not be modified
+
+
+def test_apply_pinning_multiple_categories() -> None:
+    """Given multiple routed categories with different pinning rules, when pinning
+    is applied, then all required cards are pinned."""
+    existing_chunk = retrieval.RetrievedChunk(
+        card_id="other-card",
+        category="Other",
+        section="Summary",
+        content="Some content",
+        distance=0.2,
+        origin_categories=["Other category"],
+        best_origin_category="Other category",
+    )
+    chunks = [existing_chunk]
+
+    pinning_rules = {
+        "Education and formal background": ["education-facts"],
+        "Certifications": ["certifications-facts"],
+    }
+    routed_categories = ["Education and formal background", "Certifications"]
+
+    def mock_retrieve_for_card(
+        card_id: str, limit: int
+    ) -> list[retrieval.RetrievedChunk]:
+        category_map = {
+            "education-facts": "Education and formal background",
+            "certifications-facts": "Certifications",
+        }
+        return [
+            retrieval.RetrievedChunk(
+                card_id=card_id,
+                category=card_id.replace("-", " ").title(),
+                section="Overview",
+                content=f"Content for {card_id}",
+                distance=0.3,
+                origin_categories=[category_map.get(card_id, "Unknown")],
+                best_origin_category=category_map.get(card_id, "Unknown"),
+            )
+        ]
+
+    result, pinned_ids = retrieval.apply_pinning(
+        chunks=chunks,
+        pinning_rules=pinning_rules,
+        routed_categories=routed_categories,
+        retrieve_for_card_fn=mock_retrieve_for_card,
+    )
+
+    assert len(result) == 3  # 1 existing + 2 pinned
+    assert len(pinned_ids) == 2
+    assert "education-facts" in pinned_ids
+    assert "certifications-facts" in pinned_ids
+    pinned_chunks = [c for c in result if c.pinned]
+    assert len(pinned_chunks) == 2
+
+
+def test_apply_pinning_empty_rules() -> None:
+    """Given empty pinning rules dict, when pinning is applied, then chunks are unchanged."""
+    existing_chunk = retrieval.RetrievedChunk(
+        card_id="some-card",
+        category="Some",
+        section="Summary",
+        content="Some content",
+        distance=0.2,
+        origin_categories=["Some category"],
+        best_origin_category="Some category",
+    )
+    chunks = [existing_chunk]
+
+    pinning_rules: dict[str, list[str]] = {}
+    routed_categories = ["Education and formal background"]
+
+    def mock_retrieve_for_card(
+        card_id: str, limit: int
+    ) -> list[retrieval.RetrievedChunk]:
+        raise AssertionError("Should not be called with empty rules")
+
+    result, pinned_ids = retrieval.apply_pinning(
+        chunks=chunks,
+        pinning_rules=pinning_rules,
+        routed_categories=routed_categories,
+        retrieve_for_card_fn=mock_retrieve_for_card,
+    )
+
+    assert len(result) == 1
+    assert len(pinned_ids) == 0
+    assert result[0].card_id == "some-card"
+
+
+def test_apply_pinning_no_matching_category() -> None:
+    """Given pinning rules for categories not in routed_categories, when pinning
+    is applied, then chunks are unchanged."""
+    existing_chunk = retrieval.RetrievedChunk(
+        card_id="some-card",
+        category="Some",
+        section="Summary",
+        content="Some content",
+        distance=0.2,
+        origin_categories=["Some category"],
+        best_origin_category="Some category",
+    )
+    chunks = [existing_chunk]
+
+    # Pinning rules for categories that are NOT in routed_categories
+    pinning_rules = {
+        "Education and formal background": ["education-facts"],
+        "Certifications": ["certifications-facts"],
+    }
+    routed_categories = ["Leadership", "Research"]  # Different categories
+
+    def mock_retrieve_for_card(
+        card_id: str, limit: int
+    ) -> list[retrieval.RetrievedChunk]:
+        raise AssertionError("Should not be called when no categories match")
+
+    result, pinned_ids = retrieval.apply_pinning(
+        chunks=chunks,
+        pinning_rules=pinning_rules,
+        routed_categories=routed_categories,
+        retrieve_for_card_fn=mock_retrieve_for_card,
+    )
+
+    assert len(result) == 1
+    assert len(pinned_ids) == 0
+    assert result[0].card_id == "some-card"

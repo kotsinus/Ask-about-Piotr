@@ -343,7 +343,9 @@ def test_chat_multi_category_routes_on_original_question(
 ) -> None:
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr("app.main.rewrite_question", lambda q, messages=None: "REWRITTEN")
+    monkeypatch.setattr(
+        "app.main.rewrite_question", lambda q, messages=None: "REWRITTEN"
+    )
 
     def _route_categories(q: str):
         captured["routing_input"] = q
@@ -418,6 +420,7 @@ def test_chat_multi_category_routes_on_original_question(
             multi_category_max_total_chunks=5,
             multi_category_allow_six_chunks=False,
             multi_category_intent_budget_policy="intent_rules_v1",
+            multi_category_pinning_rules={},
         ),
     )
     monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
@@ -441,3 +444,150 @@ def test_chat_multi_category_routes_on_original_question(
     assert captured["routing_input"] == chat_request.question
     assert response.routing is not None
     assert calls, "Expected per-category retrieval calls"
+
+
+def test_chat_multi_category_empty_pinning_rules_no_change(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression test: empty pinning rules should not change retrieval behavior.
+
+    When multi_category_pinning_rules is an empty dict, the multi-category flow
+    should complete successfully and retrieve_for_card should NOT be called.
+    """
+    captured: dict[str, object] = {}
+    retrieve_for_card_calls: list[tuple[str, int]] = []
+
+    monkeypatch.setattr(
+        "app.main.rewrite_question", lambda q, messages=None: "REWRITTEN"
+    )
+
+    def _route_categories(q: str):
+        captured["routing_input"] = q
+        return SimpleNamespace(
+            categories=[
+                SimpleNamespace(
+                    category=Category.education_and_formal_background,
+                    confidence=Confidence.high,
+                    budget=None,
+                ),
+                SimpleNamespace(
+                    category=Category.hands_on_engineering,
+                    confidence=Confidence.medium,
+                    budget=None,
+                ),
+            ]
+        )
+
+    monkeypatch.setattr("app.main.route_categories", _route_categories)
+
+    calls: list[tuple[str, int]] = []
+
+    def _retrieve_for_category(
+        question: str,
+        *,
+        category: str,
+        budget: int,
+        conversation_topic: str | None = None,
+    ):
+        calls.append((category, budget))
+        return [
+            RetrievedChunk(
+                card_id=f"{category}-card",
+                category="cat",
+                section="Overview",
+                source_url=None,
+                content=f"chunk for {category}",
+                distance=0.10,
+                origin_categories=[category],
+                best_origin_category=category,
+                pinned=False,
+            )
+        ]
+
+    monkeypatch.setattr("app.main.retrieve_for_category", _retrieve_for_category)
+
+    # Mock retrieve_for_card to track if it's called (it should NOT be called)
+    def _retrieve_for_card(
+        question: str,
+        *,
+        card_id: str,
+        limit: int,
+        origin_category: str = "",
+        conversation_topic: str | None = None,
+    ):
+        retrieve_for_card_calls.append((card_id, limit))
+        return [
+            RetrievedChunk(
+                card_id=card_id,
+                category="cat",
+                section="Overview",
+                source_url=None,
+                content=f"pinned chunk for {card_id}",
+                distance=0.05,
+                origin_categories=[origin_category] if origin_category else [],
+                best_origin_category=origin_category if origin_category else None,
+                pinned=True,
+            )
+        ]
+
+    monkeypatch.setattr("app.main.retrieve_for_card", _retrieve_for_card)
+
+    monkeypatch.setattr(
+        "app.main.synthesize_answer",
+        lambda *a, **k: SynthesisResult(
+            answer="ok",
+            why_this_matters="ok",
+            confidence=Confidence.medium,
+            confidence_reason=None,
+            used_chunk_indices=[0],
+        ),
+    )
+
+    # Key: empty pinning rules
+    monkeypatch.setattr(
+        "app.main.get_settings",
+        lambda: SimpleNamespace(
+            router_model="router",
+            synthesis_model="synth",
+            synthesis_temperature=0.1,
+            embeddings_provider="stub",
+            embeddings_model="stub",
+            ip_hash_salt="salt",
+            interaction_log_include_llm_context=True,
+            retrieval_per_card_cap=2,
+            multi_category_retrieval_enabled=True,
+            multi_category_rollout_percent=100,
+            multi_category_max_categories=2,
+            multi_category_max_total_chunks=5,
+            multi_category_allow_six_chunks=False,
+            multi_category_intent_budget_policy="intent_rules_v1",
+            multi_category_pinning_rules={},  # EMPTY pinning rules
+        ),
+    )
+    monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
+    monkeypatch.setattr("app.main.write_interaction_log", lambda *a, **k: None)
+    monkeypatch.setattr("app.main.get_request_id", lambda: "req-1")
+
+    http_request = _make_http_request()
+    chat_request = ChatRequest(
+        question="What is your educational background, and how has it shaped your career?",
+        messages=[],
+        context=ConversationContext(conversation_id="c1", last_topic=None),
+    )
+
+    response = chat(
+        http_request=http_request,
+        request=chat_request,
+        background_tasks=BackgroundTasks(),
+        debug_retrieval=True,
+    )
+
+    # Verify the flow completed successfully
+    assert captured["routing_input"] == chat_request.question
+    assert response.routing is not None
+    assert calls, "Expected per-category retrieval calls"
+
+    # Key assertion: retrieve_for_card should NOT be called when pinning rules are empty
+    assert retrieve_for_card_calls == [], (
+        f"retrieve_for_card should not be called with empty pinning rules, but got: {retrieve_for_card_calls}"
+    )

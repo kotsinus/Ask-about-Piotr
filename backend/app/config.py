@@ -20,8 +20,9 @@
 
 from __future__ import annotations
 
+import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 def _parse_bool(value: str | None, default: bool = False) -> bool:
@@ -40,6 +41,33 @@ def _parse_csv(value: str | None) -> list[str]:
         return []
     parts = [item.strip() for item in value.split(",")]
     return [item for item in parts if item]
+
+
+def _parse_pinning_rules(value: str | None) -> dict[str, list[str]]:
+    """Parse pinning rules from JSON environment variable.
+
+    Args:
+        value: JSON string mapping category names to lists of card IDs to pin.
+            Example: '{"Education and formal background": ["education-facts"]}'
+
+    Returns:
+        Dict mapping category names to lists of card IDs. Empty dict if not set.
+    """
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, dict):
+            # Validate structure: dict[str, list[str]]
+            result: dict[str, list[str]] = {}
+            for category, card_ids in parsed.items():
+                if isinstance(category, str) and isinstance(card_ids, list):
+                    # Ensure all card IDs are strings
+                    result[category] = [str(cid) for cid in card_ids if cid]
+            return result
+    except json.JSONDecodeError:
+        pass
+    return {}
 
 
 @dataclass(frozen=True)
@@ -86,6 +114,27 @@ class Settings:
     multi_category_max_total_chunks: int = 5
     multi_category_allow_six_chunks: bool = False
     multi_category_budget_policy: str = "deterministic"
+
+    # Multi-category pinning rules.
+    #
+    # Pinning ensures specific cards are always included in retrieval results
+    # for certain categories, regardless of their similarity score. This is a
+    # general mechanism applicable to any category.
+    #
+    # Configuration:
+    # - Map category names to lists of card IDs that should be pinned
+    # - Set via MULTI_CATEGORY_PINNING_RULES environment variable (JSON format)
+    # - Example: '{"Education and formal background": ["education-facts"]}'
+    #
+    # Use cases:
+    # - Ensure foundational/essential cards are always retrieved
+    # - Guarantee important context appears in multi-category responses
+    # - Override similarity-based ranking for critical information
+    multi_category_pinning_rules: dict[str, list[str]] = field(
+        default_factory=lambda: {
+            "Education and formal background": ["education-facts"],
+        }
+    )
 
     # OpenAI SDK behavior controls (keep defaults safe for local dev).
     openai_timeout_s: float = 60.0
@@ -201,9 +250,19 @@ def get_settings() -> Settings:
         os.getenv("MULTI_CATEGORY_ALLOW_SIX_CHUNKS"), default=False
     )
     multi_category_budget_policy = (
-        os.getenv("MULTI_CATEGORY_BUDGET_POLICY", "deterministic")
-        or "deterministic"
+        os.getenv("MULTI_CATEGORY_BUDGET_POLICY", "deterministic") or "deterministic"
     ).strip()
+
+    # Multi-category pinning rules (parsed from JSON env var).
+    # Falls back to default if not set or invalid JSON.
+    env_pinning_rules = _parse_pinning_rules(os.getenv("MULTI_CATEGORY_PINNING_RULES"))
+    multi_category_pinning_rules = (
+        env_pinning_rules
+        if env_pinning_rules
+        else {
+            "Education and formal background": ["education-facts"],
+        }
+    )
 
     # Logging metadata
     ip_hash_salt = os.getenv("IP_HASH_SALT", "")
@@ -258,6 +317,7 @@ def get_settings() -> Settings:
         multi_category_max_total_chunks=multi_category_max_total_chunks,
         multi_category_allow_six_chunks=multi_category_allow_six_chunks,
         multi_category_budget_policy=multi_category_budget_policy,
+        multi_category_pinning_rules=multi_category_pinning_rules,
         ip_hash_salt=ip_hash_salt,
         trusted_proxy_cidrs=trusted_proxy_cidrs,
         interaction_log_include_llm_context=interaction_log_include_llm_context,

@@ -36,8 +36,8 @@ from app.config import get_settings, get_web_settings
 from app.geoip import lookup_country
 from app.interaction_logging import InteractionLog, write_interaction_log
 from app.llm import (
-    RoutingResult,
     RoutedCategory,
+    RoutingResult,
     clean_why,
     rewrite_question,
     route_categories,
@@ -52,10 +52,11 @@ from app.observability import (
     set_request_id,
 )
 from app.privacy import anonymize_ip_prefix, extract_client_ip, hash_ip
-from app.retrieval import retrieve
 from app.retrieval import (
+    apply_pinning,
     cap_chunks_with_coverage,
     merge_dedup_preserve_provenance,
+    retrieve,
     retrieve_for_card,
     retrieve_for_category,
 )
@@ -732,7 +733,9 @@ def chat(
                     "category": category_label,
                     "budget": budget,
                     "selected_count": len(selected),
-                    "per_card_cap": int(getattr(settings, "retrieval_per_card_cap", 2) or 2),
+                    "per_card_cap": int(
+                        getattr(settings, "retrieval_per_card_cap", 2) or 2
+                    ),
                     "duration_ms": round((time.perf_counter() - t_cat) * 1000, 2),
                     "section_weighting_enabled": True,
                 },
@@ -740,11 +743,52 @@ def chat(
 
         merged, dedup_collisions = merge_dedup_preserve_provenance(chunks_by_category)
 
+        # Apply pinning: ensure required cards are included for routed categories.
+        # Pipeline: retrieve per category → merge → pin → re-dedup → cap → synthesis
+        pinned_card_ids: list[str] = []
+        routed_category_names = [str(i.category.value) for i in routing.categories]
         max_total = int(getattr(settings, "multi_category_max_total_chunks", 5) or 5)
         max_total = max(1, max_total)
+
+        # Create a retrieval function for pinning that captures the current context.
+        def _retrieve_for_pinning(card_id: str, limit: int):
+            return retrieve_for_card(
+                standalone_question,
+                card_id=card_id,
+                limit=limit,
+                origin_category=routed_category_names[0]
+                if routed_category_names
+                else "",
+                conversation_topic=conversation_topic,
+            )
+
+        merged, pinned_card_ids = apply_pinning(
+            chunks=merged,
+            pinning_rules=settings.multi_category_pinning_rules,
+            routed_categories=routed_category_names,
+            retrieve_for_card_fn=_retrieve_for_pinning,
+            max_total_chunks=max_total,
+        )
+
+        # Re-dedup after pinning: pinned chunks may duplicate existing chunks.
+        # Use a wrapper dict to reuse the merge_dedup_preserve_provenance function.
+        if pinned_card_ids:
+            merged_after_pin, _ = merge_dedup_preserve_provenance({"_pinned": merged})
+            merged = merged_after_pin
+
+        # Log pinning event if any cards were pinned.
+        if pinned_card_ids:
+            logger.info(
+                "chat_pinning",
+                extra={
+                    "pinned_cards": pinned_card_ids,
+                    "routed_categories": routed_category_names,
+                },
+            )
+
         chunks = cap_chunks_with_coverage(
             chunks=merged,
-            routed_categories=[str(i.category.value) for i in routing.categories],
+            routed_categories=routed_category_names,
             max_total_chunks=max_total,
         )
 
@@ -755,6 +799,7 @@ def chat(
                 "post_dedup_count": len(merged),
                 "dedup_collisions": dedup_collisions,
                 "final_chunk_count": len(chunks),
+                "pinned_card_ids": pinned_card_ids,
             },
         )
     else:

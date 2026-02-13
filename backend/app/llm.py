@@ -286,7 +286,8 @@ def synthesize_answer(
 
         lines: list[str] = ["Evidence groups (global indices):", ""]
         budget_by_category = {
-            str(item.category.value): int(item.budget or 0) for item in routing.categories
+            str(item.category.value): int(item.budget or 0)
+            for item in routing.categories
         }
         for cat in ordered_categories:
             items = by_category.get(cat, [])
@@ -300,7 +301,9 @@ def synthesize_answer(
             lines.append("")
         evidence_block = "\n".join(lines).strip()
     else:
-        evidence_lines = [_format_chunk_line(idx, chunk) for idx, chunk in enumerate(chunks)]
+        evidence_lines = [
+            _format_chunk_line(idx, chunk) for idx, chunk in enumerate(chunks)
+        ]
         evidence_block = "Evidence:\n" + "\n".join(evidence_lines)
 
     STYLE_HINTS = {
@@ -385,7 +388,7 @@ def synthesize_answer(
         "Style rules (important):\n"
         "- Write like a person speaking, not like a CV or an essay.\n"
         "- The 'answer' field MUST be facts-first.\n"
-        "- Use 2 to 6 sentences in the 'answer' field.\n"        
+        "- Use 2 to 6 sentences in the 'answer' field.\n"
         "- Prefer short, direct sentences. Avoid fluff and generic phrases.\n"
         "- Avoid meta-commentary such as: 'This highlights', 'This demonstrates', 'Understanding X is crucial', 'It is important to note'.\n"
         "- Do not restate the question. Do not introduce yourself.\n\n"
@@ -435,11 +438,7 @@ def synthesize_answer(
 
     user_prompt = (
         "Question:\n"
-        f"{question}\n\n"
-        + hint_block
-        + context_block
-        + topic_line
-        + evidence_block
+        f"{question}\n\n" + hint_block + context_block + topic_line + evidence_block
     )
     # NOTE: synthesize_answer is intentionally *not* routed through the local
     # response cache. We run it with a non-zero temperature by default, so
