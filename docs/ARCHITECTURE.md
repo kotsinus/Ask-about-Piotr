@@ -255,6 +255,8 @@ Operational notes:
 
 Primary implementation: [`backend/app/main.py`](backend/app/main.py:1).
 
+#### Single-category flow (default)
+
 ```mermaid
 sequenceDiagram
   participant U as User
@@ -285,6 +287,43 @@ sequenceDiagram
   BE-->>FE: ChatResponse JSON
   FE-->>U: Render answer + citations + details
 ```
+
+#### Multi-category flow (when enabled)
+
+When `MULTI_CATEGORY_RETRIEVAL_ENABLED=true`, the system routes the original question to multiple categories and retrieves evidence per category.
+
+```mermaid
+flowchart TD
+  A[POST /chat] --> B[rewrite_question]
+  A --> C[route_categories on original question]
+  C --> D{Valid routing?}
+  D -->|No| E[Fallback to heuristic classifier]
+  D -->|Yes| F[Apply deterministic budget policy]
+  E --> F
+  F --> G[For each category: retrieve_for_category]
+  G --> H[merge_dedup_preserve_provenance]
+  H --> I[apply_pinning]
+  I --> J[Re-dedup after pinning]
+  J --> K[cap_chunks_with_coverage]
+  K --> L[synthesize_answer with grouped evidence]
+  L --> M[Quality gate validation]
+  M --> N{Passed?}
+  N -->|No| O[Retry with temperature=0]
+  O --> P[Quality rules log-only validation]
+  N -->|Yes| P
+  P --> Q[Build response]
+  Q --> R[Log interaction with diagnostics]
+  R --> S[Return ChatResponse]
+```
+
+Key differences from single-category flow:
+
+- **Routing on original question**: The router sees the raw user question, not the rewritten version, to preserve keyword cues.
+- **Per-category retrieval**: Each routed category gets its own retrieval pass with a budget.
+- **Merge and dedup**: Results are merged while preserving provenance (`origin_categories`, `best_origin_category`).
+- **Pinning**: Configurable rules ensure specific cards are included for certain categories.
+- **Quality gates**: Server-side validation with retry on failure.
+- **Quality rules**: Configurable per-category token checks (log-only in v1).
 
 Important properties:
 

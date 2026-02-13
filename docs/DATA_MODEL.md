@@ -77,6 +77,17 @@ Additional context columns (for debugging/analytics):
   This field is controlled by env var `INTERACTION_LOG_INCLUDE_LLM_CONTEXT` (see [`.env.example`](.env.example:1)).
   Each message `content` is truncated to 2000 characters before storage.
 
+Multi-category routing diagnostics (JSONB columns):
+
+- `routing` (jsonb, nullable) — router output after server normalization.
+  Contains `categories` array with `{category, confidence, budget}` objects and `router_fallback_used` flag.
+- `retrieval_by_category` (jsonb, nullable) — per-category retrieval counts and budgets.
+  Maps category names to `{selected_count, budget}` objects.
+- `quality_gate` (jsonb, nullable) — synthesis quality gate results.
+  Contains `passed` boolean, `failure_reasons` array, and `retry_attempted` flag.
+
+These columns are populated only when multi-category routing is enabled (`MULTI_CATEGORY_RETRIEVAL_ENABLED=true`).
+
 Derived vs. persisted:
 
 - **Derived (privacy-minimized)**:
