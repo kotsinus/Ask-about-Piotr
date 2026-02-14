@@ -466,7 +466,11 @@ def retrieve_for_category(
         # Calculate bonus (only when weights provided)
         bonus = 0.0
         if section_weights:
-            raw_weight = section_weights.get(section, 0.0)
+            # Normalize section weight keys for lookup (keys may be in original case)
+            normalized_weights = {
+                _norm_section(k): v for k, v in section_weights.items()
+            }
+            raw_weight = normalized_weights.get(section, 0.0)
             # Cap bonus to prevent weak chunks from jumping strong ones
             bonus = min(max(0.0, raw_weight), MAX_SECTION_BONUS)
 
