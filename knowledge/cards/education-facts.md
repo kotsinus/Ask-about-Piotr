@@ -2,10 +2,10 @@
 Education (Facts)
 
 # Category
-experience
+Education and formal background
 
 # Problem
-What degrees and formal education are stated in the CV.
+This card contains factual information about Piotr's formal education, academic degrees, and certifications from higher education institutions.
 
 # My role
 N/A
@@ -37,4 +37,3 @@ N/A
 
 # Links
 - CV: assets/cv/CV_Piotr_Synak.pdf
-

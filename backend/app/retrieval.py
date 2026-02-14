@@ -347,11 +347,11 @@ def retrieve_for_category(
                 SELECT card_id, category, section, source_url, content,
                        embedding <=> %s AS distance
                 FROM knowledge_chunks
-                WHERE section <> 'Links'
+                WHERE section <> 'Links' AND category = %s
                 ORDER BY distance
                 LIMIT %s;
                 """,
-                (embedding_param, candidate_limit),
+                (embedding_param, category, candidate_limit),
             )
             rows = cursor.fetchall()
 

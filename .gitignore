@@ -46,3 +46,6 @@ Thumbs.db
 .vscode/
 *.swp
 
+# Diagnostic scripts (temporary)
+scripts/
+
