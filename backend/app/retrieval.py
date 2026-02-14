@@ -316,6 +316,9 @@ def retrieve_for_category(
     - Uses a fixed oversample factor for the DB candidate limit.
     - Applies the standard per-card cap semantics within this category run.
     - Section weights are POSITIVE values that BOOST section ranking (subtract from distance).
+    - The `category` parameter is a ROUTER category (intent taxonomy), NOT a card category
+      (content taxonomy). Retrieval is semantic-first and does NOT filter by card category.
+      See docs/ARCHITECTURE.md for the distinction between these two taxonomies.
     """
 
     budget = max(1, int(budget))
@@ -339,6 +342,12 @@ def retrieve_for_category(
     # Oversample strongly to preserve recall; category selection will trim to budget.
     candidate_limit = max(budget * oversample_factor * 8, 30)
 
+    # NOTE: We do NOT filter by category here. The `category` parameter is a router
+    # category (intent taxonomy like "Hands-on engineering"), while the database
+    # `category` column contains card categories (content taxonomy like "project",
+    # "research", "experience"). These are intentionally different taxonomies.
+    # Retrieval is semantic-first; router categories influence synthesis style,
+    # not evidence filtering.
     with psycopg.connect(settings.database_url) as conn:
         register_vector(conn)
         with conn.cursor() as cursor:
@@ -347,11 +356,11 @@ def retrieve_for_category(
                 SELECT card_id, category, section, source_url, content,
                        embedding <=> %s AS distance
                 FROM knowledge_chunks
-                WHERE section <> 'Links' AND category = %s
+                WHERE section <> 'Links'
                 ORDER BY distance
                 LIMIT %s;
                 """,
-                (embedding_param, category, candidate_limit),
+                (embedding_param, candidate_limit),
             )
             rows = cursor.fetchall()
 

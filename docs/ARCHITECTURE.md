@@ -605,6 +605,48 @@ Not implemented (recommended):
 
 ## Data model and retention
 
+### Two separate category taxonomies
+
+This system uses **two intentionally different category taxonomies** for different purposes. They must NOT be conflated.
+
+#### Card categories (content taxonomy)
+
+* **Purpose**: Describe the TYPE of knowledge source (what kind of document is this?)
+* **Values**: `project`, `research`, `certification`, `experience`, `profile`, `Education and formal background`
+* **Source**: The `Category` section in each knowledge card Markdown file
+* **Storage**: `knowledge_chunks.category` column in Postgres
+* **Use cases**:
+  * Organizing and citing evidence sources
+  * Filtering by document type (if needed for specific queries)
+  * Displaying source type to users
+
+#### Router categories (intent taxonomy)
+
+* **Purpose**: Describe the QUESTION INTENT and desired answer style (how should this be answered?)
+* **Values**: `Hands-on engineering`, `Architecture and system design`, `AI and ML practice`, `Leadership and product strategy`, `Research and academic credibility`, `Career fit and role alignment`, `Education and formal background`, `Personal interests and working style`
+* **Source**: LLM router classification in [`backend/app/llm.py`](backend/app/llm.py:1)
+* **Storage**: Passed to synthesis, not stored in database
+* **Use cases**:
+  * Selecting answer style hints (technical depth, leadership focus, etc.)
+  * Determining which `why_this_matters` template to use
+  * Influencing synthesis prompt without constraining evidence
+
+#### Why they must remain separate
+
+1. **One question often needs mixed sources**: A question like "Tell me about leadership at DeepSeas" has intent "Leadership and product strategy" but evidence may come from `experience` and `project` cards.
+
+2. **Card categories are too coarse for routing**: `project`/`research`/`certification` don't indicate whether the user wants hands-on details vs. architecture vs. career fit.
+
+3. **Stability and evolution**: You can change card organization without affecting UX routing, and vice versa.
+
+4. **Semantic-first retrieval**: Retrieval should find the most relevant evidence regardless of document type. Router categories influence synthesis style, not evidence filtering.
+
+#### Implementation implications
+
+* **Retrieval functions** in [`backend/app/retrieval.py`](backend/app/retrieval.py:1) must NOT filter by router categories.
+* **Synthesis** in [`backend/app/llm.py`](backend/app/llm.py:1) uses router categories for style hints, not evidence selection.
+* **Future enhancement**: Consider soft boost/rerank based on router-to-card-category preferences (e.g., "Research and academic credibility" → boost `research` and `certification` cards), but never hard filter.
+
 ### `knowledge_chunks`
 
 Purpose:
