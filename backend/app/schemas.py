@@ -25,16 +25,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
-class Category(StrEnum):
-    hands_on_engineering = "Hands-on engineering"
-    architecture_and_system_design = "Architecture and system design"
-    ai_and_ml_practice = "AI and ML practice"
-    leadership_and_product_strategy = "Leadership and product strategy"
-    research_and_academic_credibility = "Research and academic credibility"
-    career_fit_and_role_alignment = "Career fit and role alignment"
-    education_and_formal_background = "Education and formal background"
-    personal_interests_and_working_style = "Personal interests and working style"
+from app.routing_category import RoutingCategory
 
 
 class Confidence(StrEnum):
@@ -59,14 +50,14 @@ class DebugRetrievalItem(BaseModel):
     distance: float
 
 
-class RoutingCategory(BaseModel):
-    category: str
+class RoutingCategoryAllocation(BaseModel):
+    routing_category: RoutingCategory
     confidence: Confidence
     budget: int
 
 
 class RoutingDebug(BaseModel):
-    categories: list[RoutingCategory]
+    routing_categories: list[RoutingCategoryAllocation]
 
 
 class ConversationContext(BaseModel):
@@ -100,7 +91,7 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    category: Category
+    routing_category: RoutingCategory
     answer: str
     why_this_matters: str
     evidence: list[EvidenceItem]

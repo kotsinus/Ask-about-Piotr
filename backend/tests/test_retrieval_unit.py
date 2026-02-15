@@ -166,23 +166,23 @@ def test_retrieve_postprocesses_sections_and_diversifies(
 def test_merge_dedup_preserves_provenance_and_keeps_best_distance() -> None:
     chunk_a = retrieval.RetrievedChunk(
         card_id="c1",
-        category="cat",
+        card_category="cat",
         section="Overview",
         source_url=None,
         content="Same content",
         distance=0.20,
-        origin_categories=["education"],
-        best_origin_category="education",
+        origin_routing_categories=["education"],
+        origin_routing_category="education",
     )
     chunk_b = retrieval.RetrievedChunk(
         card_id="c1",
-        category="cat",
+        card_category="cat",
         section="Overview",
         source_url=None,
         content="Same content",
         distance=0.10,
-        origin_categories=["Hands-on engineering"],
-        best_origin_category="Hands-on engineering",
+        origin_routing_categories=["Hands-on engineering"],
+        origin_routing_category="Hands-on engineering",
     )
 
     merged, collisions = retrieval.merge_dedup_preserve_provenance(
@@ -195,7 +195,7 @@ def test_merge_dedup_preserves_provenance_and_keeps_best_distance() -> None:
     assert collisions == 1
     assert len(merged) == 1
     assert merged[0].distance == 0.10
-    assert set(merged[0].origin_categories or []) == {
+    assert set(merged[0].origin_routing_categories or []) == {
         "education",
         "Hands-on engineering",
     }
@@ -207,30 +207,30 @@ def test_cap_chunks_with_coverage_prefers_eviction_from_overrepresented_category
     chunks = [
         retrieval.RetrievedChunk(
             card_id="a1",
-            category="x",
+            card_category="x",
             section="S",
             content="A1",
             distance=0.10,
-            origin_categories=["education"],
-            best_origin_category="education",
+            origin_routing_categories=["education"],
+            origin_routing_category="education",
         ),
         retrieval.RetrievedChunk(
             card_id="a2",
-            category="x",
+            card_category="x",
             section="S",
             content="A2",
             distance=0.20,
-            origin_categories=["education"],
-            best_origin_category="education",
+            origin_routing_categories=["education"],
+            origin_routing_category="education",
         ),
         retrieval.RetrievedChunk(
             card_id="b1",
-            category="y",
+            card_category="y",
             section="S",
             content="B1",
             distance=0.15,
-            origin_categories=["Hands-on engineering"],
-            best_origin_category="Hands-on engineering",
+            origin_routing_categories=["Hands-on engineering"],
+            origin_routing_category="Hands-on engineering",
         ),
     ]
 
@@ -240,7 +240,7 @@ def test_cap_chunks_with_coverage_prefers_eviction_from_overrepresented_category
         max_total_chunks=2,
     )
     assert len(capped) == 2
-    best_origins = {c.best_origin_category for c in capped}
+    best_origins = {c.origin_routing_category for c in capped}
     assert best_origins == {"education", "Hands-on engineering"}
 
 
@@ -249,12 +249,12 @@ def test_apply_pinning_adds_missing_card() -> None:
     card for a category, then the card is added to chunks with pinned=True."""
     existing_chunk = retrieval.RetrievedChunk(
         card_id="other-card",
-        category="Other",
+        card_category="Other",
         section="Summary",
         content="Some content",
         distance=0.2,
-        origin_categories=["Other category"],
-        best_origin_category="Other category",
+        origin_routing_categories=["Other category"],
+        origin_routing_category="Other category",
     )
     chunks = [existing_chunk]
 
@@ -267,12 +267,12 @@ def test_apply_pinning_adds_missing_card() -> None:
         return [
             retrieval.RetrievedChunk(
                 card_id=card_id,
-                category="Education",
+                card_category="Education",
                 section="Degrees",
                 content="Education content",
                 distance=0.3,
-                origin_categories=["education"],
-                best_origin_category="education",
+                origin_routing_categories=["education"],
+                origin_routing_category="education",
             )
         ]
 
@@ -295,12 +295,12 @@ def test_apply_pinning_skips_if_card_already_present() -> None:
     rules require that card, then no duplicate is added, existing chunk is not modified."""
     existing_chunk = retrieval.RetrievedChunk(
         card_id="education-facts",
-        category="Education",
+        card_category="Education",
         section="Degrees",
         content="Existing education content",
         distance=0.15,
-        origin_categories=["education"],
-        best_origin_category="education",
+        origin_routing_categories=["education"],
+        origin_routing_category="education",
         pinned=False,
     )
     chunks = [existing_chunk]
@@ -318,12 +318,12 @@ def test_apply_pinning_skips_if_card_already_present() -> None:
         return [
             retrieval.RetrievedChunk(
                 card_id=card_id,
-                category="Education",
+                card_category="Education",
                 section="Other",
                 content="Should not be added",
                 distance=0.5,
-                origin_categories=["education"],
-                best_origin_category="education",
+                origin_routing_categories=["education"],
+                origin_routing_category="education",
             )
         ]
 
@@ -345,12 +345,12 @@ def test_apply_pinning_multiple_categories() -> None:
     is applied, then all required cards are pinned."""
     existing_chunk = retrieval.RetrievedChunk(
         card_id="other-card",
-        category="Other",
+        card_category="Other",
         section="Summary",
         content="Some content",
         distance=0.2,
-        origin_categories=["Other category"],
-        best_origin_category="Other category",
+        origin_routing_categories=["Other category"],
+        origin_routing_category="Other category",
     )
     chunks = [existing_chunk]
 
@@ -370,12 +370,12 @@ def test_apply_pinning_multiple_categories() -> None:
         return [
             retrieval.RetrievedChunk(
                 card_id=card_id,
-                category=card_id.replace("-", " ").title(),
+                card_category=card_id.replace("-", " ").title(),
                 section="Overview",
                 content=f"Content for {card_id}",
                 distance=0.3,
-                origin_categories=[category_map.get(card_id, "Unknown")],
-                best_origin_category=category_map.get(card_id, "Unknown"),
+                origin_routing_categories=[category_map.get(card_id, "Unknown")],
+                origin_routing_category=category_map.get(card_id, "Unknown"),
             )
         ]
 
@@ -398,12 +398,12 @@ def test_apply_pinning_empty_rules() -> None:
     """Given empty pinning rules dict, when pinning is applied, then chunks are unchanged."""
     existing_chunk = retrieval.RetrievedChunk(
         card_id="some-card",
-        category="Some",
+        card_category="Some",
         section="Summary",
         content="Some content",
         distance=0.2,
-        origin_categories=["Some category"],
-        best_origin_category="Some category",
+        origin_routing_categories=["Some category"],
+        origin_routing_category="Some category",
     )
     chunks = [existing_chunk]
 
@@ -432,12 +432,12 @@ def test_apply_pinning_no_matching_category() -> None:
     is applied, then chunks are unchanged."""
     existing_chunk = retrieval.RetrievedChunk(
         card_id="some-card",
-        category="Some",
+        card_category="Some",
         section="Summary",
         content="Some content",
         distance=0.2,
-        origin_categories=["Some category"],
-        best_origin_category="Some category",
+        origin_routing_categories=["Some category"],
+        origin_routing_category="Some category",
     )
     chunks = [existing_chunk]
 
@@ -489,7 +489,7 @@ def test_section_weights_empty_no_change(
     # Get results with no weights
     chunks_none = retrieval.retrieve_for_category(
         "test",
-        category="Education",
+        routing_category="Education",
         budget=2,
         section_weights=None,
     )
@@ -497,7 +497,7 @@ def test_section_weights_empty_no_change(
     # Get results with empty weights
     chunks_empty = retrieval.retrieve_for_category(
         "test",
-        category="Education",
+        routing_category="Education",
         budget=2,
         section_weights={},
     )
@@ -531,7 +531,7 @@ def test_section_weights_affect_ranking(
     # Without weights, Overview (distance 0.10) should come first
     chunks_no_weights = retrieval.retrieve_for_category(
         "test",
-        category="Education",
+        routing_category="Education",
         budget=2,
         section_weights=None,
     )
@@ -541,7 +541,7 @@ def test_section_weights_affect_ranking(
     # Adjusted distance for Degrees: 0.25 - 0.20 = 0.05 (better than 0.10)
     chunks_with_weights = retrieval.retrieve_for_category(
         "test",
-        category="Education",
+        routing_category="Education",
         budget=2,
         section_weights={"degrees": 0.20},
     )
@@ -574,7 +574,7 @@ def test_section_weights_bonus_capped(
     # Adjusted distance for Degrees: 0.50 - 0.25 = 0.25 (still worse than 0.10)
     chunks = retrieval.retrieve_for_category(
         "test",
-        category="Education",
+        routing_category="Education",
         budget=2,
         section_weights={"degrees": 1.0},  # Extreme weight, should be capped
     )
@@ -612,7 +612,7 @@ def test_section_weights_with_penalty(
     # Degrees should come first
     chunks_no_weights = retrieval.retrieve_for_category(
         "test",
-        category="Education",
+        routing_category="Education",
         budget=2,
         section_weights=None,
     )
@@ -624,7 +624,7 @@ def test_section_weights_with_penalty(
     # Both are equal, stable sort keeps original order (Title first in rows)
     chunks_with_weights = retrieval.retrieve_for_category(
         "test",
-        category="Education",
+        routing_category="Education",
         budget=2,
         section_weights={"title": 0.15},
     )

@@ -29,18 +29,18 @@ class TestValidateAnswerQuality:
         """Empty quality rules should always pass."""
         result = validate_answer_quality(
             answer="Any answer text",
-            category="education",
+            routing_category="education",
             quality_rules={},
         )
         assert result.passed is True
         assert result.failure_reasons == []
-        assert result.category == "education"
+        assert result.routing_category == "education"
 
-    def test_unknown_category_returns_pass(self):
-        """Unknown category (not in rules) should pass."""
+    def test_unknown_routing_category_returns_pass(self):
+        """Unknown routing category (not in rules) should pass."""
         result = validate_answer_quality(
             answer="Some answer",
-            category="Unknown Category",
+            routing_category="Unknown Category",
             quality_rules={
                 "education": {
                     "min_tokens": ["degree", "university"],
@@ -55,7 +55,7 @@ class TestValidateAnswerQuality:
         """Should pass when required tokens are present in answer."""
         result = validate_answer_quality(
             answer="I have a degree from Stanford University in Computer Science.",
-            category="education",
+            routing_category="education",
             quality_rules={
                 "education": {
                     "min_tokens": ["degree", "university", "stanford"],
@@ -70,7 +70,7 @@ class TestValidateAnswerQuality:
         """Should fail when not enough required tokens are present."""
         result = validate_answer_quality(
             answer="I studied computer science.",
-            category="education",
+            routing_category="education",
             quality_rules={
                 "education": {
                     "min_tokens": ["degree", "university", "diploma"],
@@ -80,13 +80,13 @@ class TestValidateAnswerQuality:
         )
         assert result.passed is False
         assert len(result.failure_reasons) == 1
-        assert "missing_category_tokens" in result.failure_reasons[0]
+        assert "missing_routing_category_tokens" in result.failure_reasons[0]
 
     def test_min_tokens_case_insensitive(self):
         """Token matching should be case-insensitive."""
         result = validate_answer_quality(
             answer="I have a DEGREE from UNIVERSITY.",
-            category="education",
+            routing_category="education",
             quality_rules={
                 "education": {
                     "min_tokens": ["degree", "university"],
@@ -100,7 +100,7 @@ class TestValidateAnswerQuality:
         """If min_token_count not specified, should default to 1."""
         result = validate_answer_quality(
             answer="I have a degree in computer science.",
-            category="education",
+            routing_category="education",
             quality_rules={
                 "education": {
                     "min_tokens": ["degree", "university"],
@@ -113,7 +113,7 @@ class TestValidateAnswerQuality:
         """min_token_count of 0 should still require 0 tokens found (passes)."""
         result = validate_answer_quality(
             answer="No relevant tokens here.",
-            category="education",
+            routing_category="education",
             quality_rules={
                 "education": {
                     "min_tokens": ["degree", "university"],
@@ -127,7 +127,7 @@ class TestValidateAnswerQuality:
         """Empty answer should fail if tokens required."""
         result = validate_answer_quality(
             answer="",
-            category="education",
+            routing_category="education",
             quality_rules={
                 "education": {
                     "min_tokens": ["degree"],
@@ -137,8 +137,8 @@ class TestValidateAnswerQuality:
         )
         assert result.passed is False
 
-    def test_multiple_categories_in_rules(self):
-        """Should validate only the specified category, not others."""
+    def test_multiple_routing_categories_in_rules(self):
+        """Should validate only the specified routing category, not others."""
         quality_rules = {
             "education": {
                 "min_tokens": ["degree"],
@@ -153,7 +153,7 @@ class TestValidateAnswerQuality:
         # Answer passes for Education (has "degree")
         result_edu = validate_answer_quality(
             answer="I have a degree in CS.",
-            category="education",
+            routing_category="education",
             quality_rules=quality_rules,
         )
         assert result_edu.passed is True
@@ -161,7 +161,7 @@ class TestValidateAnswerQuality:
         # Same answer fails for Hands-on engineering (no action verbs)
         result_eng = validate_answer_quality(
             answer="I have a degree in CS.",
-            category="Hands-on engineering",
+            routing_category="Hands-on engineering",
             quality_rules=quality_rules,
         )
         assert result_eng.passed is False
@@ -175,7 +175,7 @@ class TestQualityValidationResult:
         result = QualityValidationResult(
             passed=True,
             failure_reasons=[],
-            category="Test",
+            routing_category="Test",
         )
         with pytest.raises(AttributeError):
             result.passed = False
@@ -184,9 +184,11 @@ class TestQualityValidationResult:
         """Result should store failure reasons correctly."""
         result = QualityValidationResult(
             passed=False,
-            failure_reasons=["missing_category_tokens: found 0/2 required tokens"],
-            category="education",
+            failure_reasons=[
+                "missing_routing_category_tokens: found 0/2 required tokens"
+            ],
+            routing_category="education",
         )
         assert result.passed is False
         assert len(result.failure_reasons) == 1
-        assert "missing_category_tokens" in result.failure_reasons[0]
+        assert "missing_routing_category_tokens" in result.failure_reasons[0]

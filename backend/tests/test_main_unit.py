@@ -27,8 +27,8 @@ from starlette.requests import Request
 from app.llm import SynthesisResult
 from app.main import _is_uuid, chat, classify_question, request_logging_middleware
 from app.retrieval import RetrievedChunk
+from app.routing_category import RoutingCategory
 from app.schemas import (
-    Category,
     ChatMessage,
     ChatRequest,
     Confidence,
@@ -52,18 +52,24 @@ def test_is_uuid(value: str | None, expected: bool) -> None:
 @pytest.mark.parametrize(
     ("question", "expected"),
     [
-        ("Tell me about your team strategy", Category.leadership_and_product_strategy),
-        ("Discuss system architecture", Category.architecture_and_system_design),
-        ("AI embedding models?", Category.ai_and_ml_practice),
-        ("Any publication paper?", Category.research_and_academic_credibility),
+        (
+            "Tell me about your team strategy",
+            RoutingCategory.leadership_and_product_strategy,
+        ),
+        (
+            "Discuss system architecture",
+            RoutingCategory.architecture_and_system_design,
+        ),
+        ("AI embedding models?", RoutingCategory.ai_and_ml_practice),
+        ("Any publication paper?", RoutingCategory.research_and_academic_credibility),
         (
             "Are you a good fit for this position?",
-            Category.career_fit_and_role_alignment,
+            RoutingCategory.career_fit_and_role_alignment,
         ),
-        ("What did you build?", Category.hands_on_engineering),
+        ("What did you build?", RoutingCategory.hands_on_engineering),
     ],
 )
-def test_classify_question_branches(question: str, expected: Category) -> None:
+def test_classify_question_branches(question: str, expected: RoutingCategory) -> None:
     assert classify_question(question) == expected
 
 
@@ -350,14 +356,14 @@ def test_chat_multi_category_routes_on_original_question(
     def _route_categories(q: str):
         captured["routing_input"] = q
         return SimpleNamespace(
-            categories=[
+            routing_categories=[
                 SimpleNamespace(
-                    category=Category.education_and_formal_background,
+                    routing_category=RoutingCategory.education_and_formal_background,
                     confidence=Confidence.high,
                     budget=None,
                 ),
                 SimpleNamespace(
-                    category=Category.hands_on_engineering,
+                    routing_category=RoutingCategory.hands_on_engineering,
                     confidence=Confidence.medium,
                     budget=None,
                 ),
@@ -371,22 +377,22 @@ def test_chat_multi_category_routes_on_original_question(
     def _retrieve_for_category(
         question: str,
         *,
-        category: str,
+        routing_category: str,
         budget: int,
         conversation_topic: str | None = None,
         section_weights: dict[str, float] | None = None,
     ):
-        calls.append((category, budget))
+        calls.append((routing_category, budget))
         return [
             RetrievedChunk(
-                card_id=f"{category}-card",
-                category="cat",
+                card_id=f"{routing_category}-card",
+                card_category="cat",
                 section="Overview",
                 source_url=None,
-                content=f"chunk for {category}",
+                content=f"chunk for {routing_category}",
                 distance=0.10,
-                origin_categories=[category],
-                best_origin_category=category,
+                origin_routing_categories=[routing_category],
+                origin_routing_category=routing_category,
                 pinned=False,
             )
         ]
@@ -466,14 +472,14 @@ def test_chat_multi_category_empty_pinning_rules_no_change(
     def _route_categories(q: str):
         captured["routing_input"] = q
         return SimpleNamespace(
-            categories=[
+            routing_categories=[
                 SimpleNamespace(
-                    category=Category.education_and_formal_background,
+                    routing_category=RoutingCategory.education_and_formal_background,
                     confidence=Confidence.high,
                     budget=None,
                 ),
                 SimpleNamespace(
-                    category=Category.hands_on_engineering,
+                    routing_category=RoutingCategory.hands_on_engineering,
                     confidence=Confidence.medium,
                     budget=None,
                 ),
@@ -487,22 +493,22 @@ def test_chat_multi_category_empty_pinning_rules_no_change(
     def _retrieve_for_category(
         question: str,
         *,
-        category: str,
+        routing_category: str,
         budget: int,
         conversation_topic: str | None = None,
         section_weights: dict[str, float] | None = None,
     ):
-        calls.append((category, budget))
+        calls.append((routing_category, budget))
         return [
             RetrievedChunk(
-                card_id=f"{category}-card",
-                category="cat",
+                card_id=f"{routing_category}-card",
+                card_category="cat",
                 section="Overview",
                 source_url=None,
-                content=f"chunk for {category}",
+                content=f"chunk for {routing_category}",
                 distance=0.10,
-                origin_categories=[category],
-                best_origin_category=category,
+                origin_routing_categories=[routing_category],
+                origin_routing_category=routing_category,
                 pinned=False,
             )
         ]
@@ -515,20 +521,24 @@ def test_chat_multi_category_empty_pinning_rules_no_change(
         *,
         card_id: str,
         limit: int,
-        origin_category: str = "",
+        origin_routing_category: str = "",
         conversation_topic: str | None = None,
     ):
         retrieve_for_card_calls.append((card_id, limit))
         return [
             RetrievedChunk(
                 card_id=card_id,
-                category="cat",
+                card_category="cat",
                 section="Overview",
                 source_url=None,
                 content=f"pinned chunk for {card_id}",
                 distance=0.05,
-                origin_categories=[origin_category] if origin_category else [],
-                best_origin_category=origin_category if origin_category else None,
+                origin_routing_categories=[origin_routing_category]
+                if origin_routing_category
+                else [],
+                origin_routing_category=origin_routing_category
+                if origin_routing_category
+                else None,
                 pinned=True,
             )
         ]

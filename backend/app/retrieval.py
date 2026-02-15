@@ -39,15 +39,15 @@ logger = logging.getLogger(__name__)
 
 class RetrievedChunk(BaseModel):
     card_id: str
-    category: str
+    card_category: str
     section: str
     source_url: str | None = None
     content: str
     distance: float | None = None
 
     # Internal-only metadata used by multi-category retrieval.
-    origin_categories: list[str] | None = None
-    best_origin_category: str | None = None
+    origin_routing_categories: list[str] | None = None
+    origin_routing_category: str | None = None
     pinned: bool = False
 
 
@@ -95,7 +95,7 @@ def retrieve(
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT card_id, category, section, source_url, content,
+                SELECT card_id, card_category, section, source_url, content,
                        embedding <=> %s AS distance
                 FROM knowledge_chunks
                 WHERE section <> 'Links'
@@ -292,7 +292,7 @@ def retrieve(
     return [
         RetrievedChunk(
             card_id=row[0],
-            category=row[1],
+            card_category=row[1],
             section=row[2],
             source_url=row[3],
             content=row[4],
@@ -305,7 +305,7 @@ def retrieve(
 def retrieve_for_category(
     question: str,
     *,
-    category: str,
+    routing_category: str,
     budget: int,
     conversation_topic: str | None = None,
     section_weights: dict[str, float] | None = None,
@@ -316,7 +316,7 @@ def retrieve_for_category(
     - Uses a fixed oversample factor for the DB candidate limit.
     - Applies the standard per-card cap semantics within this category run.
     - Section weights are POSITIVE values that BOOST section ranking (subtract from distance).
-    - The `category` parameter is a ROUTER category (intent taxonomy), NOT a card category
+    - The `routing_category` parameter is a ROUTER category (intent taxonomy), NOT a card category
       (content taxonomy). Retrieval is semantic-first and does NOT filter by card category.
       See docs/ARCHITECTURE.md for the distinction between these two taxonomies.
     """
@@ -342,9 +342,9 @@ def retrieve_for_category(
     # Oversample strongly to preserve recall; category selection will trim to budget.
     candidate_limit = max(budget * oversample_factor * 8, 30)
 
-    # NOTE: We do NOT filter by category here. The `category` parameter is a router
+    # NOTE: We do NOT filter by card category here. The `routing_category` parameter is a router
     # category (intent taxonomy like "Hands-on engineering"), while the database
-    # `category` column contains card categories (content taxonomy like "project",
+    # `card_category` column contains card categories (content taxonomy like "project",
     # "research", "experience"). These are intentionally different taxonomies.
     # Retrieval is semantic-first; router categories influence synthesis style,
     # not evidence filtering.
@@ -353,7 +353,7 @@ def retrieve_for_category(
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT card_id, category, section, source_url, content,
+                SELECT card_id, card_category, section, source_url, content,
                        embedding <=> %s AS distance
                 FROM knowledge_chunks
                 WHERE section <> 'Links'
@@ -526,13 +526,13 @@ def retrieve_for_category(
     return [
         RetrievedChunk(
             card_id=row[0],
-            category=row[1],
+            card_category=row[1],
             section=row[2],
             source_url=row[3],
             content=row[4],
             distance=float(row[5]),
-            origin_categories=[str(category).strip()],
-            best_origin_category=str(category).strip(),
+            origin_routing_categories=[str(routing_category).strip()],
+            origin_routing_category=str(routing_category).strip(),
             pinned=False,
         )
         for row in filtered
@@ -544,7 +544,7 @@ def retrieve_for_card(
     *,
     card_id: str,
     limit: int,
-    origin_category: str,
+    origin_routing_category: str,
     conversation_topic: str | None = None,
 ) -> list[RetrievedChunk]:
     """Targeted retrieval constrained to a single knowledge card."""
@@ -571,7 +571,7 @@ def retrieve_for_card(
         with conn.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT card_id, category, section, source_url, content,
+                SELECT card_id, card_category, section, source_url, content,
                        embedding <=> %s AS distance
                 FROM knowledge_chunks
                 WHERE section <> 'Links' AND card_id = %s
@@ -593,13 +593,13 @@ def retrieve_for_card(
     return [
         RetrievedChunk(
             card_id=row[0],
-            category=row[1],
+            card_category=row[1],
             section=row[2],
             source_url=row[3],
             content=row[4],
             distance=float(row[5]),
-            origin_categories=[str(origin_category).strip()],
-            best_origin_category=str(origin_category).strip(),
+            origin_routing_categories=[str(origin_routing_category).strip()],
+            origin_routing_category=str(origin_routing_category).strip(),
             pinned=True,
         )
         for row in filtered
@@ -634,13 +634,13 @@ def apply_pinning(
     existing_card_ids: set[str] = {chunk.card_id for chunk in chunks}
 
     # Process each routed category
-    for category in routed_categories:
-        category = str(category).strip()
-        if not category:
+    for routing_category in routed_categories:
+        routing_category = str(routing_category).strip()
+        if not routing_category:
             continue
 
         # Check if pinning rules exist for this category
-        cards_to_pin = pinning_rules.get(category, [])
+        cards_to_pin = pinning_rules.get(routing_category, [])
         if not cards_to_pin:
             continue
 
@@ -656,7 +656,7 @@ def apply_pinning(
                     "pinning_chunk_already_present",
                     extra={
                         "card_id": card_id,
-                        "category": category,
+                        "routing_category": routing_category,
                     },
                 )
                 continue
@@ -669,7 +669,7 @@ def apply_pinning(
                     "pinning_retrieval_empty",
                     extra={
                         "card_id": card_id,
-                        "category": category,
+                        "routing_category": routing_category,
                     },
                 )
                 continue
@@ -679,13 +679,13 @@ def apply_pinning(
             pinned_chunk.pinned = True
 
             # Set origin categories if not already set
-            if not pinned_chunk.origin_categories:
-                pinned_chunk.origin_categories = [category]
-            elif category not in pinned_chunk.origin_categories:
-                pinned_chunk.origin_categories.append(category)
+            if not pinned_chunk.origin_routing_categories:
+                pinned_chunk.origin_routing_categories = [routing_category]
+            elif routing_category not in pinned_chunk.origin_routing_categories:
+                pinned_chunk.origin_routing_categories.append(routing_category)
 
-            if not pinned_chunk.best_origin_category:
-                pinned_chunk.best_origin_category = category
+            if not pinned_chunk.origin_routing_category:
+                pinned_chunk.origin_routing_category = routing_category
 
             chunks.append(pinned_chunk)
             existing_card_ids.add(card_id)
@@ -695,7 +695,7 @@ def apply_pinning(
                 "pinning_applied",
                 extra={
                     "card_id": card_id,
-                    "category": category,
+                    "routing_category": routing_category,
                     "total_chunks": len(chunks),
                     "max_total_chunks": max_total_chunks,
                 },
@@ -710,14 +710,16 @@ def merge_dedup_preserve_provenance(
     """Merge per-category results and deduplicate while preserving provenance."""
 
     merged: list[RetrievedChunk] = []
-    for category, chunks in chunks_by_category.items():
+    for routing_category, chunks in chunks_by_category.items():
         for chunk in chunks:
-            if not chunk.origin_categories:
-                chunk.origin_categories = [category]
+            if not chunk.origin_routing_categories:
+                chunk.origin_routing_categories = [routing_category]
             else:
-                if category not in chunk.origin_categories:
-                    chunk.origin_categories.append(category)
-            chunk.best_origin_category = chunk.best_origin_category or category
+                if routing_category not in chunk.origin_routing_categories:
+                    chunk.origin_routing_categories.append(routing_category)
+            chunk.origin_routing_category = (
+                chunk.origin_routing_category or routing_category
+            )
             merged.append(chunk)
 
     collisions = 0
@@ -738,13 +740,13 @@ def merge_dedup_preserve_provenance(
             winner, loser = existing, chunk
 
         # Merge provenance.
-        merged_origins = set(winner.origin_categories or [])
-        merged_origins.update(loser.origin_categories or [])
-        winner.origin_categories = sorted(merged_origins)
+        merged_origins = set(winner.origin_routing_categories or [])
+        merged_origins.update(loser.origin_routing_categories or [])
+        winner.origin_routing_categories = sorted(merged_origins)
 
         # Keep best_origin_category consistent with the best (lowest distance).
-        winner.best_origin_category = winner.best_origin_category or str(
-            winner.origin_categories[0]
+        winner.origin_routing_category = winner.origin_routing_category or str(
+            winner.origin_routing_categories[0]
         )
         winner.pinned = bool(winner.pinned or loser.pinned)
 
@@ -772,7 +774,7 @@ def cap_chunks_with_coverage(
     - Never evict pinned chunks.
     - Never evict the only chunk that covers a routed category (when that category
       has at least one chunk available in `chunks`).
-    - Prefer evicting from over-represented categories (by best_origin_category).
+    - Prefer evicting from over-represented categories (by origin_routing_category).
     """
 
     max_total_chunks = max(1, int(max_total_chunks))
@@ -784,8 +786,8 @@ def cap_chunks_with_coverage(
     # Only require coverage for categories that are present in the current set.
     present_categories: set[str] = set()
     for chunk in chunks:
-        for origin in chunk.origin_categories or (
-            [] if not chunk.best_origin_category else [chunk.best_origin_category]
+        for origin in chunk.origin_routing_categories or (
+            [] if not chunk.origin_routing_category else [chunk.origin_routing_category]
         ):
             if origin in routed_set:
                 present_categories.add(origin)
@@ -793,9 +795,9 @@ def cap_chunks_with_coverage(
     def _coverage_counts(items: list[RetrievedChunk]) -> dict[str, int]:
         counts = {c: 0 for c in present_categories}
         for ch in items:
-            origins = set(ch.origin_categories or [])
-            if ch.best_origin_category:
-                origins.add(ch.best_origin_category)
+            origins = set(ch.origin_routing_categories or [])
+            if ch.origin_routing_category:
+                origins.add(ch.origin_routing_category)
             for origin in origins:
                 if origin in counts:
                     counts[origin] += 1
@@ -804,7 +806,7 @@ def cap_chunks_with_coverage(
     def _best_origin_counts(items: list[RetrievedChunk]) -> dict[str, int]:
         counts = {c: 0 for c in present_categories}
         for ch in items:
-            origin = ch.best_origin_category
+            origin = ch.origin_routing_category
             if origin in counts:
                 counts[origin] += 1
         return counts
@@ -820,9 +822,9 @@ def cap_chunks_with_coverage(
                 continue
             # Can we remove this without breaking required coverage?
             removable = True
-            origins = set(ch.origin_categories or [])
-            if ch.best_origin_category:
-                origins.add(ch.best_origin_category)
+            origins = set(ch.origin_routing_categories or [])
+            if ch.origin_routing_category:
+                origins.add(ch.origin_routing_category)
             for origin in origins:
                 if origin in coverage and coverage[origin] <= 1:
                     removable = False
@@ -838,7 +840,7 @@ def cap_chunks_with_coverage(
 
         def _evict_key(ch: RetrievedChunk) -> tuple[int, float, str, str]:
             # Evict from over-represented categories first.
-            origin = ch.best_origin_category or ""
+            origin = ch.origin_routing_category or ""
             overrep = best_counts.get(origin, 0)
             distance = float(ch.distance) if ch.distance is not None else 1e9
             return (-overrep, -distance, ch.card_id, _norm_section(ch.section))

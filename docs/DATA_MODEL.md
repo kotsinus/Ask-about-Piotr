@@ -36,11 +36,13 @@ Purpose:
 Key columns (high level):
 
 - `card_id` (text) — identifier used for citations.
-- `category` (text) — high-level grouping.
+- `card_category` (text) — high-level grouping (content taxonomy: `project`, `research`, `certification`, `experience`, `profile`, `education`).
 - `section` (text) — section name inside the card.
 - `source_url` (text, nullable) — human-auditable link carried from card metadata.
 - `content` (text) — the chunk text shown as evidence.
 - `embedding` (vector) — pgvector embedding for retrieval.
+
+Note: A legacy `category` column may exist for backward compatibility; new code should use `card_category`.
 
 Data lifecycle:
 
@@ -80,9 +82,9 @@ Additional context columns (for debugging/analytics):
 Multi-category routing diagnostics (JSONB columns):
 
 - `routing` (jsonb, nullable) — router output after server normalization.
-  Contains `categories` array with `{category, confidence, budget}` objects and `router_fallback_used` flag.
+  Contains `routing_categories` array with `{routing_category, confidence, budget}` objects and `router_fallback_used` flag.
 - `retrieval_by_category` (jsonb, nullable) — per-category retrieval counts and budgets.
-  Maps category names to `{selected_count, budget}` objects.
+  Maps routing category names to `{selected_count, budget}` objects.
 - `quality_gate` (jsonb, nullable) — synthesis quality gate results.
   Contains `passed` boolean, `failure_reasons` array, and `retry_attempted` flag.
 

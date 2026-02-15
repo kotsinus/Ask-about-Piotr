@@ -78,19 +78,19 @@ from app.knowledge import chunk_cards, load_cards
 
 def _print_cards_summary(*, cards) -> None:
     card_ids = sorted([c.card_id for c in cards])
-    categories = Counter([c.category for c in cards])
+    card_categories = Counter([str(c.card_category.value) for c in cards])
 
     print(f"Loaded {len(cards)} knowledge cards", flush=True)
     if card_ids:
         print("Cards:", flush=True)
         for card_id in card_ids:
             print(f"- {card_id}", flush=True)
-    if categories:
-        print("Category counts:", flush=True)
-        for category, count in sorted(
-            categories.items(), key=lambda kv: (-kv[1], kv[0])
+    if card_categories:
+        print("Card category counts:", flush=True)
+        for card_category, count in sorted(
+            card_categories.items(), key=lambda kv: (-kv[1], kv[0])
         ):
-            print(f"- {category}: {count}", flush=True)
+            print(f"- {card_category}: {count}", flush=True)
 
 
 def main() -> None:
@@ -138,7 +138,7 @@ def main() -> None:
                 CREATE TABLE IF NOT EXISTS knowledge_chunks (
                     id SERIAL PRIMARY KEY,
                     card_id TEXT NOT NULL,
-                    category TEXT NOT NULL,
+                    card_category TEXT NOT NULL,
                     section TEXT NOT NULL,
                     source_url TEXT,
                     content TEXT NOT NULL,
@@ -159,12 +159,19 @@ def main() -> None:
                 cursor.execute(
                     """
                     INSERT INTO knowledge_chunks
-                        (card_id, category, section, source_url, content, embedding)
+                        (
+                            card_id,
+                            card_category,
+                            section,
+                            source_url,
+                            content,
+                            embedding
+                        )
                     VALUES (%s, %s, %s, %s, %s, %s);
                     """,
                     (
                         chunk.card_id,
-                        chunk.category,
+                        str(chunk.card_category.value),
                         chunk.section,
                         chunk.source_url,
                         chunk.content,

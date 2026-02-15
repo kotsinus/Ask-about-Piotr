@@ -30,7 +30,7 @@ def _make_stub_chunks(count: int = 1) -> list[RetrievedChunk]:
     return [
         RetrievedChunk(
             card_id=f"card-{i}",
-            category="project",
+            card_category="project",
             section="Problem",
             source_url=None,
             content=f"Test chunk {i}.",
@@ -61,7 +61,7 @@ def _stub_all_retrieval_functions(
     def _stub_retrieve_for_category(
         question: str,
         *,
-        category: str,
+        routing_category: str,
         budget: int,
         conversation_topic: str | None = None,
         section_weights: dict[str, float] | None = None,
@@ -73,7 +73,7 @@ def _stub_all_retrieval_functions(
         *,
         card_id: str,
         limit: int,
-        origin_category: str,
+        origin_routing_category: str,
         conversation_topic: str | None = None,
     ) -> list[RetrievedChunk]:
         return retrieve_for_card_result
@@ -113,7 +113,7 @@ async def test_formatted_answer_contains_sections(
         chunks = [
             RetrievedChunk(
                 card_id="sample",
-                category="project",
+                card_category="project",
                 section="Problem",
                 source_url=None,
                 content="This is a test chunk.",
@@ -163,7 +163,7 @@ async def test_followup_question_uses_history_rewrite(
                 return [
                     RetrievedChunk(
                         card_id="skills-programming-languages",
-                        category="skills",
+                        card_category="skills",
                         section="Overview",
                         source_url=None,
                         content="Piotr programs primarily in Python and TypeScript.",
@@ -172,7 +172,7 @@ async def test_followup_question_uses_history_rewrite(
             return [
                 RetrievedChunk(
                     card_id="skills-spoken-languages",
-                    category="skills",
+                    card_category="skills",
                     section="Overview",
                     source_url=None,
                     content="Piotr speaks Polish and English.",
@@ -182,7 +182,7 @@ async def test_followup_question_uses_history_rewrite(
         def _stub_retrieve_for_category(
             question: str,
             *,
-            category: str,
+            routing_category: str,
             budget: int,
             conversation_topic: str | None = None,
             section_weights: dict[str, float] | None = None,
@@ -194,7 +194,7 @@ async def test_followup_question_uses_history_rewrite(
             *,
             card_id: str,
             limit: int,
-            origin_category: str,
+            origin_routing_category: str,
             conversation_topic: str | None = None,
         ) -> list[RetrievedChunk]:
             return []
@@ -233,7 +233,7 @@ async def test_evidence_and_sources_include_only_used_chunks(
         chunks = [
             RetrievedChunk(
                 card_id="c1",
-                category="skills",
+                card_category="skills",
                 section="Overview",
                 source_url=None,
                 content="Chunk 0",
@@ -241,7 +241,7 @@ async def test_evidence_and_sources_include_only_used_chunks(
             ),
             RetrievedChunk(
                 card_id="c2",
-                category="skills",
+                card_category="skills",
                 section="Details",
                 source_url=None,
                 content="Chunk 1 (used)",
@@ -249,7 +249,7 @@ async def test_evidence_and_sources_include_only_used_chunks(
             ),
             RetrievedChunk(
                 card_id="c3",
-                category="skills",
+                card_category="skills",
                 section="More",
                 source_url=None,
                 content="Chunk 2",

@@ -61,15 +61,15 @@ from app.retrieval import (
     retrieve_for_card,
     retrieve_for_category,
 )
+from app.routing_category import RoutingCategory
 from app.schemas import (
-    Category,
     ChatRequest,
     ChatResponse,
     Confidence,
     ConversationContext,
     DebugRetrievalItem,
     EvidenceItem,
-    RoutingCategory,
+    RoutingCategoryAllocation,
     RoutingDebug,
     SourceRef,
 )
@@ -342,8 +342,8 @@ async def openai_api_handler(request: Request, exc: APIError) -> JSONResponse:
     )
 
 
-def classify_question(question: str) -> Category:
-    """Classify the question into exactly one category.
+def classify_question(question: str) -> RoutingCategory:
+    """Classify the question into exactly one routing category.
 
     TODO: Replace with a deterministic classifier or a small ruleset.
     """
@@ -363,18 +363,18 @@ def classify_question(question: str) -> Category:
             "academy",
         ]
     ):
-        return Category.education_and_formal_background
+        return RoutingCategory.education_and_formal_background
     if any(keyword in text for keyword in ["team", "lead", "strategy", "roadmap"]):
-        return Category.leadership_and_product_strategy
+        return RoutingCategory.leadership_and_product_strategy
     if any(keyword in text for keyword in ["architecture", "design", "system"]):
-        return Category.architecture_and_system_design
+        return RoutingCategory.architecture_and_system_design
     if any(keyword in text for keyword in ["ml", "ai", "model", "embedding"]):
-        return Category.ai_and_ml_practice
+        return RoutingCategory.ai_and_ml_practice
     if any(keyword in text for keyword in ["research", "paper", "publication"]):
-        return Category.research_and_academic_credibility
+        return RoutingCategory.research_and_academic_credibility
     if any(keyword in text for keyword in ["role", "fit", "position"]):
-        return Category.career_fit_and_role_alignment
-    return Category.hands_on_engineering
+        return RoutingCategory.career_fit_and_role_alignment
+    return RoutingCategory.hands_on_engineering
 
 
 def _stable_request_percent(request_id: str) -> int:
@@ -432,7 +432,7 @@ def _deterministic_budget_policy(
         elif _confidence_rank(left.confidence) < _confidence_rank(right.confidence):
             budgets[0], budgets[1] = total - 3, 3
         else:
-            if str(left.category.value) <= str(right.category.value):
+            if str(left.routing_category.value) <= str(right.routing_category.value):
                 budgets[0], budgets[1] = 3, total - 3
             else:
                 budgets[0], budgets[1] = total - 3, 3
@@ -454,7 +454,7 @@ def _clamp_budgets(
         return (
             _confidence_rank(categories[idx].confidence),
             budgets[idx],
-            str(categories[idx].category.value),
+            str(categories[idx].routing_category.value),
         )
 
     while sum(budgets) > max_total_chunks:
@@ -619,7 +619,7 @@ def chat(
 
     routing: RoutingResult | None = None
     router_fallback_used = False
-    category: Category
+    routing_category: RoutingCategory
 
     if use_multi_category:
         # IMPORTANT: route on the original user question (not rewritten).
@@ -630,7 +630,7 @@ def chat(
             routing = None
 
         # Validate routing result minimally; any invalid output triggers fallback.
-        routed_categories = list(routing.categories) if routing else []
+        routed_categories = list(routing.routing_categories) if routing else []
         max_categories = int(getattr(settings, "multi_category_max_categories", 2) or 2)
         max_categories = max(1, min(3, max_categories))
 
@@ -641,7 +641,7 @@ def chat(
             seen: set[str] = set()
             deduped: list[RoutedCategory] = []
             for item in routed_categories:
-                key = str(item.category.value)
+                key = str(item.routing_category.value)
                 if key in seen:
                     continue
                 seen.add(key)
@@ -654,15 +654,15 @@ def chat(
             # Deterministic fallback: single-category heuristic.
             fallback_category = classify_question(routing_question)
             routing = RoutingResult(
-                categories=[
+                routing_categories=[
                     RoutedCategory(
-                        category=fallback_category,
+                        routing_category=fallback_category,
                         confidence=Confidence.medium,
                         budget=None,
                     )
                 ]
             )
-            routed_categories = list(routing.categories)
+            routed_categories = list(routing.routing_categories)
 
         # Apply deterministic intent-based budgets (policy selected by config).
         max_total = int(getattr(settings, "multi_category_max_total_chunks", 5) or 5)
@@ -684,27 +684,27 @@ def chat(
         )
 
         routing = RoutingResult(
-            categories=[
+            routing_categories=[
                 RoutedCategory(
-                    category=item.category,
+                    routing_category=item.routing_category,
                     confidence=item.confidence,
                     budget=budgets[idx],
                 )
                 for idx, item in enumerate(routed_categories)
             ]
         )
-        category = routing.categories[0].category
+        routing_category = routing.routing_categories[0].routing_category
     else:
         try:
-            category = route_category(standalone_question)
+            routing_category = route_category(standalone_question)
         except Exception:
-            category = classify_question(standalone_question)
+            routing_category = classify_question(standalone_question)
     logger.info(
         "chat_stage",
         extra={
             "stage": "route_category_done",
             "duration_ms": round((time.perf_counter() - t_stage) * 1000, 2),
-            "category": str(category),
+            "routing_category": str(routing_category),
         },
     )
 
@@ -712,13 +712,13 @@ def chat(
         logger.info(
             "chat_routing",
             extra={
-                "categories": [
+                "routing_categories": [
                     {
-                        "category": str(item.category.value),
+                        "routing_category": str(item.routing_category.value),
                         "confidence": str(item.confidence.value),
                         "budget": int(item.budget or 0),
                     }
-                    for item in routing.categories
+                    for item in routing.routing_categories
                 ],
                 "max_categories": int(
                     getattr(settings, "multi_category_max_categories", 2) or 2
@@ -745,9 +745,9 @@ def chat(
             getattr(settings, "multi_category_section_weights", {}) or {}
         )
 
-        for item in routing.categories:
+        for item in routing.routing_categories:
             budget = int(item.budget or 1)
-            category_label = str(item.category.value)
+            category_label = str(item.routing_category.value)
             t_cat = time.perf_counter()
 
             # Get category-specific section weights (if any)
@@ -755,7 +755,7 @@ def chat(
 
             selected = retrieve_for_category(
                 standalone_question,
-                category=category_label,
+                routing_category=category_label,
                 budget=budget,
                 conversation_topic=conversation_topic,
                 section_weights=category_section_weights,
@@ -764,7 +764,7 @@ def chat(
             logger.info(
                 "chat_retrieve_category",
                 extra={
-                    "category": category_label,
+                    "routing_category": category_label,
                     "budget": budget,
                     "selected_count": len(selected),
                     "per_card_cap": int(
@@ -780,7 +780,9 @@ def chat(
         # Apply pinning: ensure required cards are included for routed categories.
         # Pipeline: retrieve per category → merge → pin → re-dedup → cap → synthesis
         pinned_card_ids: list[str] = []
-        routed_category_names = [str(i.category.value) for i in routing.categories]
+        routed_category_names = [
+            str(i.routing_category.value) for i in routing.routing_categories
+        ]
         max_total = int(getattr(settings, "multi_category_max_total_chunks", 5) or 5)
         max_total = max(1, max_total)
 
@@ -790,7 +792,7 @@ def chat(
                 standalone_question,
                 card_id=card_id,
                 limit=limit,
-                origin_category=routed_category_names[0]
+                origin_routing_category=routed_category_names[0]
                 if routed_category_names
                 else "",
                 conversation_topic=conversation_topic,
@@ -858,7 +860,7 @@ def chat(
     synthesis = synthesize_answer(
         standalone_question,
         chunks,
-        category,
+        routing_category,
         conversation_topic=conversation_topic,
         conversation_messages=[message.model_dump() for message in request.messages]
         if request.messages
@@ -877,7 +879,7 @@ def chat(
                 failure_reasons.append("answer_too_short")
 
             # Category coverage: for 2 categories, must use at least one chunk from each.
-            if len(routing.categories) == 2 and synthesis.used_chunk_indices:
+            if len(routing.routing_categories) == 2 and synthesis.used_chunk_indices:
                 used = [
                     chunks[idx]
                     for idx in synthesis.used_chunk_indices
@@ -885,11 +887,13 @@ def chat(
                 ]
                 used_origins: set[str] = set()
                 for ch in used:
-                    if ch.best_origin_category:
-                        used_origins.add(ch.best_origin_category)
-                    for origin in ch.origin_categories or []:
+                    if ch.origin_routing_category:
+                        used_origins.add(ch.origin_routing_category)
+                    for origin in ch.origin_routing_categories or []:
                         used_origins.add(origin)
-                expected = {str(i.category.value) for i in routing.categories}
+                expected = {
+                    str(i.routing_category.value) for i in routing.routing_categories
+                }
                 if expected and not expected.issubset(used_origins):
                     failure_reasons.append("missing_category_coverage")
 
@@ -900,7 +904,7 @@ def chat(
             synthesis_retry = synthesize_answer(
                 standalone_question,
                 chunks,
-                category,
+                routing_category,
                 conversation_topic=conversation_topic,
                 conversation_messages=[
                     message.model_dump() for message in request.messages
@@ -928,17 +932,17 @@ def chat(
         quality_rules = getattr(settings, "multi_category_quality_rules", {}) or {}
         if quality_rules and synthesis.answer != refusal:
             category_validation_failures: list[dict] = []
-            for item in routing.categories:
-                category_label = str(item.category.value)
+            for item in routing.routing_categories:
+                category_label = str(item.routing_category.value)
                 result = validate_answer_quality(
                     answer=synthesis.answer or "",
-                    category=category_label,
+                    routing_category=category_label,
                     quality_rules=quality_rules,
                 )
                 if not result.passed:
                     category_validation_failures.append(
                         {
-                            "category": category_label,
+                            "routing_category": category_label,
                             "failures": result.failure_reasons,
                         }
                     )
@@ -994,9 +998,9 @@ def chat(
     resolved_topic = chunks[0].card_id if chunks else conversation_topic
 
     response = ChatResponse(
-        category=category,
+        routing_category=routing_category,
         answer=synthesis.answer,
-        why_this_matters=clean_why(synthesis.why_this_matters, category),
+        why_this_matters=clean_why(synthesis.why_this_matters, routing_category),
         evidence=evidence,
         sources=sources,
         debug_retrieval=[
@@ -1012,13 +1016,13 @@ def chat(
         confidence=synthesis.confidence,
         confidence_reason=synthesis.confidence_reason,
         routing=RoutingDebug(
-            categories=[
-                RoutingCategory(
-                    category=str(item.category.value),
+            routing_categories=[
+                RoutingCategoryAllocation(
+                    routing_category=str(item.routing_category.value),
                     confidence=item.confidence,
                     budget=int(item.budget or 0),
                 )
-                for item in (routing.categories if routing else [])
+                for item in (routing.routing_categories if routing else [])
             ]
         )
         if (debug_retrieval and use_multi_category and routing is not None)
@@ -1068,13 +1072,13 @@ def chat(
 
         if use_multi_category and routing is not None:
             routing_dict = {
-                "categories": [
+                "routing_categories": [
                     {
-                        "category": str(item.category.value),
+                        "routing_category": str(item.routing_category.value),
                         "confidence": str(item.confidence.value),
                         "budget": int(item.budget or 0),
                     }
-                    for item in routing.categories
+                    for item in routing.routing_categories
                 ],
                 "router_fallback_used": bool(router_fallback_used),
             }
@@ -1087,8 +1091,10 @@ def chat(
                         next(
                             (
                                 item.budget
-                                for item in (routing.categories if routing else [])
-                                if str(item.category.value) == category
+                                for item in (
+                                    routing.routing_categories if routing else []
+                                )
+                                if str(item.routing_category.value) == category
                             ),
                             0,
                         )

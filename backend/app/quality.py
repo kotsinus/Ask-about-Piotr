@@ -36,21 +36,21 @@ class QualityValidationResult:
     Attributes:
         passed: Whether the answer passed all quality checks
         failure_reasons: List of reasons why the answer failed (empty if passed)
-        category: The category that was validated
+        routing_category: The routing category that was validated
     """
 
     passed: bool
     failure_reasons: list[str]
-    category: str
+    routing_category: str
 
 
 def validate_answer_quality(
     *,
     answer: str,
-    category: str,
+    routing_category: str,
     quality_rules: dict[str, dict[str, list[str] | int]],
 ) -> QualityValidationResult:
-    """Validate answer against category-specific quality rules.
+    """Validate answer against routing category-specific quality rules.
 
     IMPORTANT: This function only checks, never modifies.
     Retry logic is handled separately in main.py.
@@ -61,20 +61,20 @@ def validate_answer_quality(
 
     Args:
         answer: The synthesized answer to validate
-        category: The category to validate against
-        quality_rules: Dict mapping category names to quality rule configs
+        routing_category: The routing category to validate against
+        quality_rules: Dict mapping routing category names to quality rule configs
 
     Returns:
         QualityValidationResult with pass/fail status and reasons.
     """
     failures: list[str] = []
-    rules = quality_rules.get(category, {})
+    rules = quality_rules.get(routing_category, {})
 
     if not rules:
         return QualityValidationResult(
             passed=True,
             failure_reasons=[],
-            category=category,
+            routing_category=routing_category,
         )
 
     # Check min_tokens rule
@@ -86,11 +86,11 @@ def validate_answer_quality(
         found = sum(1 for token in required_tokens if token.lower() in answer_lower)
         if found < min_count:
             failures.append(
-                f"missing_category_tokens: found {found}/{min_count} required tokens"
+                f"missing_routing_category_tokens: found {found}/{min_count} required tokens"
             )
 
     return QualityValidationResult(
         passed=len(failures) == 0,
         failure_reasons=failures,
-        category=category,
+        routing_category=routing_category,
     )

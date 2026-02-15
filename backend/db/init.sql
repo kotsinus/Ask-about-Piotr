@@ -14,12 +14,17 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE IF NOT EXISTS knowledge_chunks (
     id SERIAL PRIMARY KEY,
     card_id TEXT NOT NULL,
-    category TEXT NOT NULL,
+    card_category TEXT NOT NULL,
     section TEXT NOT NULL,
     source_url TEXT,
     content TEXT NOT NULL,
     embedding vector(1536)
 );
+
+-- Backward-compatible schema evolution (for existing DB volumes).
+-- CREATE TABLE IF NOT EXISTS does NOT add new columns.
+ALTER TABLE knowledge_chunks
+    ADD COLUMN IF NOT EXISTS card_category TEXT;
 
 CREATE INDEX IF NOT EXISTS knowledge_chunks_embedding_idx
     ON knowledge_chunks

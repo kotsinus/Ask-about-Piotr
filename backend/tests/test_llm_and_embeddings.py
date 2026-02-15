@@ -30,7 +30,8 @@ from app.embeddings import (
 )
 from app.llm import rewrite_question, route_category, synthesize_answer
 from app.retrieval import RetrievedChunk
-from app.schemas import Category, Confidence
+from app.routing_category import RoutingCategory
+from app.schemas import Confidence
 
 
 class _FakeOpenAI:
@@ -127,21 +128,23 @@ def test_route_category_parses_known_and_unknown_categories(
         lambda api_key: _FakeOpenAI(
             api_key=api_key,
             create_impl=lambda **k: _chat_response(
-                json.dumps({"category": "AI and ML practice"})
+                json.dumps({"routing_category": "AI and ML practice"})
             ),
         ),
     )
-    assert route_category("Q") == Category.ai_and_ml_practice
+    assert route_category("Q") == RoutingCategory.ai_and_ml_practice
 
     monkeypatch.setattr("app.openai_client._client", None)
     monkeypatch.setattr(
         "app.openai_client.OpenAI",
         lambda api_key: _FakeOpenAI(
             api_key=api_key,
-            create_impl=lambda **k: _chat_response(json.dumps({"category": "???"})),
+            create_impl=lambda **k: _chat_response(
+                json.dumps({"routing_category": "???"})
+            ),
         ),
     )
-    assert route_category("Q") == Category.hands_on_engineering
+    assert route_category("Q") == RoutingCategory.hands_on_engineering
 
 
 def test_synthesize_answer_falls_back_to_all_indices_when_missing(
@@ -152,14 +155,14 @@ def test_synthesize_answer_falls_back_to_all_indices_when_missing(
     chunks = [
         RetrievedChunk(
             card_id="c1",
-            category="skills",
+            card_category="skills",
             section="Overview",
             source_url=None,
             content="One. Two.",
         ),
         RetrievedChunk(
             card_id="c2",
-            category="skills",
+            card_category="skills",
             section="Details",
             source_url=None,
             content="Three. Four.",
@@ -202,7 +205,7 @@ def test_synthesize_answer_uses_deterministic_fallback_when_no_key(
     chunks = [
         RetrievedChunk(
             card_id="c1",
-            category="skills",
+            card_category="skills",
             section="Overview",
             source_url=None,
             content="First. Second! Third? Fourth.",

@@ -47,11 +47,11 @@ def _parse_pinning_rules(value: str | None) -> dict[str, list[str]]:
     """Parse pinning rules from JSON environment variable.
 
     Args:
-        value: JSON string mapping category names to lists of card IDs to pin.
-            Example: '{"Education and formal background": ["education-facts"]}'
+        value: JSON string mapping RoutingCategory values to lists of card IDs to pin.
+            Example: '{"education_and_formal_background": ["education-facts"]}'
 
     Returns:
-        Dict mapping category names to lists of card IDs. Empty dict if not set.
+        Dict mapping RoutingCategory values to lists of card IDs. Empty dict if not set.
     """
     if not value:
         return {}
@@ -97,11 +97,11 @@ def _parse_section_weights(value: str | None) -> dict[str, dict[str, float]]:
     """Parse section weights from JSON environment variable.
 
     Args:
-        value: JSON string mapping category names to section weight maps.
-            Example: '{"Education and formal background": {"degrees": 0.15, "education": 0.12}}'
+        value: JSON string mapping RoutingCategory values to section weight maps.
+            Example: '{"education_and_formal_background": {"degrees": 0.15, "education": 0.12}}'
 
     Returns:
-        Dict mapping category names to section weight maps. Empty dict if not set.
+        Dict mapping RoutingCategory values to section weight maps. Empty dict if not set.
         Section weights are positive floats that BOOST section ranking (subtract from distance).
     """
     if not value:
@@ -139,11 +139,11 @@ def _parse_quality_rules(value: str | None) -> dict[str, dict[str, list[str] | i
     """Parse quality rules from JSON environment variable.
 
     Args:
-        value: JSON string mapping category names to quality rule configs.
-            Example: '{"Education and formal background": {"min_tokens": ["degree", "university"], "min_token_count": 1}}'
+        value: JSON string mapping RoutingCategory values to quality rule configs.
+            Example: '{"education_and_formal_background": {"min_tokens": ["degree", "university"], "min_token_count": 1}}'
 
     Returns:
-        Dict mapping category names to quality rule configs. Empty dict if not set.
+        Dict mapping RoutingCategory values to quality rule configs. Empty dict if not set.
         Each rule config can contain:
         - min_tokens: list of required tokens (any must be present)
         - min_token_count: minimum number of tokens that must be present (default 1)
@@ -227,13 +227,13 @@ class Settings:
     # Multi-category pinning rules.
     #
     # Pinning ensures specific cards are always included in retrieval results
-    # for certain categories, regardless of their similarity score. This is a
-    # general mechanism applicable to any category.
+    # for certain routing categories, regardless of their similarity score. This is a
+    # general mechanism applicable to any routing category.
     #
     # Configuration:
-    # - Map category names to lists of card IDs that should be pinned
+    # - Map RoutingCategory values to lists of card IDs that should be pinned
     # - Set via MULTI_CATEGORY_PINNING_RULES environment variable (JSON format)
-    # - Example: '{"Education and formal background": ["education-facts"]}'
+    # - Example: '{"education_and_formal_background": ["education-facts"]}'
     #
     # Use cases:
     # - Ensure foundational/essential cards are always retrieved
@@ -241,19 +241,19 @@ class Settings:
     # - Override similarity-based ranking for critical information
     multi_category_pinning_rules: dict[str, list[str]] = field(
         default_factory=lambda: {
-            "Education and formal background": ["education-facts"],
+            "education_and_formal_background": ["education-facts"],
         }
     )
 
     # Multi-category section weights.
     #
-    # Section weights allow category-specific boosting of certain sections during
-    # retrieval. This is a general mechanism applicable to any category.
+    # Section weights allow routing_category-specific boosting of certain sections during
+    # retrieval. This is a general mechanism applicable to any routing category.
     #
     # Configuration:
-    # - Map category names to section weight maps (section name -> weight)
+    # - Map RoutingCategory values to section weight maps (section name -> weight)
     # - Set via MULTI_CATEGORY_SECTION_WEIGHTS environment variable (JSON format)
-    # - Example: '{"Education and formal background": {"degrees": 0.15, "education": 0.12}}'
+    # - Example: '{"education_and_formal_background": {"degrees": 0.15, "education": 0.12}}'
     #
     # How it works:
     # - Weights are POSITIVE values that BOOST section ranking (subtract from distance)
@@ -261,30 +261,30 @@ class Settings:
     # - Maximum bonus is capped at 0.25 to prevent weak chunks from jumping strong ones
     #
     # Use cases:
-    # - Boost "degrees" sections for Education category
-    # - Boost "publications" sections for Research category
-    # - Improve precision for category-specific retrieval
+    # - Boost "degrees" sections for education_and_formal_background routing category
+    # - Boost "publications" sections for research_and_academic_credibility routing category
+    # - Improve precision for routing_category-specific retrieval
     multi_category_section_weights: dict[str, dict[str, float]] = field(
         default_factory=dict
     )
 
     # Multi-category quality rules.
     #
-    # Quality rules allow category-specific validation of synthesized answers.
-    # This is a general mechanism applicable to any category.
+    # Quality rules allow routing_category-specific validation of synthesized answers.
+    # This is a general mechanism applicable to any routing category.
     #
     # Configuration:
-    # - Map category names to quality rule configs
+    # - Map RoutingCategory values to quality rule configs
     # - Set via MULTI_CATEGORY_QUALITY_RULES environment variable (JSON format)
-    # - Example: '{"Education and formal background": {"min_tokens": ["degree", "university"], "min_token_count": 1}}'
+    # - Example: '{"education_and_formal_background": {"min_tokens": ["degree", "university"], "min_token_count": 1}}'
     #
     # How it works:
     # - min_tokens: list of required tokens (at least min_token_count must be present)
     # - min_token_count: minimum number of tokens that must be present (default 1)
     #
     # Use cases:
-    # - Ensure education answers contain education-related terms
-    # - Ensure production answers contain named examples
+    # - Ensure education_and_formal_background answers contain education-related terms
+    # - Ensure hands_on_engineering answers contain named examples
     # - Detect generic/low-quality answers for retry
     #
     # NOTE: In v1, quality rules are LOG-ONLY (no retry trigger).
@@ -417,7 +417,7 @@ def get_settings() -> Settings:
         env_pinning_rules
         if env_pinning_rules
         else {
-            "Education and formal background": ["education-facts"],
+            "education_and_formal_background": ["education-facts"],
         }
     )
 

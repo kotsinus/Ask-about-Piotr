@@ -24,7 +24,8 @@ import pytest
 
 from app import llm
 from app.retrieval import RetrievedChunk
-from app.schemas import Category, Confidence
+from app.routing_category import RoutingCategory
+from app.schemas import Confidence
 
 
 class _FakeOpenAI:
@@ -97,7 +98,7 @@ def test_synthesize_answer_includes_context_and_topic_in_prompt(
     chunks = [
         RetrievedChunk(
             card_id="c1",
-            category="cat",
+            card_category="cat",
             section="Overview",
             source_url=None,
             content="Evidence sentence one. Evidence sentence two.",
@@ -140,7 +141,7 @@ def test_synthesize_answer_falls_back_when_answer_missing(
     chunks = [
         RetrievedChunk(
             card_id="c1",
-            category="cat",
+            card_category="cat",
             section="Overview",
             source_url=None,
             content="One. Two.",
@@ -173,7 +174,7 @@ def test_synthesize_answer_indices_non_list_falls_back_to_all(
     chunks = [
         RetrievedChunk(
             card_id="c1",
-            category="cat",
+            card_category="cat",
             section="Overview",
             source_url=None,
             content="One. Two.",
@@ -181,7 +182,7 @@ def test_synthesize_answer_indices_non_list_falls_back_to_all(
         ),
         RetrievedChunk(
             card_id="c2",
-            category="cat",
+            card_category="cat",
             section="Details",
             source_url=None,
             content="Three. Four.",
@@ -207,13 +208,15 @@ def test_rewrite_question_returns_original_on_bad_json(
 
 def test_clean_why_soft_removes_banned_phrases_without_constant_fallback() -> None:
     text = "This highlights the reliability trade-offs in production systems."
-    out = llm.clean_why(text, Category.hands_on_engineering)
+    out = llm.clean_why(text, RoutingCategory.hands_on_engineering)
     assert "highlights" not in out.lower()
     assert "reliability" in out.lower()
 
 
 def test_clean_why_uses_category_specific_fallback_when_too_short() -> None:
-    out = llm.clean_why("It demonstrates.", Category.education_and_formal_background)
+    out = llm.clean_why(
+        "It demonstrates.", RoutingCategory.education_and_formal_background
+    )
     assert out in {
         "It gives a foundation I rely on when reasoning about systems and data.",
         "It provides background that shapes how I approach technical problems.",
@@ -221,7 +224,7 @@ def test_clean_why_uses_category_specific_fallback_when_too_short() -> None:
 
 
 def test_clean_why_empty_returns_category_specific_fallback() -> None:
-    out = llm.clean_why(" ", Category.architecture_and_system_design)
+    out = llm.clean_why(" ", RoutingCategory.architecture_and_system_design)
     assert out in {
         "It shapes the trade-offs I make when designing system boundaries and keeping services operable over time.",
         "It affects long-term complexity and operability when scaling systems.",
@@ -250,7 +253,7 @@ def test_synthesize_answer_includes_style_and_why_hints_and_parses_indices(
     chunks = [
         RetrievedChunk(
             card_id="c1",
-            category="cat",
+            card_category="cat",
             section="Overview",
             source_url=None,
             content="Evidence sentence one. Evidence sentence two.",
@@ -258,7 +261,7 @@ def test_synthesize_answer_includes_style_and_why_hints_and_parses_indices(
         )
     ]
     result = llm.synthesize_answer(
-        "q", chunks, category=Category.hands_on_engineering.value
+        "q", chunks, routing_category=RoutingCategory.hands_on_engineering.value
     )
     assert result.used_chunk_indices == [0]
 
@@ -267,22 +270,25 @@ def test_synthesize_answer_includes_style_and_why_hints_and_parses_indices(
     assert "Why-this-matters hint:" in user_msg
 
 
-def test_parse_category_debug_branch_and_generic_fallbacks(
+def test_parse_routing_category_debug_branch_and_generic_fallbacks(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     caplog.set_level("DEBUG")
     llm.logger.setLevel("DEBUG")
 
-    assert llm._parse_category("???").value == Category.hands_on_engineering.value
-    assert any("unknown_category_string" in r.message for r in caplog.records)
+    assert (
+        llm._parse_routing_category("???").value
+        == RoutingCategory.hands_on_engineering.value
+    )
+    assert any("unknown_routing_category_string" in r.message for r in caplog.records)
 
     assert llm._stable_choice((), seed="x") == ""
     generic = {
         "It affects how I make technical decisions.",
         "It influences practical trade-offs I make when building systems.",
     }
-    assert llm._fallback_why(category=None, seed="s") in generic
-    assert llm.clean_why("It demonstrates.", category="Unknown") in generic
+    assert llm._fallback_why(routing_category=None, seed="s") in generic
+    assert llm.clean_why("It demonstrates.", routing_category="Unknown") in generic
 
 
 def test_route_categories_parses_multi_category_payload(
@@ -303,14 +309,14 @@ def test_route_categories_parses_multi_category_payload(
             self.choices = [_Resp._Choice(content)]
 
     payload = {
-        "categories": [
+        "routing_categories": [
             {
-                "category": Category.education_and_formal_background.value,
+                "routing_category": RoutingCategory.education_and_formal_background.value,
                 "confidence": "High",
                 "budget": 2,
             },
             {
-                "category": Category.hands_on_engineering.value,
+                "routing_category": RoutingCategory.hands_on_engineering.value,
                 "confidence": "Medium",
                 "budget": 3,
             },
@@ -324,16 +330,22 @@ def test_route_categories_parses_multi_category_payload(
     )
 
     out = llm.route_categories("q")
-    assert len(out.categories) == 2
-    assert out.categories[0].category == Category.education_and_formal_background
-    assert out.categories[0].confidence == Confidence.high
-    assert out.categories[0].budget == 2
-    assert out.categories[1].category == Category.hands_on_engineering
-    assert out.categories[1].confidence == Confidence.medium
-    assert out.categories[1].budget == 3
+    assert len(out.routing_categories) == 2
+    assert (
+        out.routing_categories[0].routing_category
+        == RoutingCategory.education_and_formal_background
+    )
+    assert out.routing_categories[0].confidence == Confidence.high
+    assert out.routing_categories[0].budget == 2
+    assert (
+        out.routing_categories[1].routing_category
+        == RoutingCategory.hands_on_engineering
+    )
+    assert out.routing_categories[1].confidence == Confidence.medium
+    assert out.routing_categories[1].budget == 3
 
 
-def test_route_categories_rejects_unknown_category(
+def test_route_categories_rejects_unknown_routing_category(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(llm, "get_settings", lambda: _settings())
@@ -351,9 +363,9 @@ def test_route_categories_rejects_unknown_category(
             self.choices = [_Resp._Choice(content)]
 
     payload = {
-        "categories": [
+        "routing_categories": [
             {
-                "category": "Not a real category",
+                "routing_category": "Not a real category",
                 "confidence": "High",
                 "budget": 2,
             }

@@ -320,7 +320,7 @@ Key differences from single-category flow:
 
 - **Routing on original question**: The router sees the raw user question, not the rewritten version, to preserve keyword cues.
 - **Per-category retrieval**: Each routed category gets its own retrieval pass with a budget.
-- **Merge and dedup**: Results are merged while preserving provenance (`origin_categories`, `best_origin_category`).
+- **Merge and dedup**: Results are merged while preserving provenance (`origin_routing_categories`, `origin_routing_category`).
 - **Pinning**: Configurable rules ensure specific cards are included for certain categories.
 - **Quality gates**: Server-side validation with retry on failure.
 - **Quality rules**: Configurable per-category token checks (log-only in v1).
@@ -614,17 +614,19 @@ This system uses **two intentionally different category taxonomies** for differe
 * **Purpose**: Describe the TYPE of knowledge source (what kind of document is this?)
 * **Values**: `project`, `research`, `certification`, `experience`, `profile`, `education`
 * **Source**: The `Category` section in each knowledge card Markdown file
-* **Storage**: `knowledge_chunks.category` column in Postgres
+* **Storage**: `knowledge_chunks.card_category` column in Postgres
+* **Type definition**: [`backend/app/card_category.py`](backend/app/card_category.py:1) — `CardCategory` enum
 * **Use cases**:
   * Organizing and citing evidence sources
   * Filtering by document type (if needed for specific queries)
   * Displaying source type to users
 
-#### Router categories (intent taxonomy)
+#### Routing categories (intent taxonomy)
 
 * **Purpose**: Describe the QUESTION INTENT and desired answer style (how should this be answered?)
-* **Values**: `Hands-on engineering`, `Architecture and system design`, `AI and ML practice`, `Leadership and product strategy`, `Research and academic credibility`, `Career fit and role alignment`, `education`, `Personal interests and working style`
+* **Values**: `hands_on_engineering`, `architecture_and_system_design`, `ai_and_ml_practice`, `leadership_and_product_strategy`, `research_and_academic_credibility`, `career_fit_and_role_alignment`, `education`, `personal_interests_and_working_style`
 * **Source**: LLM router classification in [`backend/app/llm.py`](backend/app/llm.py:1)
+* **Type definition**: [`backend/app/routing_category.py`](backend/app/routing_category.py:1) — `RoutingCategory` enum
 * **Storage**: Passed to synthesis, not stored in database
 * **Use cases**:
   * Selecting answer style hints (technical depth, leadership focus, etc.)
@@ -633,19 +635,19 @@ This system uses **two intentionally different category taxonomies** for differe
 
 #### Why they must remain separate
 
-1. **One question often needs mixed sources**: A question like "Tell me about leadership at DeepSeas" has intent "Leadership and product strategy" but evidence may come from `experience` and `project` cards.
+1. **One question often needs mixed sources**: A question like "Tell me about leadership at DeepSeas" has intent "leadership_and_product_strategy" but evidence may come from `experience` and `project` cards.
 
 2. **Card categories are too coarse for routing**: `project`/`research`/`certification` don't indicate whether the user wants hands-on details vs. architecture vs. career fit.
 
 3. **Stability and evolution**: You can change card organization without affecting UX routing, and vice versa.
 
-4. **Semantic-first retrieval**: Retrieval should find the most relevant evidence regardless of document type. Router categories influence synthesis style, not evidence filtering.
+4. **Semantic-first retrieval**: Retrieval should find the most relevant evidence regardless of document type. Routing categories influence synthesis style, not evidence filtering.
 
 #### Implementation implications
 
-* **Retrieval functions** in [`backend/app/retrieval.py`](backend/app/retrieval.py:1) must NOT filter by router categories.
-* **Synthesis** in [`backend/app/llm.py`](backend/app/llm.py:1) uses router categories for style hints, not evidence selection.
-* **Future enhancement**: Consider soft boost/rerank based on router-to-card-category preferences (e.g., "Research and academic credibility" → boost `research` and `certification` cards), but never hard filter.
+* **Retrieval functions** in [`backend/app/retrieval.py`](backend/app/retrieval.py:1) must NOT filter by routing categories.
+* **Synthesis** in [`backend/app/llm.py`](backend/app/llm.py:1) uses routing categories for style hints, not evidence selection.
+* **Future enhancement**: Consider soft boost/rerank based on routing-to-card-category preferences (e.g., "research_and_academic_credibility" → boost `research` and `certification` cards), but never hard filter.
 
 ### `knowledge_chunks`
 
@@ -657,7 +659,7 @@ Schema source: [`backend/db/init.sql`](backend/db/init.sql:1).
 
 Key columns:
 
-* `card_id`, `category`, `section` — citation metadata.
+* `card_id`, `card_category`, `section` — citation metadata.
 * `source_url` — derived from the Links section in cards.
 * `content` — chunk text used as evidence.
 * `embedding` — pgvector embedding for similarity search.

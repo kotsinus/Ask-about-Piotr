@@ -136,7 +136,7 @@ def test_chunk_cards_emits_only_non_empty_required_sections() -> None:
     card = KnowledgeCard(
         card_id="c1",
         title="T",
-        category="project",
+        card_category="project",
         sections={
             "Title": "T",
             "Category": "project",
@@ -155,7 +155,7 @@ def test_chunk_cards_emits_only_non_empty_required_sections() -> None:
         ("Links", "- https://example.com"),
     }
     assert all(chunk.card_id == "c1" for chunk in chunks)
-    assert all(chunk.category == "project" for chunk in chunks)
+    assert all(chunk.card_category == "project" for chunk in chunks)
     assert all(chunk.source_url == "https://example.com" for chunk in chunks)
 
 
