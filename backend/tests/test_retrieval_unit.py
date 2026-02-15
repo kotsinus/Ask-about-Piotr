@@ -171,8 +171,8 @@ def test_merge_dedup_preserves_provenance_and_keeps_best_distance() -> None:
         source_url=None,
         content="Same content",
         distance=0.20,
-        origin_categories=["Education and formal background"],
-        best_origin_category="Education and formal background",
+        origin_categories=["education"],
+        best_origin_category="education",
     )
     chunk_b = retrieval.RetrievedChunk(
         card_id="c1",
@@ -187,7 +187,7 @@ def test_merge_dedup_preserves_provenance_and_keeps_best_distance() -> None:
 
     merged, collisions = retrieval.merge_dedup_preserve_provenance(
         {
-            "Education and formal background": [chunk_a],
+            "education": [chunk_a],
             "Hands-on engineering": [chunk_b],
         }
     )
@@ -196,7 +196,7 @@ def test_merge_dedup_preserves_provenance_and_keeps_best_distance() -> None:
     assert len(merged) == 1
     assert merged[0].distance == 0.10
     assert set(merged[0].origin_categories or []) == {
-        "Education and formal background",
+        "education",
         "Hands-on engineering",
     }
 
@@ -211,8 +211,8 @@ def test_cap_chunks_with_coverage_prefers_eviction_from_overrepresented_category
             section="S",
             content="A1",
             distance=0.10,
-            origin_categories=["Education and formal background"],
-            best_origin_category="Education and formal background",
+            origin_categories=["education"],
+            best_origin_category="education",
         ),
         retrieval.RetrievedChunk(
             card_id="a2",
@@ -220,8 +220,8 @@ def test_cap_chunks_with_coverage_prefers_eviction_from_overrepresented_category
             section="S",
             content="A2",
             distance=0.20,
-            origin_categories=["Education and formal background"],
-            best_origin_category="Education and formal background",
+            origin_categories=["education"],
+            best_origin_category="education",
         ),
         retrieval.RetrievedChunk(
             card_id="b1",
@@ -236,12 +236,12 @@ def test_cap_chunks_with_coverage_prefers_eviction_from_overrepresented_category
 
     capped = retrieval.cap_chunks_with_coverage(
         chunks=chunks,
-        routed_categories=["Education and formal background", "Hands-on engineering"],
+        routed_categories=["education", "Hands-on engineering"],
         max_total_chunks=2,
     )
     assert len(capped) == 2
     best_origins = {c.best_origin_category for c in capped}
-    assert best_origins == {"Education and formal background", "Hands-on engineering"}
+    assert best_origins == {"education", "Hands-on engineering"}
 
 
 def test_apply_pinning_adds_missing_card() -> None:
@@ -258,8 +258,8 @@ def test_apply_pinning_adds_missing_card() -> None:
     )
     chunks = [existing_chunk]
 
-    pinning_rules = {"Education and formal background": ["education-facts"]}
-    routed_categories = ["Education and formal background"]
+    pinning_rules = {"education": ["education-facts"]}
+    routed_categories = ["education"]
 
     def mock_retrieve_for_card(
         card_id: str, limit: int
@@ -271,8 +271,8 @@ def test_apply_pinning_adds_missing_card() -> None:
                 section="Degrees",
                 content="Education content",
                 distance=0.3,
-                origin_categories=["Education and formal background"],
-                best_origin_category="Education and formal background",
+                origin_categories=["education"],
+                best_origin_category="education",
             )
         ]
 
@@ -299,14 +299,14 @@ def test_apply_pinning_skips_if_card_already_present() -> None:
         section="Degrees",
         content="Existing education content",
         distance=0.15,
-        origin_categories=["Education and formal background"],
-        best_origin_category="Education and formal background",
+        origin_categories=["education"],
+        best_origin_category="education",
         pinned=False,
     )
     chunks = [existing_chunk]
 
-    pinning_rules = {"Education and formal background": ["education-facts"]}
-    routed_categories = ["Education and formal background"]
+    pinning_rules = {"education": ["education-facts"]}
+    routed_categories = ["education"]
 
     call_count = 0
 
@@ -322,8 +322,8 @@ def test_apply_pinning_skips_if_card_already_present() -> None:
                 section="Other",
                 content="Should not be added",
                 distance=0.5,
-                origin_categories=["Education and formal background"],
-                best_origin_category="Education and formal background",
+                origin_categories=["education"],
+                best_origin_category="education",
             )
         ]
 
@@ -355,16 +355,16 @@ def test_apply_pinning_multiple_categories() -> None:
     chunks = [existing_chunk]
 
     pinning_rules = {
-        "Education and formal background": ["education-facts"],
+        "education": ["education-facts"],
         "Certifications": ["certifications-facts"],
     }
-    routed_categories = ["Education and formal background", "Certifications"]
+    routed_categories = ["education", "Certifications"]
 
     def mock_retrieve_for_card(
         card_id: str, limit: int
     ) -> list[retrieval.RetrievedChunk]:
         category_map = {
-            "education-facts": "Education and formal background",
+            "education-facts": "education",
             "certifications-facts": "Certifications",
         }
         return [
@@ -408,7 +408,7 @@ def test_apply_pinning_empty_rules() -> None:
     chunks = [existing_chunk]
 
     pinning_rules: dict[str, list[str]] = {}
-    routed_categories = ["Education and formal background"]
+    routed_categories = ["education"]
 
     def mock_retrieve_for_card(
         card_id: str, limit: int
@@ -443,7 +443,7 @@ def test_apply_pinning_no_matching_category() -> None:
 
     # Pinning rules for categories that are NOT in routed_categories
     pinning_rules = {
-        "Education and formal background": ["education-facts"],
+        "education": ["education-facts"],
         "Certifications": ["certifications-facts"],
     }
     routed_categories = ["Leadership", "Research"]  # Different categories

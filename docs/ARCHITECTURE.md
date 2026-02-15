@@ -612,7 +612,7 @@ This system uses **two intentionally different category taxonomies** for differe
 #### Card categories (content taxonomy)
 
 * **Purpose**: Describe the TYPE of knowledge source (what kind of document is this?)
-* **Values**: `project`, `research`, `certification`, `experience`, `profile`, `Education and formal background`
+* **Values**: `project`, `research`, `certification`, `experience`, `profile`, `education`
 * **Source**: The `Category` section in each knowledge card Markdown file
 * **Storage**: `knowledge_chunks.category` column in Postgres
 * **Use cases**:
@@ -623,7 +623,7 @@ This system uses **two intentionally different category taxonomies** for differe
 #### Router categories (intent taxonomy)
 
 * **Purpose**: Describe the QUESTION INTENT and desired answer style (how should this be answered?)
-* **Values**: `Hands-on engineering`, `Architecture and system design`, `AI and ML practice`, `Leadership and product strategy`, `Research and academic credibility`, `Career fit and role alignment`, `Education and formal background`, `Personal interests and working style`
+* **Values**: `Hands-on engineering`, `Architecture and system design`, `AI and ML practice`, `Leadership and product strategy`, `Research and academic credibility`, `Career fit and role alignment`, `education`, `Personal interests and working style`
 * **Source**: LLM router classification in [`backend/app/llm.py`](backend/app/llm.py:1)
 * **Storage**: Passed to synthesis, not stored in database
 * **Use cases**:

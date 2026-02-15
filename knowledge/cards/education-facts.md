@@ -2,7 +2,7 @@
 Education (Facts)
 
 # Category
-Education and formal background
+education
 
 # Problem
 This card contains factual information about Piotr's formal education, academic degrees, and certifications from higher education institutions.

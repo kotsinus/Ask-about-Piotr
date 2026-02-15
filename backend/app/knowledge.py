@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 
 REQUIRED_SECTIONS = [
@@ -36,6 +37,22 @@ REQUIRED_SECTIONS = [
     "Key decisions and trade-offs",
     "Links",
 ]
+
+
+class CardCategory(StrEnum):
+    """Allowed knowledge-card content categories (canonical, lowercase)."""
+
+    project = "project"
+    research = "research"
+    certification = "certification"
+    experience = "experience"
+    profile = "profile"
+    education = "education"
+
+
+ALLOWED_CARD_CATEGORIES: frozenset[str] = frozenset(
+    {str(item.value) for item in CardCategory}
+)
 
 
 @dataclass(frozen=True)
@@ -112,6 +129,13 @@ def _parse_card(path: Path) -> KnowledgeCard:
 
     title = sections["Title"].strip()
     category = sections["Category"].strip()
+    if category not in ALLOWED_CARD_CATEGORIES:
+        allowed = ", ".join(sorted(ALLOWED_CARD_CATEGORIES))
+        raise ValueError(
+            "Invalid card category "
+            f"{category!r} in {path.as_posix()} (card_id={path.stem}). "
+            f"Allowed categories: {allowed}."
+        )
     source_url = _extract_source_url(sections.get("Links", ""))
 
     return KnowledgeCard(

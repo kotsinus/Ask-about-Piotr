@@ -349,6 +349,21 @@ def classify_question(question: str) -> Category:
     """
 
     text = question.lower()
+    if any(
+        keyword in text
+        for keyword in [
+            "education",
+            "educational",
+            "degree",
+            "phd",
+            "m.sc",
+            "msc",
+            "master",
+            "university",
+            "academy",
+        ]
+    ):
+        return Category.education_and_formal_background
     if any(keyword in text for keyword in ["team", "lead", "strategy", "roadmap"]):
         return Category.leadership_and_product_strategy
     if any(keyword in text for keyword in ["architecture", "design", "system"]):

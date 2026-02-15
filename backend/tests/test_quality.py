@@ -29,12 +29,12 @@ class TestValidateAnswerQuality:
         """Empty quality rules should always pass."""
         result = validate_answer_quality(
             answer="Any answer text",
-            category="Education and formal background",
+            category="education",
             quality_rules={},
         )
         assert result.passed is True
         assert result.failure_reasons == []
-        assert result.category == "Education and formal background"
+        assert result.category == "education"
 
     def test_unknown_category_returns_pass(self):
         """Unknown category (not in rules) should pass."""
@@ -42,7 +42,7 @@ class TestValidateAnswerQuality:
             answer="Some answer",
             category="Unknown Category",
             quality_rules={
-                "Education and formal background": {
+                "education": {
                     "min_tokens": ["degree", "university"],
                     "min_token_count": 1,
                 }
@@ -55,9 +55,9 @@ class TestValidateAnswerQuality:
         """Should pass when required tokens are present in answer."""
         result = validate_answer_quality(
             answer="I have a degree from Stanford University in Computer Science.",
-            category="Education and formal background",
+            category="education",
             quality_rules={
-                "Education and formal background": {
+                "education": {
                     "min_tokens": ["degree", "university", "stanford"],
                     "min_token_count": 2,
                 }
@@ -70,9 +70,9 @@ class TestValidateAnswerQuality:
         """Should fail when not enough required tokens are present."""
         result = validate_answer_quality(
             answer="I studied computer science.",
-            category="Education and formal background",
+            category="education",
             quality_rules={
-                "Education and formal background": {
+                "education": {
                     "min_tokens": ["degree", "university", "diploma"],
                     "min_token_count": 2,
                 }
@@ -86,9 +86,9 @@ class TestValidateAnswerQuality:
         """Token matching should be case-insensitive."""
         result = validate_answer_quality(
             answer="I have a DEGREE from UNIVERSITY.",
-            category="Education and formal background",
+            category="education",
             quality_rules={
-                "Education and formal background": {
+                "education": {
                     "min_tokens": ["degree", "university"],
                     "min_token_count": 2,
                 }
@@ -100,9 +100,9 @@ class TestValidateAnswerQuality:
         """If min_token_count not specified, should default to 1."""
         result = validate_answer_quality(
             answer="I have a degree in computer science.",
-            category="Education and formal background",
+            category="education",
             quality_rules={
-                "Education and formal background": {
+                "education": {
                     "min_tokens": ["degree", "university"],
                 }
             },
@@ -113,9 +113,9 @@ class TestValidateAnswerQuality:
         """min_token_count of 0 should still require 0 tokens found (passes)."""
         result = validate_answer_quality(
             answer="No relevant tokens here.",
-            category="Education and formal background",
+            category="education",
             quality_rules={
-                "Education and formal background": {
+                "education": {
                     "min_tokens": ["degree", "university"],
                     "min_token_count": 0,
                 }
@@ -127,9 +127,9 @@ class TestValidateAnswerQuality:
         """Empty answer should fail if tokens required."""
         result = validate_answer_quality(
             answer="",
-            category="Education and formal background",
+            category="education",
             quality_rules={
-                "Education and formal background": {
+                "education": {
                     "min_tokens": ["degree"],
                     "min_token_count": 1,
                 }
@@ -140,7 +140,7 @@ class TestValidateAnswerQuality:
     def test_multiple_categories_in_rules(self):
         """Should validate only the specified category, not others."""
         quality_rules = {
-            "Education and formal background": {
+            "education": {
                 "min_tokens": ["degree"],
                 "min_token_count": 1,
             },
@@ -153,7 +153,7 @@ class TestValidateAnswerQuality:
         # Answer passes for Education (has "degree")
         result_edu = validate_answer_quality(
             answer="I have a degree in CS.",
-            category="Education and formal background",
+            category="education",
             quality_rules=quality_rules,
         )
         assert result_edu.passed is True
@@ -185,7 +185,7 @@ class TestQualityValidationResult:
         result = QualityValidationResult(
             passed=False,
             failure_reasons=["missing_category_tokens: found 0/2 required tokens"],
-            category="Education and formal background",
+            category="education",
         )
         assert result.passed is False
         assert len(result.failure_reasons) == 1

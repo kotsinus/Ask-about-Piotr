@@ -58,6 +58,7 @@ def _parse_pinning_rules(value: str | None) -> dict[str, list[str]]:
     try:
         parsed = json.loads(value)
         if isinstance(parsed, dict):
+            parsed = _normalize_router_category_map(parsed)
             # Validate structure: dict[str, list[str]]
             result: dict[str, list[str]] = {}
             for category, card_ids in parsed.items():
@@ -68,6 +69,28 @@ def _parse_pinning_rules(value: str | None) -> dict[str, list[str]]:
     except json.JSONDecodeError:
         pass
     return {}
+
+
+def _normalize_router_category_name(value: str) -> str:
+    """Normalize router category names.
+
+    Router category strings are used as dictionary keys in settings (pinning,
+    section weights, quality rules).
+
+    NOTE: This function intentionally does NOT perform taxonomy migrations or
+    legacy-name mapping. Only canonical category strings should be used.
+    """
+
+    return (value or "").strip()
+
+
+def _normalize_router_category_map(value: dict[str, object]) -> dict[str, object]:
+    normalized: dict[str, object] = {}
+    for key, val in (value or {}).items():
+        if not isinstance(key, str):
+            continue
+        normalized[_normalize_router_category_name(key)] = val
+    return normalized
 
 
 def _parse_section_weights(value: str | None) -> dict[str, dict[str, float]]:
@@ -86,6 +109,7 @@ def _parse_section_weights(value: str | None) -> dict[str, dict[str, float]]:
     try:
         parsed = json.loads(value)
         if isinstance(parsed, dict):
+            parsed = _normalize_router_category_map(parsed)
             # Validate structure: dict[str, dict[str, float]]
             result: dict[str, dict[str, float]] = {}
             for category, weights in parsed.items():
@@ -129,6 +153,7 @@ def _parse_quality_rules(value: str | None) -> dict[str, dict[str, list[str] | i
     try:
         parsed = json.loads(value)
         if isinstance(parsed, dict):
+            parsed = _normalize_router_category_map(parsed)
             # Validate structure: dict[str, dict]
             result: dict[str, dict[str, list[str] | int]] = {}
             for category, rules in parsed.items():
