@@ -201,7 +201,9 @@ async def test_followup_question_uses_history_rewrite(
 
         monkeypatch.setattr("app.main.rewrite_question", _stub_rewrite)
         monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
-        monkeypatch.setattr("app.main.retrieve_for_category", _stub_retrieve_for_category)
+        monkeypatch.setattr(
+            "app.main.retrieve_for_category", _stub_retrieve_for_category
+        )
         monkeypatch.setattr("app.main.retrieve_for_card", _stub_retrieve_for_card)
 
         response = await client.post(

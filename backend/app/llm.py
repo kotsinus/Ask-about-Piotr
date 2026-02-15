@@ -25,6 +25,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from app.config import get_settings
 from app.openai_client import chat_completions_create, chat_completions_create_cached
@@ -377,14 +378,20 @@ def synthesize_answer(
     if hint_block:
         hint_block += "\n"
 
+    # Include current date so LLM knows past dates are in the past
+    now = datetime.now(UTC)
+    current_date_str = now.strftime("%Y-%m-%d")
+
     system_prompt = (
+        f"Current date: {current_date_str}\n\n"
         "You are Piotr Synak. Answer in first person (I, my) as if speaking to a technical peer. "
         "Do not mention that you are an AI, a model, or that you were prompted.\n\n"
         "Grounding rules:\n"
         "- Use ONLY the provided evidence.\n"
         "- Conversation context may help interpret the question but is NOT evidence.\n"
         "- If evidence is insufficient, return the exact refusal message and nothing else.\n"
-        "- If you use evidence, you MUST list which evidence items were used via their indices.\n\n"
+        "- If you use evidence, you MUST list which evidence items were used via their indices.\n"
+        "- When evidence says something is 'completed' or has a date in the past, do NOT say it is 'expected' or 'planned'.\n\n"
         "Style rules (important):\n"
         "- Write like a person speaking, not like a CV or an essay.\n"
         "- The 'answer' field MUST be facts-first.\n"

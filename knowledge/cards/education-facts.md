@@ -11,10 +11,12 @@ This card contains factual information about Piotr's formal education, academic 
 N/A
 
 # What I built
-xMBA — Agile Business, Startup Skills  
-Institution: SAQ (Swiss Association for Quality)  
-Country: Switzerland  
-Year: 2025  
+xMBA — Agile Business, Startup Skills (completed June 2025)
+Institution: SAQ (Swiss Association for Quality)
+Country: Switzerland
+Year: 2025
+Certificate valid: 02.06.2025 - 01.06.2028
+Certificate number: 25ABSS1591478/1  
 
 PhD — Computer Science  
 Institution: Institute of Computer Science, Polish Academy of Sciences  

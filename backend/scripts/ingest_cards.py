@@ -127,6 +127,9 @@ def main() -> None:
     embeddings = provider.embed([chunk.content for chunk in chunks])
     print(f"Generated {len(embeddings)} embeddings", flush=True)
 
+    # Note: Advisory lock is handled by ensure_ingested.py when called during startup.
+    # When running standalone, we don't need the lock since it's a single-process operation.
+
     with psycopg.connect(database_url) as conn:
         with conn.cursor() as cursor:
             cursor.execute("CREATE EXTENSION IF NOT EXISTS vector;")
