@@ -786,6 +786,15 @@ def chat(
         max_total = int(getattr(settings, "multi_category_max_total_chunks", 5) or 5)
         max_total = max(1, max_total)
 
+        # Get section weights for the first routed category (primary category for pinning).
+        # This ensures pinned cards select the most relevant sections, not just low-distance
+        # low-signal sections like "Category".
+        primary_category_section_weights = (
+            all_section_weights.get(routed_category_names[0])
+            if routed_category_names
+            else None
+        )
+
         # Create a retrieval function for pinning that captures the current context.
         def _retrieve_for_pinning(card_id: str, limit: int):
             return retrieve_for_card(
@@ -796,6 +805,7 @@ def chat(
                 if routed_category_names
                 else "",
                 conversation_topic=conversation_topic,
+                section_weights=primary_category_section_weights,
             )
 
         merged, pinned_card_ids = apply_pinning(

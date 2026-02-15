@@ -632,3 +632,131 @@ def test_section_weights_with_penalty(
     # Degrees adjusted: 0.20
     # They're equal, so order depends on stable sort (Title came first in rows)
     assert chunks_with_weights[0].section in ["Degrees", "Title"]
+
+
+def test_retrieve_for_card_section_weights_affect_ranking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Section weights should boost matching sections in retrieve_for_card ranking.
+
+    This test verifies the fix for the education question bug where pinned cards
+    selected low-signal "Category" sections instead of substantive "What I built"
+    sections because retrieve_for_card didn't apply section weights.
+
+    The fix applies both:
+    1. Section penalties for low-signal sections (Category, Title, Tech stack)
+    2. Section bonuses from category-specific weights
+    """
+    monkeypatch.setattr(retrieval, "get_settings", lambda: _settings())
+    monkeypatch.setattr(retrieval, "register_vector", lambda conn: None)
+
+    # Two chunks from the same card:
+    # - "Category" section has lower distance but is low-signal (penalty 0.30)
+    # - "What I built" section has higher distance but is substantive
+    rows = [
+        ("education-facts", "education", "Category", None, "Education", 0.557),
+        (
+            "education-facts",
+            "education",
+            "What I built",
+            None,
+            "M.Sc. in Computer Science",
+            0.717,
+        ),
+    ]
+
+    monkeypatch.setattr(retrieval.psycopg, "connect", lambda *a, **k: _Conn(rows))
+
+    class _Provider:
+        def embed(self, texts: list[str]):
+            return [[0.0, 0.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(retrieval, "get_embedding_provider", lambda **k: _Provider())
+
+    # Without weights, the penalty logic should still prefer "What I built":
+    # Category: 0.557 + 0.30 penalty = 0.857 (low-signal section)
+    # What I built: 0.717 (no penalty, substantive section)
+    # What I built should come first due to penalty on Category
+    chunks_no_weights = retrieval.retrieve_for_card(
+        "What is your educational background?",
+        card_id="education-facts",
+        limit=1,
+        origin_routing_category="Education and formal background",
+        section_weights=None,
+    )
+    assert chunks_no_weights[0].section == "What I built"
+
+    # With weights boosting "what i built" by 0.20:
+    # Category: 0.557 + 0.30 penalty = 0.857 (low-signal section with penalty)
+    # What I built: 0.717 - 0.20 bonus = 0.517 (boosted substantive section)
+    # What I built should still come first, with even larger margin
+    chunks_with_weights = retrieval.retrieve_for_card(
+        "What is your educational background?",
+        card_id="education-facts",
+        limit=1,
+        origin_routing_category="Education and formal background",
+        section_weights={"What I built": 0.20},
+    )
+    assert chunks_with_weights[0].section == "What I built"
+
+
+def test_retrieve_for_card_section_weights_overcome_penalty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Section weights can help a low-signal section win when appropriate.
+
+    This tests the edge case where a section weight bonus is applied to a
+    low-signal section, demonstrating that weights work correctly.
+    """
+    monkeypatch.setattr(retrieval, "get_settings", lambda: _settings())
+    monkeypatch.setattr(retrieval, "register_vector", lambda conn: None)
+
+    # Two chunks from the same card:
+    # - "Category" section has much lower distance and is low-signal
+    # - "What I built" section has higher distance but is substantive
+    rows = [
+        ("education-facts", "education", "Category", None, "Education", 0.30),
+        (
+            "education-facts",
+            "education",
+            "What I built",
+            None,
+            "M.Sc. in Computer Science",
+            0.60,
+        ),
+    ]
+
+    monkeypatch.setattr(retrieval.psycopg, "connect", lambda *a, **k: _Conn(rows))
+
+    class _Provider:
+        def embed(self, texts: list[str]):
+            return [[0.0, 0.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(retrieval, "get_embedding_provider", lambda **k: _Provider())
+
+    # Without weights:
+    # Category: 0.30 + 0.30 penalty = 0.60
+    # What I built: 0.60 (no penalty)
+    # They're equal, so stable sort keeps original order (Category first)
+    chunks_no_weights = retrieval.retrieve_for_card(
+        "What is your educational background?",
+        card_id="education-facts",
+        limit=1,
+        origin_routing_category="Education and formal background",
+        section_weights=None,
+    )
+    # Category comes first due to stable sort (equal adjusted distances)
+    assert chunks_no_weights[0].section == "Category"
+
+    # With weights boosting "what i built" by 0.20:
+    # Category: 0.30 + 0.30 penalty = 0.60
+    # What I built: 0.60 - 0.20 bonus = 0.40
+    # What I built should come first now
+    chunks_with_weights = retrieval.retrieve_for_card(
+        "What is your educational background?",
+        card_id="education-facts",
+        limit=1,
+        origin_routing_category="Education and formal background",
+        section_weights={"What I built": 0.20},
+    )
+    assert chunks_with_weights[0].section == "What I built"
