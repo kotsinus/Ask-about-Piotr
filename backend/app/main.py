@@ -90,6 +90,28 @@ SESSION_COOKIE_NAME = "ask_piotr_session_id"
 SESSION_ID_HEADER = "x-session-id"
 
 
+def _router_category_settings_key(category_label: str) -> str:
+    """Map a human routing label to the settings JSON key.
+
+    Runtime routing uses [`RoutingCategory.<...>.value`](backend/app/routing_category.py:23)
+    (human-readable strings).
+
+    Env-configured dictionaries (pinning rules, section weights, quality rules)
+    commonly use snake_case enum member names.
+
+    This helper normalizes labels to snake_case keys when possible.
+    """
+
+    label = (category_label or "").strip()
+    if not label:
+        return ""
+    label_norm = " ".join(label.lower().split())
+    for cat in RoutingCategory:
+        if label_norm == " ".join(str(cat.value).lower().split()):
+            return str(cat.name)
+    return label
+
+
 def _truncate_text(value: str, max_chars: int) -> str:
     if max_chars <= 0:
         return ""
@@ -837,13 +859,18 @@ def chat(
         for item in routing.routing_categories:
             budget = int(item.budget or 1)
             category_label = str(item.routing_category.value)
+            category_settings_key = _router_category_settings_key(category_label)
             t_cat = time.perf_counter()
 
             # Get category-specific section weights (if any)
-            category_section_weights = all_section_weights.get(category_label)
+            category_section_weights = all_section_weights.get(
+                category_settings_key
+            ) or all_section_weights.get(category_label)
 
             # Get category-specific card conditioning (if any)
-            category_card_conditioning = all_card_conditioning.get(category_label)
+            category_card_conditioning = all_card_conditioning.get(
+                category_settings_key
+            ) or all_card_conditioning.get(category_label)
 
             selected = retrieve_for_category(
                 standalone_question,
@@ -853,6 +880,19 @@ def chat(
                 section_weights=category_section_weights,
                 card_conditioning=category_card_conditioning,
             )
+
+            # Backward-compatible provenance: if retrieval assigns origin using
+            # the passed-in label (human-readable), also record the settings key
+            # (snake_case) so downstream matching remains robust.
+            if category_settings_key and category_settings_key != category_label:
+                for ch in selected:
+                    if not getattr(ch, "origin_routing_categories", None):
+                        ch.origin_routing_categories = []
+                    if category_settings_key not in ch.origin_routing_categories:
+                        ch.origin_routing_categories.append(category_settings_key)
+
+                    if getattr(ch, "origin_routing_category", None) == category_label:
+                        ch.origin_routing_category = category_settings_key
             chunks_by_category[category_label] = selected
             logger.info(
                 "chat_retrieve_category",
@@ -883,11 +923,12 @@ def chat(
         # Get section weights for the first routed category (primary category for pinning).
         # This ensures pinned cards select the most relevant sections, not just low-distance
         # low-signal sections like "Category".
-        primary_category_section_weights = (
-            all_section_weights.get(routed_category_names[0])
-            if routed_category_names
-            else None
-        )
+        primary_category_section_weights = None
+        if routed_category_names:
+            primary_key = _router_category_settings_key(routed_category_names[0])
+            primary_category_section_weights = all_section_weights.get(
+                primary_key
+            ) or all_section_weights.get(routed_category_names[0])
 
         # Create a retrieval function for pinning that captures the current context.
         def _retrieve_for_pinning(card_id: str, limit: int):
@@ -910,6 +951,28 @@ def chat(
             max_total_chunks=max_total,
         )
 
+        # Backward-compatible: env pinning rules commonly use snake_case keys.
+        # If the settings dict uses snake_case keys, the lookup in apply_pinning
+        # won't match human-readable routed category labels.
+        # Retry pinning with normalized keys if first pass pinned nothing.
+        if (not pinned_card_ids) and getattr(settings, "multi_category_pinning_rules", None):
+            normalized_rules = {
+                _router_category_settings_key(k): v
+                for k, v in (settings.multi_category_pinning_rules or {}).items()
+                if _router_category_settings_key(k)
+            }
+            normalized_routed = [
+                _router_category_settings_key(c) for c in routed_category_names if c
+            ]
+            if normalized_rules and normalized_routed:
+                merged, pinned_card_ids = apply_pinning(
+                    chunks=merged,
+                    pinning_rules=normalized_rules,
+                    routed_categories=normalized_routed,
+                    retrieve_for_card_fn=_retrieve_for_pinning,
+                    max_total_chunks=max_total,
+                )
+
         # Re-dedup after pinning: pinned chunks may duplicate existing chunks.
         # Use a wrapper dict to reuse the merge_dedup_preserve_provenance function.
         if pinned_card_ids:
@@ -931,6 +994,19 @@ def chat(
             routed_categories=routed_category_names,
             max_total_chunks=max_total,
         )
+
+        # Coverage capping uses origin strings. Ensure we also support snake_case
+        # routed category names by re-running with normalized labels when needed.
+        if len(chunks) > 0:
+            normalized_routed = [
+                _router_category_settings_key(c) for c in routed_category_names if c
+            ]
+            if normalized_routed and set(normalized_routed) != set(routed_category_names):
+                chunks = cap_chunks_with_coverage(
+                    chunks=chunks,
+                    routed_categories=normalized_routed,
+                    max_total_chunks=max_total,
+                )
 
         logger.info(
             "chat_retrieve_merge",
@@ -1106,20 +1182,21 @@ def chat(
 
         # Quality rules validation (log-only in v1, no retry trigger).
         # Validates answer against category-specific quality rules.
-        quality_rules = getattr(settings, "multi_category_quality_rules", {}) or {}
-        if quality_rules and synthesis.answer != refusal:
-            category_validation_failures: list[dict] = []
-            for item in routing.routing_categories:
-                category_label = str(item.routing_category.value)
-                result = validate_answer_quality(
-                    answer=synthesis.answer or "",
-                    routing_category=category_label,
-                    quality_rules=quality_rules,
-                )
-                if not result.passed:
-                    category_validation_failures.append(
-                        {
-                            "routing_category": category_label,
+    quality_rules = getattr(settings, "multi_category_quality_rules", {}) or {}
+    if quality_rules and synthesis.answer != refusal:
+        category_validation_failures: list[dict] = []
+        for item in routing.routing_categories:
+            category_label = str(item.routing_category.value)
+            category_key = _router_category_settings_key(category_label)
+            result = validate_answer_quality(
+                answer=synthesis.answer or "",
+                routing_category=category_key,
+                quality_rules=quality_rules,
+            )
+            if not result.passed:
+                category_validation_failures.append(
+                    {
+                        "routing_category": category_label,
                             "failures": result.failure_reasons,
                         }
                     )
