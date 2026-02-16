@@ -38,6 +38,7 @@ from app.interaction_logging import InteractionLog, write_interaction_log
 from app.llm import (
     RoutedCategory,
     RoutingResult,
+    SynthesisResult,
     clean_why,
     rewrite_question,
     route_categories,
@@ -936,6 +937,57 @@ def chat(
                 "used_chunk_indices_count": len(synthesis.used_chunk_indices or []),
             },
         )
+
+        # Hard post-condition: enforce multi-category coverage after retry.
+        # If synthesis still doesn't use chunks from all routed categories,
+        # force inclusion of at least one chunk from each missing category.
+        if len(routing.routing_categories) > 1 and synthesis.used_chunk_indices:
+            used = [
+                chunks[idx]
+                for idx in synthesis.used_chunk_indices
+                if isinstance(idx, int) and 0 <= idx < len(chunks)
+            ]
+            used_origins: set[str] = set()
+            for ch in used:
+                if ch.origin_routing_category:
+                    used_origins.add(ch.origin_routing_category)
+                for origin in ch.origin_routing_categories or []:
+                    used_origins.add(origin)
+            expected = {
+                str(i.routing_category.value) for i in routing.routing_categories
+            }
+            missing_categories = expected - used_origins
+
+            if missing_categories:
+                # Find one chunk from each missing category and force inclusion.
+                forced_indices: list[int] = []
+                for missing_cat in missing_categories:
+                    for idx, ch in enumerate(chunks):
+                        ch_origins = set(ch.origin_routing_categories or [])
+                        if ch.origin_routing_category:
+                            ch_origins.add(ch.origin_routing_category)
+                        if missing_cat in ch_origins and idx not in synthesis.used_chunk_indices:
+                            forced_indices.append(idx)
+                            break
+
+                if forced_indices:
+                    # Merge forced indices with existing ones.
+                    new_indices = list(synthesis.used_chunk_indices) + forced_indices
+                    synthesis = SynthesisResult(
+                        answer=synthesis.answer,
+                        why_this_matters=synthesis.why_this_matters,
+                        confidence=synthesis.confidence,
+                        confidence_reason=synthesis.confidence_reason,
+                        used_chunk_indices=new_indices,
+                    )
+                    logger.info(
+                        "chat_multi_category_forced_coverage",
+                        extra={
+                            "missing_categories": list(missing_categories),
+                            "forced_indices": forced_indices,
+                            "final_used_chunk_indices_count": len(new_indices),
+                        },
+                    )
 
         # Quality rules validation (log-only in v1, no retry trigger).
         # Validates answer against category-specific quality rules.

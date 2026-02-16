@@ -605,3 +605,153 @@ def test_chat_multi_category_empty_pinning_rules_no_change(
     assert retrieve_for_card_calls == [], (
         f"retrieve_for_card should not be called with empty pinning rules, but got: {retrieve_for_card_calls}"
     )
+
+
+def test_chat_multi_category_enforces_coverage_after_synthesis_omits_category(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression test: multi-category coverage is enforced even when synthesis omits a category.
+
+    This test verifies that when:
+    1. Routing returns 2 categories
+    2. Synthesis returns used_chunk_indices only from category #1
+
+    The pipeline forces inclusion of at least one chunk from the missing category
+    so the final response evidence includes chunks from both categories.
+    """
+    captured: dict[str, object] = {}
+    synthesis_call_count: list[int] = [0]
+
+    monkeypatch.setattr(
+        "app.main.rewrite_question", lambda q, messages=None: "REWRITTEN"
+    )
+
+    def _route_categories(q: str):
+        captured["routing_input"] = q
+        return SimpleNamespace(
+            routing_categories=[
+                SimpleNamespace(
+                    routing_category=RoutingCategory.education_and_formal_background,
+                    confidence=Confidence.high,
+                    budget=None,
+                ),
+                SimpleNamespace(
+                    routing_category=RoutingCategory.hands_on_engineering,
+                    confidence=Confidence.medium,
+                    budget=None,
+                ),
+            ]
+        )
+
+    monkeypatch.setattr("app.main.route_categories", _route_categories)
+
+    def _retrieve_for_category(
+        question: str,
+        *,
+        routing_category: str,
+        budget: int,
+        conversation_topic: str | None = None,
+        section_weights: dict[str, float] | None = None,
+    ):
+        return [
+            RetrievedChunk(
+                card_id=f"{routing_category}-card",
+                card_category="cat",
+                section="Overview",
+                source_url=None,
+                content=f"chunk for {routing_category}",
+                distance=0.10,
+                origin_routing_categories=[routing_category],
+                origin_routing_category=routing_category,
+                pinned=False,
+            )
+        ]
+
+    monkeypatch.setattr("app.main.retrieve_for_category", _retrieve_for_category)
+
+    def _synthesize_answer(
+        question: str,
+        chunks: list[RetrievedChunk],
+        routing_category,
+        conversation_topic: str | None = None,
+        conversation_messages: list[dict] | None = None,
+        routing=None,
+        **kwargs,
+    ):
+        synthesis_call_count[0] += 1
+        # First call: only use chunk from first category (index 0)
+        # This simulates the bug where synthesis ignores the second category
+        if synthesis_call_count[0] == 1:
+            return SynthesisResult(
+                answer="Answer only from education category.",
+                why_this_matters="Test why.",
+                confidence=Confidence.medium,
+                confidence_reason=None,
+                used_chunk_indices=[0],  # Only first category chunk
+            )
+        # Retry call: still only use first category (simulates persistent bug)
+        return SynthesisResult(
+            answer="Answer still only from education category.",
+            why_this_matters="Test why.",
+            confidence=Confidence.medium,
+            confidence_reason=None,
+            used_chunk_indices=[0],  # Still only first category chunk
+        )
+
+    monkeypatch.setattr("app.main.synthesize_answer", _synthesize_answer)
+
+    monkeypatch.setattr(
+        "app.main.get_settings",
+        lambda: SimpleNamespace(
+            router_model="router",
+            synthesis_model="synth",
+            synthesis_temperature=0.1,
+            embeddings_provider="stub",
+            embeddings_model="stub",
+            ip_hash_salt="salt",
+            interaction_log_include_llm_context=True,
+            retrieval_per_card_cap=2,
+            multi_category_retrieval_enabled=True,
+            multi_category_rollout_percent=100,
+            multi_category_max_categories=2,
+            multi_category_max_total_chunks=5,
+            multi_category_allow_six_chunks=False,
+            multi_category_intent_budget_policy="intent_rules_v1",
+            multi_category_pinning_rules={},
+            multi_category_section_weights={},
+        ),
+    )
+    monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
+    monkeypatch.setattr("app.main.write_interaction_log", lambda *a, **k: None)
+    monkeypatch.setattr("app.main.get_request_id", lambda: "req-1")
+
+    http_request = _make_http_request()
+    chat_request = ChatRequest(
+        question="What is your educational background and hands-on experience?",
+        messages=[],
+        context=ConversationContext(conversation_id="c1", last_topic=None),
+    )
+
+    response = chat(
+        http_request=http_request,
+        request=chat_request,
+        background_tasks=BackgroundTasks(),
+        debug_retrieval=True,
+    )
+
+    # Key assertion: evidence must include chunks from BOTH categories
+    # even though synthesis only returned chunks from the first category
+    evidence_card_ids = [e.card_id for e in response.evidence]
+
+    # Both category cards should be present in evidence
+    assert "Education and formal background-card" in evidence_card_ids, (
+        f"Expected education category in evidence, got: {evidence_card_ids}"
+    )
+    assert "Hands-on engineering-card" in evidence_card_ids, (
+        f"Expected hands-on engineering category in evidence, got: {evidence_card_ids}"
+    )
+
+    # Verify we have evidence from both categories
+    assert len(response.evidence) >= 2, (
+        f"Expected at least 2 evidence items (one from each category), got: {len(response.evidence)}"
+    )

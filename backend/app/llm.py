@@ -454,6 +454,21 @@ def synthesize_answer(
             "- Do not output generic filler.\n"
         )
 
+    # Multi-category coverage requirement.
+    if (
+        routing is not None
+        and len(getattr(routing, "routing_categories", []) or []) > 1
+    ):
+        routing_category_names = [
+            str(item.routing_category.value) for item in routing.routing_categories
+        ]
+        system_prompt += (
+            "\n\nMulti-category requirement:\n"
+            f"- This question was routed to {len(routing_category_names)} routing categories: {', '.join(routing_category_names)}.\n"
+            "- You MUST use at least one chunk from EACH routed category.\n"
+            "- Include at least one sentence grounded in evidence from each category.\n"
+        )
+
     # Bind category hints at system level to reduce model guessing/drift.
     if style_hint:
         system_prompt += f"\n\nStyle hint:\n{style_hint}\n"
