@@ -622,6 +622,12 @@ def chat(
     router_fallback_used = False
     routing_category: RoutingCategory
 
+    # Initialize multi-category diagnostic variables (avoid fragile dir() checks)
+    chunks_by_category: dict[str, list] | None = None
+    passed: bool | None = None
+    failure_reasons: list[str] = []
+    retry_attempted: bool = False
+
     if use_multi_category:
         # IMPORTANT: route on the original user question (not rewritten).
         routing_question = request.question
@@ -740,7 +746,7 @@ def chat(
         },
     )
     if use_multi_category and routing is not None:
-        chunks_by_category: dict[str, list] = {}
+        chunks_by_category = {}
         # Get all section weights from settings
         all_section_weights = (
             getattr(settings, "multi_category_section_weights", {}) or {}
@@ -881,7 +887,7 @@ def chat(
 
     # Quality gate + one retry (temperature=0) for multi-category answers.
     if use_multi_category and routing is not None:
-        failure_reasons: list[str] = []
+        failure_reasons = []  # Reset for this request
         refusal = "I do not have enough evidence in the provided materials."
         if synthesis.answer != refusal:
             if not synthesis.used_chunk_indices:
@@ -1148,7 +1154,7 @@ def chat(
                 "router_fallback_used": bool(router_fallback_used),
             }
 
-        if use_multi_category and "chunks_by_category" in dir():
+        if use_multi_category and chunks_by_category is not None:
             retrieval_by_category_dict = {
                 category: {
                     "selected_count": len(chunks),
@@ -1171,13 +1177,9 @@ def chat(
 
         if use_multi_category and routing is not None:
             quality_gate_dict = {
-                "passed": bool(passed) if "passed" in dir() else None,
-                "failure_reasons": failure_reasons
-                if "failure_reasons" in dir()
-                else [],
-                "retry_attempted": bool(retry_attempted)
-                if "retry_attempted" in dir()
-                else False,
+                "passed": bool(passed) if passed is not None else None,
+                "failure_reasons": failure_reasons,
+                "retry_attempted": retry_attempted,
             }
 
         tasks.add_task(

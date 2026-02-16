@@ -235,6 +235,12 @@ class Settings:
     # - Set via MULTI_CATEGORY_PINNING_RULES environment variable (JSON format)
     # - Example: '{"education_and_formal_background": ["education-facts"]}'
     #
+    # Default behavior:
+    # - By default, "education-facts" is pinned for "education_and_formal_background"
+    # - This ensures education-related queries always include foundational context
+    # - To disable all pinning, set env var to '{}'
+    # - To override defaults, provide a complete JSON config (replaces defaults)
+    #
     # Use cases:
     # - Ensure foundational/essential cards are always retrieved
     # - Guarantee important context appears in multi-category responses
