@@ -31,6 +31,7 @@ services:
     volumes:
       - ./knowledge:/knowledge:ro
     environment:
+      - APP_ENV=${APP_ENV:-prod}
       - DATABASE_URL=${DATABASE_URL}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       # Retrieval (RAG) needs embeddings; default is "stub" which raises at runtime.
@@ -39,10 +40,24 @@ services:
       # Optional explicit defaults (kept here to make prod behavior obvious).
       - EMBEDDINGS_MODEL=${EMBEDDINGS_MODEL:-text-embedding-3-small}
       - EMBEDDINGS_DIMENSIONS=${EMBEDDINGS_DIMENSIONS:-1536}
+      - ROUTER_MODEL=${ROUTER_MODEL}
+      - SYNTHESIS_MODEL=${SYNTHESIS_MODEL}
+      - SYNTHESIS_TEMPERATURE=${SYNTHESIS_TEMPERATURE}
+      - PROMPT_CACHE_ENABLED=${PROMPT_CACHE_ENABLED}
       - COOKIE_SECURE=true
       - CORS_ALLOW_ORIGINS=${CORS_ALLOW_ORIGINS}
       - IP_HASH_SALT=${IP_HASH_SALT}
       - TRUSTED_PROXY_CIDRS=${TRUSTED_PROXY_CIDRS}
+
+      # Optional GeoIP (default OFF unless enabled in host .env)
+      - GEOIP_ENABLED=${GEOIP_ENABLED}
+      - GEOIP_PROVIDER=${GEOIP_PROVIDER}
+      - GEOIP_URL=${GEOIP_URL}
+
+      # Retrieval settings
+      - RETRIEVAL_PER_CARD_CAP=${RETRIEVAL_PER_CARD_CAP}
+      - RETRIEVAL_MAX_DISTANCE=${RETRIEVAL_MAX_DISTANCE}
+      - RETRIEVAL_DISTANCE_DELTA=${RETRIEVAL_DISTANCE_DELTA}
 
       # Multi-category routing
       - MULTI_CATEGORY_RETRIEVAL_ENABLED=${MULTI_CATEGORY_RETRIEVAL_ENABLED:-true}
