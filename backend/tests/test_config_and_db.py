@@ -111,7 +111,7 @@ def test_parse_pinning_rules_valid_json(monkeypatch: pytest.MonkeyPatch) -> None
     result = _parse_pinning_rules(
         '{"education_and_formal_background": ["card1", "card2"]}'
     )
-    assert result == {"education_and_formal_background": ["card1", "card2"]}
+    assert result == {"Education and formal background": ["card1", "card2"]}
 
     # Empty string returns empty dict
     assert _parse_pinning_rules("") == {}
@@ -164,7 +164,7 @@ def test_parse_section_weights_valid_json(monkeypatch: pytest.MonkeyPatch) -> No
     result = _parse_section_weights(
         '{"education_and_formal_background": {"degrees": 0.15}}'
     )
-    assert result == {"education_and_formal_background": {"degrees": 0.15}}
+    assert result == {"Education and formal background": {"degrees": 0.15}}
 
     # Weight clamped to max 0.5
     result = _parse_section_weights('{"cat": {"section": 0.8}}')
@@ -198,7 +198,7 @@ def test_parse_quality_rules_valid_json(monkeypatch: pytest.MonkeyPatch) -> None
         '{"education_and_formal_background": {"min_tokens": ["degree", "university"], "min_token_count": 2}}'
     )
     assert result == {
-        "education_and_formal_background": {
+        "Education and formal background": {
             "min_tokens": ["degree", "university"],
             "min_token_count": 2,
         }
@@ -339,5 +339,5 @@ def test_get_settings_empty_pinning_rules_uses_default(
     settings = get_settings()
     # Empty env value falls back to default
     assert settings.multi_category_pinning_rules == {
-        "education_and_formal_background": ["education-facts"],
+        "Education and formal background": ["education-facts"],
     }

@@ -24,6 +24,8 @@ import json
 import os
 from dataclasses import dataclass, field
 
+from app.routing_category import RoutingCategory
+
 
 def _parse_bool(value: str | None, default: bool = False) -> bool:
     if value is None:
@@ -77,11 +79,24 @@ def _normalize_router_category_name(value: str) -> str:
     Router category strings are used as dictionary keys in settings (pinning,
     section weights, quality rules).
 
-    NOTE: This function intentionally does NOT perform taxonomy migrations or
-    legacy-name mapping. Only canonical category strings should be used.
+    Accept both:
+    - human labels (e.g. "Education and formal background")
+    - snake_case enum names (e.g. "education_and_formal_background")
+
+    Returns the canonical human label (i.e. `RoutingCategory.<...>.value`) when possible.
     """
 
-    return (value or "").strip()
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+
+    raw_norm = raw.lower()
+    for cat in RoutingCategory:
+        if raw_norm == str(cat.value).lower() or raw_norm == str(cat.name).lower():
+            return str(cat.value)
+
+    # Unknown value: keep as-is for observability.
+    return raw
 
 
 def _normalize_router_category_map(value: dict[str, object]) -> dict[str, object]:
@@ -292,7 +307,7 @@ class Settings:
     # - Override similarity-based ranking for critical information
     multi_category_pinning_rules: dict[str, list[str]] = field(
         default_factory=lambda: {
-            "education_and_formal_background": ["education-facts"],
+            RoutingCategory.education_and_formal_background.value: ["education-facts"],
         }
     )
 
@@ -495,7 +510,7 @@ def get_settings() -> Settings:
         env_pinning_rules
         if env_pinning_rules
         else {
-            "education_and_formal_background": ["education-facts"],
+            RoutingCategory.education_and_formal_background.value: ["education-facts"],
         }
     )
 
