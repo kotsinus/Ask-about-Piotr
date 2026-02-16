@@ -966,7 +966,10 @@ def chat(
                         ch_origins = set(ch.origin_routing_categories or [])
                         if ch.origin_routing_category:
                             ch_origins.add(ch.origin_routing_category)
-                        if missing_cat in ch_origins and idx not in synthesis.used_chunk_indices:
+                        if (
+                            missing_cat in ch_origins
+                            and idx not in synthesis.used_chunk_indices
+                        ):
                             forced_indices.append(idx)
                             break
 
