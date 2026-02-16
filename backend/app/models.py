@@ -78,6 +78,11 @@ class InteractionLogModel(Base):
     user_agent: Mapped[str | None] = mapped_column(Text, nullable=True)
     country: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Multi-category routing diagnostics (JSONB)
+    routing: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    retrieval_by_category: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    quality_gate: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     logged_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

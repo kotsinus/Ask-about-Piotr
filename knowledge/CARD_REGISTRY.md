@@ -2,7 +2,6 @@
 
 - `certification-xmba-agile-business-startup-skills` → `knowledge/cards/certification-xmba-agile-business-startup-skills.md`
 - `certifications-facts` → `knowledge/cards/certifications-facts.md`
-- `education-overview` → `knowledge/cards/education-overview.md`
 - `education-facts` → `knowledge/cards/education-facts.md`
 - `experience-academic-teaching` → `knowledge/cards/experience-academic-teaching.md`
 - `experience-ai-evaluation-and-cost-control` → `knowledge/cards/experience-ai-evaluation-and-cost-control.md`

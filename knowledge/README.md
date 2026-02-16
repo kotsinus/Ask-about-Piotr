@@ -5,12 +5,18 @@ Knowledge cards are the only source of truth used by the AI system.
 Source documents (CV, PDFs, certificates) stored in `assets/` are not
 ingested directly and serve only as reference material.
 
+## Directory contents
+- Cards live in `knowledge/cards/` (one Markdown file per card).
+- [`knowledge/CARD_REGISTRY.md`](knowledge/CARD_REGISTRY.md) is the canonical list of card IDs → file paths.
+- [`knowledge/KNOWLEDGE_INDEX.md`](knowledge/KNOWLEDGE_INDEX.md) maps the demo question set to cards that provide evidence.
+- [`knowledge/sample_questions.md`](knowledge/sample_questions.md) contains the demo questions.
+
 ## Knowledge Card Schema (Required)
 Each card is a standalone Markdown file that MUST include the following sections
 in this exact order and with these exact headings.
 
 1. Title
-2. Category (profile | project | research | certification | experience)
+2. Category (profile | project | research | certification | experience | education)
 3. Problem
 4. My role
 5. What I built
@@ -30,7 +36,7 @@ in this exact order and with these exact headings.
 When cards are chunked, each chunk MUST include these metadata fields:
 
 - `card_id`: stable identifier derived from the filename (e.g., `project-ml-platform`).
-- `category`: one of `profile | project | research | certification | experience`.
+- `category`: one of `profile | project | research | certification | experience | education`.
 - `section`: exact section heading from the schema (e.g., `Tech stack`).
 - `source_url`: URL or file reference from the Links section (if present).
 

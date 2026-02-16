@@ -32,17 +32,21 @@ This is the current request path for `POST /chat`:
 
 Code reference: [`backend/app/llm.py`](backend/app/llm.py:37).
 
-2) **Route (optional)**
+2) **Route (optional; multi-category when enabled)**
 
-- Purpose: classify the question into exactly one category.
+- Purpose:
+  - Default (flag OFF): classify the question into exactly one category.
+  - Flag ON: route the **original user question** into 1–N categories with per-category budgets.
 - Failure behavior:
   - If routing via LLM fails or is not configured, the backend falls back to a deterministic heuristic classifier.
 
-Code references: [`backend/app/llm.py`](backend/app/llm.py:103), [`backend/app/main.py`](backend/app/main.py:264).
+Code references: [`backend/app/llm.py`](backend/app/llm.py:103), [`backend/app/main.py`](backend/app/main.py:373).
 
 3) **Retrieve**
 
-- Purpose: select candidate evidence chunks from Postgres table `knowledge_chunks` via pgvector similarity search.
+- Purpose:
+  - Default (flag OFF): one retrieval pass for the rewritten standalone question.
+  - Flag ON: per-category retrieval passes (budgeted), then merge + dedup with provenance and coverage-aware capping.
 - Boundaries:
   - Hard cutoffs (max distance / delta) can intentionally yield fewer than `limit` chunks.
   - Post-processing diversifies across cards (per-card cap) and de-prioritizes low-signal sections (e.g., Title).

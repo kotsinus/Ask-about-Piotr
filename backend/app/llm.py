@@ -25,11 +25,13 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from app.config import get_settings
 from app.openai_client import chat_completions_create, chat_completions_create_cached
 from app.retrieval import RetrievedChunk
-from app.schemas import Category, Confidence
+from app.routing_category import RoutingCategory
+from app.schemas import Confidence
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +102,114 @@ class SynthesisResult:
     used_chunk_indices: list[int]
 
 
-def route_category(question: str) -> Category:
-    """Route a question into exactly one category using a low-cost model."""
+@dataclass(frozen=True)
+class RoutedCategory:
+    routing_category: RoutingCategory
+    confidence: Confidence
+    budget: int | None = None
+
+
+@dataclass(frozen=True)
+class RoutingResult:
+    routing_categories: list[RoutedCategory]
+
+
+def route_categories(question: str) -> RoutingResult:
+    """Route a question into 1-3 routing categories.
+
+    NOTE: This function performs only minimal parsing/validation. Deterministic
+    clamping + budget policy is enforced server-side in `chat()`.
+
+    Contract (LLM JSON output):
+    {
+      "routing_categories": [
+        {"routing_category": "...", "confidence": "High|Medium|Low", "budget": 2},
+        ...
+      ]
+    }
+
+    Backward compatibility:
+    - Accepts legacy key names `categories` / `category`.
+    """
+
+    settings = get_settings()
+    if not settings.openai_api_key:
+        raise RuntimeError("OPENAI_API_KEY is required for routing.")
+
+    allowed_routing_categories = [str(c.value) for c in RoutingCategory]
+    allowed_norm = {c.strip().lower() for c in allowed_routing_categories}
+
+    system_prompt = (
+        "Classify the question into 1 to 3 categories from this list:\n"
+        + "\n".join(f"- {c}" for c in allowed_routing_categories)
+        + "\n\n"
+        "Rules:\n"
+        "- Return 1 category for single-intent questions, 2 for two-part questions, and 3 only if clearly three-part.\n"
+        "- Confidence must be one of: High, Medium, Low.\n"
+        "- Provide an integer budget per category (>=1). If unsure, choose budgets that sum to 5 for two categories (2+3).\n\n"
+        'Return JSON exactly like: {"routing_categories": [{"routing_category": "...", "confidence": "High", "budget": 2}]}.'
+        "\n"
+        "Do not add any other keys."
+    )
+
+    response = chat_completions_create_cached(
+        cache_namespace="route_categories",
+        model=settings.router_model,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": question},
+        ],
+        response_format={"type": "json_object"},
+        temperature=0,
+    )
+
+    content = response.choices[0].message.content or "{}"
+    payload = json.loads(content)
+
+    # Backward-compatible: accept legacy key `categories`.
+    raw_categories = payload.get("routing_categories")
+    if raw_categories is None:
+        raw_categories = payload.get("categories")
+    if not isinstance(raw_categories, list) or not raw_categories:
+        raise ValueError("Router returned no categories")
+
+    parsed: list[RoutedCategory] = []
+    for item in raw_categories:
+        if not isinstance(item, dict):
+            continue
+
+        raw_routing_category = str(
+            item.get("routing_category") or item.get("category") or ""
+        ).strip()
+        if raw_routing_category.strip().lower() not in allowed_norm:
+            raise ValueError(
+                f"Router returned unknown routing_category: {raw_routing_category}"
+            )
+        routing_category = _parse_routing_category(raw_routing_category)
+
+        confidence = _parse_confidence(str(item.get("confidence", "")))
+        budget_value = item.get("budget")
+        budget: int | None = None
+        if budget_value is not None:
+            try:
+                budget = int(budget_value)
+            except Exception:
+                budget = None
+
+        parsed.append(
+            RoutedCategory(
+                routing_category=routing_category, confidence=confidence, budget=budget
+            )
+        )
+
+    if not parsed:
+        raise ValueError("Router returned no valid routing_categories")
+
+    return RoutingResult(routing_categories=parsed)
+
+
+def route_category(question: str) -> RoutingCategory:
+    """Route a question into exactly one routing category using a low-cost model."""
 
     settings = get_settings()
     if not settings.openai_api_key:
@@ -117,7 +225,8 @@ def route_category(question: str) -> Category:
         "- Education and formal background\n"
         "- Personal interests and working style\n"
         "- Career fit and role alignment\n\n"
-        'Return JSON exactly like: {"category": "<one of the list items>"}.\n'
+        'Return JSON exactly like: {"routing_category": "<one of the list items>"}.'
+        "\n"
         "Do not add any other keys."
     )
 
@@ -134,15 +243,22 @@ def route_category(question: str) -> Category:
 
     content = response.choices[0].message.content or "{}"
     payload = json.loads(content)
-    return _parse_category(payload.get("category", ""))
+    # Backward-compatible: accept legacy key `category`.
+    return _parse_routing_category(
+        payload.get("routing_category") or payload.get("category") or ""
+    )
 
 
 def synthesize_answer(
     question: str,
     chunks: list[RetrievedChunk],
-    category: str | None = None,
+    routing_category: str | RoutingCategory | None = None,
     conversation_topic: str | None = None,
     conversation_messages: list[dict] | None = None,
+    routing: RoutingResult | None = None,
+    *,
+    temperature_override: float | None = None,
+    strict_facts_first: bool = False,
 ) -> SynthesisResult:
     """Generate a strict, grounded answer from retrieved chunks."""
 
@@ -161,10 +277,66 @@ def synthesize_answer(
     if not settings.openai_api_key:
         return _fallback_synthesis(chunks)
 
-    evidence_lines = [
-        f"[{idx}] [{chunk.card_id}.{chunk.section}] {chunk.content}"
-        for idx, chunk in enumerate(chunks)
-    ]
+    def _chunk_origin(chunk: RetrievedChunk) -> str:
+        if getattr(chunk, "origin_routing_category", None):
+            return str(chunk.origin_routing_category)
+        origins = getattr(chunk, "origin_routing_categories", None) or []
+        if origins:
+            return str(origins[0])
+        return ""
+
+    def _format_chunk_line(idx: int, chunk: RetrievedChunk) -> str:
+        origin_routing_categories = (
+            getattr(chunk, "origin_routing_categories", None) or []
+        )
+        origin_hint = ""
+        if origin_routing_categories:
+            origin_hint = (
+                f" | origin_routing_categories={','.join(origin_routing_categories)}"
+            )
+        return f"[{idx}] [{chunk.card_id}.{chunk.section}]{origin_hint} {chunk.content}"
+
+    evidence_block: str
+    if (
+        routing is not None
+        and len(getattr(routing, "routing_categories", []) or []) > 1
+    ):
+        # Group evidence by routed category while preserving global indices.
+        by_category: dict[str, list[tuple[int, RetrievedChunk]]] = {}
+        for idx, chunk in enumerate(chunks):
+            group = _chunk_origin(chunk) or "unknown"
+            by_category.setdefault(group, []).append((idx, chunk))
+
+        routing_order = [
+            str(item.routing_category.value) for item in routing.routing_categories
+        ]
+        ordered_categories = [c for c in routing_order if c in by_category]
+        # Append any categories that appear only via dedup/provenance.
+        for cat in sorted(by_category.keys()):
+            if cat not in ordered_categories:
+                ordered_categories.append(cat)
+
+        lines: list[str] = ["Evidence groups (global indices):", ""]
+        budget_by_category = {
+            str(item.routing_category.value): int(item.budget or 0)
+            for item in routing.routing_categories
+        }
+        for cat in ordered_categories:
+            items = by_category.get(cat, [])
+            budget = budget_by_category.get(cat)
+            header = f"Category: {cat}"
+            if budget is not None:
+                header += f" | budget {budget} | provided {len(items)}"
+            lines.append(header)
+            for idx, chunk in items:
+                lines.append(_format_chunk_line(idx, chunk))
+            lines.append("")
+        evidence_block = "\n".join(lines).strip()
+    else:
+        evidence_lines = [
+            _format_chunk_line(idx, chunk) for idx, chunk in enumerate(chunks)
+        ]
+        evidence_block = "Evidence:\n" + "\n".join(evidence_lines)
 
     STYLE_HINTS = {
         "Hands-on engineering": (
@@ -223,7 +395,7 @@ def synthesize_answer(
         ),
     }
 
-    category_key = _normalize_category(category)
+    category_key = _normalize_routing_category(routing_category)
     style_hint = STYLE_HINTS.get(category_key, "")
     why_hint = WHY_HINTS.get(category_key, "")
 
@@ -237,16 +409,23 @@ def synthesize_answer(
     if hint_block:
         hint_block += "\n"
 
+    # Include current date so LLM knows past dates are in the past
+    now = datetime.now(UTC)
+    current_date_str = now.strftime("%Y-%m-%d")
+
     system_prompt = (
+        f"Current date: {current_date_str}\n\n"
         "You are Piotr Synak. Answer in first person (I, my) as if speaking to a technical peer. "
         "Do not mention that you are an AI, a model, or that you were prompted.\n\n"
         "Grounding rules:\n"
         "- Use ONLY the provided evidence.\n"
         "- Conversation context may help interpret the question but is NOT evidence.\n"
         "- If evidence is insufficient, return the exact refusal message and nothing else.\n"
-        "- If you use evidence, you MUST list which evidence items were used via their indices.\n\n"
+        "- If you use evidence, you MUST list which evidence items were used via their indices.\n"
+        "- When evidence says something is 'completed' or has a date in the past, do NOT say it is 'expected' or 'planned'.\n\n"
         "Style rules (important):\n"
         "- Write like a person speaking, not like a CV or an essay.\n"
+        "- The 'answer' field MUST be facts-first.\n"
         "- Use 2 to 6 sentences in the 'answer' field.\n"
         "- Prefer short, direct sentences. Avoid fluff and generic phrases.\n"
         "- Avoid meta-commentary such as: 'This highlights', 'This demonstrates', 'Understanding X is crucial', 'It is important to note'.\n"
@@ -256,7 +435,7 @@ def synthesize_answer(
         "- Start with 'Yes' or 'No' in the answer field.\n"
         "- Then justify using evidence.\n\n"
         "Length constraints:\n"
-        "- The 'answer' field should be between 25 and 90 words unless the refusal message is used.\n\n"
+        "- The 'answer' field should be between 25 and 130 words unless the refusal message is used.\n\n"
         "Return JSON with the following fields only:\n"
         '{"answer", "why_this_matters", "confidence", "confidence_reason", "used_chunk_indices"}.\n'
         "Use confidence values: High, Medium, or Low.\n"
@@ -266,6 +445,29 @@ def synthesize_answer(
         "The refusal message is exactly:\n"
         '"I do not have enough evidence in the provided materials."'
     )
+
+    if strict_facts_first:
+        system_prompt += (
+            "\n\nSTRICT MODE (retry):\n"
+            "- Follow the Facts/Synthesis structure exactly.\n"
+            "- Facts must be concrete and attributable to evidence items.\n"
+            "- Do not output generic filler.\n"
+        )
+
+    # Multi-category coverage requirement.
+    if (
+        routing is not None
+        and len(getattr(routing, "routing_categories", []) or []) > 1
+    ):
+        routing_category_names = [
+            str(item.routing_category.value) for item in routing.routing_categories
+        ]
+        system_prompt += (
+            "\n\nMulti-category requirement:\n"
+            f"- This question was routed to {len(routing_category_names)} routing categories: {', '.join(routing_category_names)}.\n"
+            "- You MUST use at least one chunk from EACH routed category.\n"
+            "- Include at least one sentence grounded in evidence from each category.\n"
+        )
 
     # Bind category hints at system level to reduce model guessing/drift.
     if style_hint:
@@ -289,12 +491,7 @@ def synthesize_answer(
 
     user_prompt = (
         "Question:\n"
-        f"{question}\n\n"
-        + hint_block
-        + context_block
-        + topic_line
-        + "Evidence:\n"
-        + "\n".join(evidence_lines)
+        f"{question}\n\n" + hint_block + context_block + topic_line + evidence_block
     )
     # NOTE: synthesize_answer is intentionally *not* routed through the local
     # response cache. We run it with a non-zero temperature by default, so
@@ -306,7 +503,9 @@ def synthesize_answer(
             {"role": "user", "content": user_prompt},
         ],
         response_format={"type": "json_object"},
-        temperature=settings.synthesis_temperature,
+        temperature=settings.synthesis_temperature
+        if temperature_override is None
+        else float(temperature_override),
     )
 
     content = response.choices[0].message.content or "{}"
@@ -410,16 +609,16 @@ def _fallback_synthesis(chunks: list[RetrievedChunk]) -> SynthesisResult:
     )
 
 
-def _parse_category(value: str) -> Category:
+def _parse_routing_category(value: str) -> RoutingCategory:
     mapping = {
-        "hands-on engineering": Category.hands_on_engineering,
-        "architecture and system design": Category.architecture_and_system_design,
-        "ai and ml practice": Category.ai_and_ml_practice,
-        "leadership and product strategy": Category.leadership_and_product_strategy,
-        "research and academic credibility": Category.research_and_academic_credibility,
-        "career fit and role alignment": Category.career_fit_and_role_alignment,
-        "education and formal background": Category.education_and_formal_background,
-        "personal interests and working style": Category.personal_interests_and_working_style,
+        "hands-on engineering": RoutingCategory.hands_on_engineering,
+        "architecture and system design": RoutingCategory.architecture_and_system_design,
+        "ai and ml practice": RoutingCategory.ai_and_ml_practice,
+        "leadership and product strategy": RoutingCategory.leadership_and_product_strategy,
+        "research and academic credibility": RoutingCategory.research_and_academic_credibility,
+        "career fit and role alignment": RoutingCategory.career_fit_and_role_alignment,
+        "education and formal background": RoutingCategory.education_and_formal_background,
+        "personal interests and working style": RoutingCategory.personal_interests_and_working_style,
     }
     normalized = (value or "").strip().lower()
     parsed = mapping.get(normalized)
@@ -430,10 +629,13 @@ def _parse_category(value: str) -> Category:
     # strings, we'd like to notice it during development without spamming prod.
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(
-            "unknown_category_string",
-            extra={"category": value, "category_normalized": normalized},
+            "unknown_routing_category_string",
+            extra={
+                "routing_category": value,
+                "routing_category_normalized": normalized,
+            },
         )
-    return Category.hands_on_engineering
+    return RoutingCategory.hands_on_engineering
 
 
 def _parse_confidence(value: str) -> Confidence:
@@ -475,35 +677,35 @@ _BANNED_WHY_REGEXES = (
 
 
 _WHY_FALLBACKS: dict[str, tuple[str, ...]] = {
-    Category.hands_on_engineering.value: (
+    RoutingCategory.hands_on_engineering.value: (
         "It affects how I build and debug production systems.",
         "It influences the trade-offs I make around reliability, maintainability, and delivery.",
     ),
-    Category.architecture_and_system_design.value: (
+    RoutingCategory.architecture_and_system_design.value: (
         "It shapes the trade-offs I make when designing system boundaries and keeping services operable over time.",
         "It affects long-term complexity and operability when scaling systems.",
     ),
-    Category.ai_and_ml_practice.value: (
+    RoutingCategory.ai_and_ml_practice.value: (
         "It affects how I evaluate models and reduce failure modes in production.",
         "It changes how I balance model quality, cost, and reliability in real deployments.",
     ),
-    Category.leadership_and_product_strategy.value: (
+    RoutingCategory.leadership_and_product_strategy.value: (
         "It affects how I align stakeholders and make trade-offs that improve outcomes.",
         "It changes how I prioritize work and reduce execution risk for the team.",
     ),
-    Category.research_and_academic_credibility.value: (
+    RoutingCategory.research_and_academic_credibility.value: (
         "It affects how rigorous my reasoning is when making technical claims.",
         "It supports credibility when discussing technical trade-offs and evidence.",
     ),
-    Category.education_and_formal_background.value: (
+    RoutingCategory.education_and_formal_background.value: (
         "It gives a foundation I rely on when reasoning about systems and data.",
         "It provides background that shapes how I approach technical problems.",
     ),
-    Category.career_fit_and_role_alignment.value: (
+    RoutingCategory.career_fit_and_role_alignment.value: (
         "It influences the kind of work I can deliver effectively in this role.",
         "It affects whether my experience matches the constraints and goals of the role.",
     ),
-    Category.personal_interests_and_working_style.value: (
+    RoutingCategory.personal_interests_and_working_style.value: (
         "It affects how I collaborate and stay effective over the long term.",
         "It influences day-to-day communication and how I work with a team.",
     ),
@@ -518,15 +720,17 @@ def _stable_choice(options: tuple[str, ...], *, seed: str) -> str:
     return options[idx]
 
 
-def _normalize_category(category: str | Category | None) -> str:
-    if category is None:
+def _normalize_routing_category(
+    routing_category: str | RoutingCategory | None,
+) -> str:
+    if routing_category is None:
         return ""
-    # Category is a StrEnum, so str(category) is already the human-readable label.
-    return str(category).strip()
+    # RoutingCategory is a StrEnum, so str(routing_category) is already the human-readable label.
+    return str(routing_category).strip()
 
 
-def _fallback_why(*, category: str | Category | None, seed: str) -> str:
-    category_key = _normalize_category(category)
+def _fallback_why(*, routing_category: str | RoutingCategory | None, seed: str) -> str:
+    category_key = _normalize_routing_category(routing_category)
     options = _WHY_FALLBACKS.get(category_key)
     if options:
         return _stable_choice(options, seed=f"{category_key}:{seed}")
@@ -538,7 +742,7 @@ def _fallback_why(*, category: str | Category | None, seed: str) -> str:
     return _stable_choice(generic, seed=seed)
 
 
-def clean_why(why: str, category: str | Category | None = None) -> str:
+def clean_why(why: str, routing_category: str | RoutingCategory | None = None) -> str:
     """Remove banned boilerplate while keeping output varied and category-aware.
 
     Strategy:
@@ -549,7 +753,7 @@ def clean_why(why: str, category: str | Category | None = None) -> str:
 
     raw = (why or "").strip()
     if not raw:
-        return _fallback_why(category=category, seed="empty")
+        return _fallback_why(routing_category=routing_category, seed="empty")
 
     cleaned = raw
 
@@ -584,6 +788,6 @@ def clean_why(why: str, category: str | Category | None = None) -> str:
         for pattern in _BANNED_WHY_REGEXES
     )
     if too_short or still_banned:
-        return _fallback_why(category=category, seed=raw)
+        return _fallback_why(routing_category=routing_category, seed=raw)
 
     return cleaned

@@ -36,11 +36,13 @@ Purpose:
 Key columns (high level):
 
 - `card_id` (text) — identifier used for citations.
-- `category` (text) — high-level grouping.
+- `card_category` (text) — high-level grouping (content taxonomy: `project`, `research`, `certification`, `experience`, `profile`, `education`).
 - `section` (text) — section name inside the card.
 - `source_url` (text, nullable) — human-auditable link carried from card metadata.
 - `content` (text) — the chunk text shown as evidence.
 - `embedding` (vector) — pgvector embedding for retrieval.
+
+Note: A legacy `category` column may exist for backward compatibility; new code should use `card_category`.
 
 Data lifecycle:
 
@@ -76,6 +78,17 @@ Additional context columns (for debugging/analytics):
 - `llm_context_messages` (jsonb, nullable) — last ~6 conversation messages actually used as LLM context.
   This field is controlled by env var `INTERACTION_LOG_INCLUDE_LLM_CONTEXT` (see [`.env.example`](.env.example:1)).
   Each message `content` is truncated to 2000 characters before storage.
+
+Multi-category routing diagnostics (JSONB columns):
+
+- `routing` (jsonb, nullable) — router output after server normalization.
+  Contains `routing_categories` array with `{routing_category, confidence, budget}` objects and `router_fallback_used` flag.
+- `retrieval_by_category` (jsonb, nullable) — per-category retrieval counts and budgets.
+  Maps routing category names to `{selected_count, budget}` objects.
+- `quality_gate` (jsonb, nullable) — synthesis quality gate results.
+  Contains `passed` boolean, `failure_reasons` array, and `retry_attempted` flag.
+
+These columns are populated only when multi-category routing is enabled (`MULTI_CATEGORY_RETRIEVAL_ENABLED=true`).
 
 Derived vs. persisted:
 

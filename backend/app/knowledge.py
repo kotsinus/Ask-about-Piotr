@@ -25,6 +25,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.card_category import ALLOWED_CARD_CATEGORIES, CardCategory
+
 REQUIRED_SECTIONS = [
     "Title",
     "Category",
@@ -42,7 +44,7 @@ REQUIRED_SECTIONS = [
 class KnowledgeCard:
     card_id: str
     title: str
-    category: str
+    card_category: CardCategory
     sections: dict[str, str]
     source_url: str | None
 
@@ -50,7 +52,7 @@ class KnowledgeCard:
 @dataclass(frozen=True)
 class KnowledgeChunk:
     card_id: str
-    category: str
+    card_category: CardCategory
     section: str
     source_url: str | None
     content: str
@@ -93,7 +95,7 @@ def chunk_cards(cards: Iterable[KnowledgeCard]) -> list[KnowledgeChunk]:
             chunks.append(
                 KnowledgeChunk(
                     card_id=card.card_id,
-                    category=card.category,
+                    card_category=card.card_category,
                     section=section,
                     source_url=card.source_url,
                     content=content,
@@ -111,13 +113,22 @@ def _parse_card(path: Path) -> KnowledgeCard:
         raise ValueError(f"Missing sections in {path.name}: {', '.join(missing)}")
 
     title = sections["Title"].strip()
-    category = sections["Category"].strip()
+    category_raw = sections["Category"].strip()
+    if category_raw not in ALLOWED_CARD_CATEGORIES:
+        allowed = ", ".join(sorted(ALLOWED_CARD_CATEGORIES))
+        raise ValueError(
+            "Invalid card category "
+            f"{category_raw!r} in {path.as_posix()} (card_id={path.stem}). "
+            f"Allowed categories: {allowed}."
+        )
+
+    card_category = CardCategory(category_raw)
     source_url = _extract_source_url(sections.get("Links", ""))
 
     return KnowledgeCard(
         card_id=path.stem,
         title=title,
-        category=category,
+        card_category=card_category,
         sections=sections,
         source_url=source_url,
     )

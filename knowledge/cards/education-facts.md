@@ -2,42 +2,40 @@
 Education (Facts)
 
 # Category
-experience
+education
 
 # Problem
-Education questions are common and should be answered from explicit, source-backed facts.
+This card contains factual information about Piotr's formal education, academic degrees, and certifications from higher education institutions.
 
 # My role
-Provide a canonical, conservative record of degrees and formal education as stated in the CV and existing evidence.
+N/A
 
 # What I built
-## xMBA — Agile Business, Startup Skills
-- Degree/Field: xMBA — Agile Business, Startup Skills
-- Institution: SAQ (Swiss Association for Quality)
-- Country: Switzerland
-- Year: 2025
+xMBA — Agile Business, Startup Skills (completed June 2025)
+Institution: SAQ (Swiss Association for Quality)
+Country: Switzerland
+Year: 2025
+Certificate valid: 02.06.2025 - 01.06.2028
+Certificate number: 25ABSS1591478/1  
 
-## PhD — Computer Science
-- Degree/Field: PhD — Computer Science
-- Institution: Institute of Computer Science, Polish Academy of Sciences
-- Country: Poland
-- Year: Not stated in sources
+PhD — Computer Science  
+Institution: Institute of Computer Science, Polish Academy of Sciences  
+Country: Poland  
+Year: Not stated in sources  
 
-## M.Sc. — Mathematics
-- Degree/Field: M.Sc. — Mathematics
-- Institution: Faculty of Mathematics, Informatics, and Mechanics, Warsaw University
-- Country: Poland
-- Year: Not stated in sources
+M.Sc. — Mathematics  
+Institution: Faculty of Mathematics, Informatics, and Mechanics, Warsaw University  
+Country: Poland  
+Year: Not stated in sources
 
 # Scale and impact
-Acts as a single source of truth for education facts used in HR screening and interview questions.
+N/A
 
 # Tech stack
-Not applicable (facts-only card).
+N/A
 
 # Key decisions and trade-offs
-Dates are included only when explicitly stated in sources; otherwise they are left as “Not stated in sources”.
+N/A
 
 # Links
 - CV: assets/cv/CV_Piotr_Synak.pdf
-- Education overview: knowledge/cards/education-overview.md

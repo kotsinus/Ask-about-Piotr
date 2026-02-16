@@ -25,17 +25,69 @@ from app.retrieval import RetrievedChunk
 from app.schemas import Confidence
 
 
+def _make_stub_chunks(count: int = 1) -> list[RetrievedChunk]:
+    """Helper to create stub chunks for testing."""
+    return [
+        RetrievedChunk(
+            card_id=f"card-{i}",
+            card_category="project",
+            section="Problem",
+            source_url=None,
+            content=f"Test chunk {i}.",
+        )
+        for i in range(count)
+    ]
+
+
+def _stub_all_retrieval_functions(
+    monkeypatch: pytest.MonkeyPatch,
+    retrieve_result: list[RetrievedChunk] | None = None,
+    retrieve_for_category_result: list[RetrievedChunk] | None = None,
+    retrieve_for_card_result: list[RetrievedChunk] | None = None,
+) -> None:
+    """Stub all retrieval functions for multi-category retrieval tests."""
+    if retrieve_result is None:
+        retrieve_result = []
+    if retrieve_for_category_result is None:
+        retrieve_for_category_result = []
+    if retrieve_for_card_result is None:
+        retrieve_for_card_result = []
+
+    def _stub_retrieve(
+        question: str, limit: int = 5, conversation_topic: str | None = None
+    ) -> list[RetrievedChunk]:
+        return retrieve_result
+
+    def _stub_retrieve_for_category(
+        question: str,
+        *,
+        routing_category: str,
+        budget: int,
+        conversation_topic: str | None = None,
+        section_weights: dict[str, float] | None = None,
+    ) -> list[RetrievedChunk]:
+        return retrieve_for_category_result
+
+    def _stub_retrieve_for_card(
+        question: str,
+        *,
+        card_id: str,
+        limit: int,
+        origin_routing_category: str,
+        conversation_topic: str | None = None,
+    ) -> list[RetrievedChunk]:
+        return retrieve_for_card_result
+
+    monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
+    monkeypatch.setattr("app.main.retrieve_for_category", _stub_retrieve_for_category)
+    monkeypatch.setattr("app.main.retrieve_for_card", _stub_retrieve_for_card)
+
+
 @pytest.mark.anyio
 async def test_no_evidence_response(monkeypatch: pytest.MonkeyPatch) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-
-        def _stub_retrieve(
-            question: str, limit: int = 5, conversation_topic: str | None = None
-        ) -> list[RetrievedChunk]:
-            return []
-
-        monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
+        _stub_all_retrieval_functions(monkeypatch)
 
         response = await client.post(
             "/chat", json={"question": "What is Piotr's role?"}
@@ -58,21 +110,21 @@ async def test_formatted_answer_contains_sections(
 ) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        chunks = [
+            RetrievedChunk(
+                card_id="sample",
+                card_category="project",
+                section="Problem",
+                source_url=None,
+                content="This is a test chunk.",
+            )
+        ]
 
-        def _stub_retrieve(
-            question: str, limit: int = 5, conversation_topic: str | None = None
-        ) -> list[RetrievedChunk]:
-            return [
-                RetrievedChunk(
-                    card_id="sample",
-                    category="project",
-                    section="Problem",
-                    source_url=None,
-                    content="This is a test chunk.",
-                )
-            ]
-
-        monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
+        _stub_all_retrieval_functions(
+            monkeypatch,
+            retrieve_result=chunks,
+            retrieve_for_category_result=chunks,
+        )
 
         response = await client.post("/chat", json={"question": "What did you build?"})
         assert response.status_code == 200
@@ -111,7 +163,7 @@ async def test_followup_question_uses_history_rewrite(
                 return [
                     RetrievedChunk(
                         card_id="skills-programming-languages",
-                        category="skills",
+                        card_category="skills",
                         section="Overview",
                         source_url=None,
                         content="Piotr programs primarily in Python and TypeScript.",
@@ -120,15 +172,39 @@ async def test_followup_question_uses_history_rewrite(
             return [
                 RetrievedChunk(
                     card_id="skills-spoken-languages",
-                    category="skills",
+                    card_category="skills",
                     section="Overview",
                     source_url=None,
                     content="Piotr speaks Polish and English.",
                 )
             ]
 
+        def _stub_retrieve_for_category(
+            question: str,
+            *,
+            routing_category: str,
+            budget: int,
+            conversation_topic: str | None = None,
+            section_weights: dict[str, float] | None = None,
+        ) -> list[RetrievedChunk]:
+            return _stub_retrieve(question)
+
+        def _stub_retrieve_for_card(
+            question: str,
+            *,
+            card_id: str,
+            limit: int,
+            origin_routing_category: str,
+            conversation_topic: str | None = None,
+        ) -> list[RetrievedChunk]:
+            return []
+
         monkeypatch.setattr("app.main.rewrite_question", _stub_rewrite)
         monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
+        monkeypatch.setattr(
+            "app.main.retrieve_for_category", _stub_retrieve_for_category
+        )
+        monkeypatch.setattr("app.main.retrieve_for_card", _stub_retrieve_for_card)
 
         response = await client.post(
             "/chat",
@@ -157,7 +233,7 @@ async def test_evidence_and_sources_include_only_used_chunks(
         chunks = [
             RetrievedChunk(
                 card_id="c1",
-                category="skills",
+                card_category="skills",
                 section="Overview",
                 source_url=None,
                 content="Chunk 0",
@@ -165,7 +241,7 @@ async def test_evidence_and_sources_include_only_used_chunks(
             ),
             RetrievedChunk(
                 card_id="c2",
-                category="skills",
+                card_category="skills",
                 section="Details",
                 source_url=None,
                 content="Chunk 1 (used)",
@@ -173,7 +249,7 @@ async def test_evidence_and_sources_include_only_used_chunks(
             ),
             RetrievedChunk(
                 card_id="c3",
-                category="skills",
+                card_category="skills",
                 section="More",
                 source_url=None,
                 content="Chunk 2",
@@ -196,7 +272,11 @@ async def test_evidence_and_sources_include_only_used_chunks(
         def _stub_synthesize_answer(*args, **kwargs):
             return _StubSynthesis()
 
-        monkeypatch.setattr("app.main.retrieve", _stub_retrieve)
+        _stub_all_retrieval_functions(
+            monkeypatch,
+            retrieve_result=chunks,
+            retrieve_for_category_result=chunks,
+        )
         monkeypatch.setattr("app.main.synthesize_answer", _stub_synthesize_answer)
 
         response = await client.post("/chat?debug_retrieval=1", json={"question": "Q"})

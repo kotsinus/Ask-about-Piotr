@@ -38,6 +38,19 @@ Per-request fields:
 
 Code reference: [`backend/app/logging_setup.py`](backend/app/logging_setup.py:98).
 
+### Chat pipeline events
+
+In addition to high-level request logs, `POST /chat` emits structured events that describe the RAG stages without logging raw user text.
+
+- `chat_routing`: routed categories with per-category budgets; includes `router_fallback_used`.
+- `chat_retrieve_category`: per-category retrieval selection counts and budgets.
+- `chat_pinning`: pinned card IDs when pinning rules are applied for routed categories.
+- `chat_retrieve_merge`: merge/dedup counts, pinned cards and final chunk count.
+- `chat_synthesis_quality_gate`: quality-gate pass/fail, failure reasons, and whether a retry was attempted.
+- `chat_quality_rules_log_only`: category-specific quality rule validation failures (v1 log-only mode).
+
+Code reference: [`backend/app/main.py`](backend/app/main.py:373).
+
 ## What is logged vs. intentionally not logged
 
 Logged (high level):

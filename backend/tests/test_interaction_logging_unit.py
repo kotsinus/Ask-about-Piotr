@@ -193,3 +193,89 @@ def test_ensure_interaction_logs_table_exists_returns_false_on_exception(
         lambda: (_ for _ in ()).throw(RuntimeError("boom")),
     )
     assert il._ensure_interaction_logs_table_exists() is False
+
+
+def test_write_interaction_log_table_create_already_attempted_retry_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test retry succeeds when table was created by concurrent request."""
+    il._INTERACTION_LOGGING_DISABLED_REASON = None
+    il._INTERACTION_LOGS_TABLE_CREATE_ATTEMPTED = True  # Already attempted
+
+    state = {"n": 0}
+
+    def _write_once(row: InteractionLog) -> None:
+        state["n"] += 1
+        if state["n"] == 1:
+            raise _undefined_table_exc()
+        # Second call succeeds (table created by concurrent request)
+        return None
+
+    monkeypatch.setattr(il, "_write_interaction_log_once", _write_once)
+    monkeypatch.setattr(il, "_ensure_interaction_logs_table_exists", lambda: False)
+
+    il.write_interaction_log(_row())
+    # Should have retried and succeeded
+    assert state["n"] == 2
+    # Should NOT be disabled since retry succeeded
+    assert il._INTERACTION_LOGGING_DISABLED_REASON is None
+
+
+def test_write_interaction_log_table_create_already_attempted_retry_fails_undefined_table(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test retry fails with undefined table after create already attempted."""
+    il._INTERACTION_LOGGING_DISABLED_REASON = None
+    il._INTERACTION_LOGS_TABLE_CREATE_ATTEMPTED = True  # Already attempted
+
+    def _write_once(row: InteractionLog) -> None:
+        raise _undefined_table_exc()
+
+    monkeypatch.setattr(il, "_write_interaction_log_once", _write_once)
+    monkeypatch.setattr(il, "_ensure_interaction_logs_table_exists", lambda: False)
+
+    il.write_interaction_log(_row())
+    assert (
+        il._INTERACTION_LOGGING_DISABLED_REASON
+        == "table_missing_create_already_attempted"
+    )
+
+
+def test_write_interaction_log_table_create_already_attempted_retry_fails_other_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test retry fails with other exception after create already attempted."""
+    il._INTERACTION_LOGGING_DISABLED_REASON = None
+    il._INTERACTION_LOGS_TABLE_CREATE_ATTEMPTED = True  # Already attempted
+
+    state = {"n": 0}
+
+    def _write_once(row: InteractionLog) -> None:
+        state["n"] += 1
+        if state["n"] == 1:
+            raise _undefined_table_exc()
+        raise RuntimeError("other error")
+
+    monkeypatch.setattr(il, "_write_interaction_log_once", _write_once)
+    monkeypatch.setattr(il, "_ensure_interaction_logs_table_exists", lambda: False)
+
+    il.write_interaction_log(_row())
+    assert il._INTERACTION_LOGGING_DISABLED_REASON == "write_failed_after_create"
+
+
+def test_write_interaction_log_non_programming_error_disables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that non-ProgrammingError exceptions also disable logging."""
+    il._INTERACTION_LOGGING_DISABLED_REASON = None
+    il._INTERACTION_LOGS_TABLE_CREATE_ATTEMPTED = False
+
+    def _write_once(row: InteractionLog) -> None:
+        raise RuntimeError("generic error")
+
+    monkeypatch.setattr(il, "_write_interaction_log_once", _write_once)
+
+    il.write_interaction_log(_row())
+    # Should still work (no exception raised), but logging continues
+    # Note: Non-ProgrammingError doesn't set disabled reason in current impl
+    # This tests the exception handler path

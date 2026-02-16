@@ -50,3 +50,33 @@ This is an explicit reliability decision.
 
 References: [`backend/app/main.py`](backend/app/main.py:73), [`backend/app/interaction_logging.py`](backend/app/interaction_logging.py:61).
 
+## 7) Multi-category routing + per-category retrieval is flag-gated and budgeted deterministically
+
+When enabled, the system can route a single user question into multiple categories and retrieve evidence per category.
+
+Key decisions:
+
+- Routing is computed from the **original** user question (not the rewritten question).
+- Budgets are assigned server-side via a versioned deterministic policy (`intent_rules_v1`) and then clamped.
+- Retrieval runs per category with per-category per-card caps, then results are merged/deduped while preserving provenance.
+- If routing fails or returns invalid output, the system falls back to the existing heuristic classifier.
+
+References: [`backend/app/llm.py`](backend/app/llm.py:103), [`backend/app/main.py`](backend/app/main.py:373), [`backend/app/retrieval.py`](backend/app/retrieval.py:48).
+
+## 8) Multi-category mechanisms are general and configurable
+
+All multi-category routing mechanisms are implemented as **general, configurable systems** rather than category-specific hardcoded logic.
+
+Key decisions:
+
+- **Pinning rules** are defined in `MULTI_CATEGORY_PINNING_RULES` config as a map of `category -> [card_ids]`. This allows adding new pinning rules without code changes.
+- **Section weighting** is defined in `MULTI_CATEGORY_SECTION_WEIGHTS` config as a map of `category -> {section: bonus}`. Bonuses are capped at 0.25 to avoid overriding semantic similarity.
+- **Quality rules** are defined in `MULTI_CATEGORY_QUALITY_RULES` config as a map of `category -> {min_tokens: [...], min_token_count: N}`. In v1, quality rules are log-only (no retry trigger) to monitor false positives before enabling enforcement.
+
+This approach ensures:
+- New categories can be added via configuration without code changes.
+- Rules can be tuned per-deployment (dev/stage/prod).
+- Behavior is deterministic and testable.
+
+References: [`backend/app/config.py`](backend/app/config.py:45), [`backend/app/retrieval.py`](backend/app/retrieval.py:48), [`backend/app/quality.py`](backend/app/quality.py:1).
+

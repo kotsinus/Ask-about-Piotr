@@ -41,14 +41,18 @@ def test_extract_source_url_ignores_dash_only_line() -> None:
     assert knowledge._extract_source_url("\n  \n-  \n") is None
 
 
-def _card_text(*, links_line: str = "- https://example.com/source") -> str:
+def _card_text(
+    *,
+    links_line: str = "- https://example.com/source",
+    category_line: str = "project",
+) -> str:
     parts: list[str] = []
     for section in REQUIRED_SECTIONS:
         parts.append(f"# {section}")
         if section == "Title":
             parts.append("Some title")
         elif section == "Category":
-            parts.append("project")
+            parts.append(category_line)
         elif section == "Links":
             parts.append(links_line)
         else:
@@ -132,7 +136,7 @@ def test_chunk_cards_emits_only_non_empty_required_sections() -> None:
     card = KnowledgeCard(
         card_id="c1",
         title="T",
-        category="project",
+        card_category="project",
         sections={
             "Title": "T",
             "Category": "project",
@@ -151,5 +155,24 @@ def test_chunk_cards_emits_only_non_empty_required_sections() -> None:
         ("Links", "- https://example.com"),
     }
     assert all(chunk.card_id == "c1" for chunk in chunks)
-    assert all(chunk.category == "project" for chunk in chunks)
+    assert all(chunk.card_category == "project" for chunk in chunks)
     assert all(chunk.source_url == "https://example.com" for chunk in chunks)
+
+
+def test_load_cards_rejects_unknown_card_category(tmp_path: Path) -> None:
+    knowledge_dir = tmp_path / "knowledge"
+    cards_dir = knowledge_dir / "cards"
+    cards_dir.mkdir(parents=True)
+
+    (cards_dir / "bad.md").write_text(
+        _card_text(category_line="Education and formal background"),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"Invalid card category") as exc:
+        load_cards(knowledge_dir)
+
+    # Helpful error should contain both the invalid value and the card id.
+    msg = str(exc.value)
+    assert "Education and formal background" in msg
+    assert "card_id=bad" in msg
