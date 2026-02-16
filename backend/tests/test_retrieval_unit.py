@@ -760,3 +760,163 @@ def test_retrieve_for_card_section_weights_overcome_penalty(
         section_weights={"What I built": 0.20},
     )
     assert chunks_with_weights[0].section == "What I built"
+
+
+def test_card_conditioning_boosts_matching_categories(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Card conditioning should boost chunks with matching card_category.
+
+    This test verifies that when card_conditioning is provided with
+    boost list, chunks with matching card_category are preferred
+    even if they have higher raw distance.
+    """
+    monkeypatch.setattr(retrieval, "get_settings", lambda: _settings())
+    monkeypatch.setattr(retrieval, "register_vector", lambda conn: None)
+
+    # Two chunks from different cards with different categories:
+    # - "education" card_category has higher distance but should be boosted
+    # - "project" card_category has lower distance but no boost
+    rows = [
+        ("cardA", "education", "Overview", None, "Education content", 0.30),
+        ("cardB", "project", "Overview", None, "Project content", 0.10),
+    ]
+
+    monkeypatch.setattr(retrieval.psycopg, "connect", lambda *a, **k: _Conn(rows))
+
+    class _Provider:
+        def embed(self, texts: list[str]):
+            return [[0.0, 0.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(retrieval, "get_embedding_provider", lambda **k: _Provider())
+
+    # Without conditioning, project (distance 0.10) should come first
+    chunks_no_conditioning = retrieval.retrieve_for_category(
+        "test",
+        routing_category="Education and formal background",
+        budget=2,
+        card_conditioning=None,
+    )
+    assert chunks_no_conditioning[0].card_category == "project"
+
+    # With conditioning boosting "education" by 0.25:
+    # education: 0.30 - 0.25 = 0.05 (better than 0.10)
+    # project: 0.10 (no boost)
+    # Education should come first
+    chunks_with_conditioning = retrieval.retrieve_for_category(
+        "test",
+        routing_category="Education and formal background",
+        budget=2,
+        card_conditioning={"boost": ["education"], "weight": 0.25},
+    )
+    assert chunks_with_conditioning[0].card_category == "education"
+
+
+def test_card_conditioning_with_allowed_categories_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Card conditioning with list of boost categories should boost each."""
+    monkeypatch.setattr(retrieval, "get_settings", lambda: _settings())
+    monkeypatch.setattr(retrieval, "register_vector", lambda conn: None)
+
+    # Three chunks from different cards with different categories
+    rows = [
+        ("cardA", "education", "Overview", None, "Education content", 0.30),
+        ("cardB", "research", "Overview", None, "Research content", 0.25),
+        ("cardC", "project", "Overview", None, "Project content", 0.10),
+    ]
+
+    monkeypatch.setattr(retrieval.psycopg, "connect", lambda *a, **k: _Conn(rows))
+
+    class _Provider:
+        def embed(self, texts: list[str]):
+            return [[0.0, 0.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(retrieval, "get_embedding_provider", lambda **k: _Provider())
+
+    # With conditioning boosting both "education" and "research" by 0.20:
+    # education: 0.30 - 0.20 = 0.10
+    # research: 0.25 - 0.20 = 0.05 (best)
+    # project: 0.10 (no boost)
+    # Research should come first, then education and project
+    chunks = retrieval.retrieve_for_category(
+        "test",
+        routing_category="Education and formal background",
+        budget=3,
+        card_conditioning={
+            "boost": ["education", "research"],
+            "weight": 0.20,
+        },
+    )
+    assert chunks[0].card_category == "research"
+    assert chunks[1].card_category == "education"
+
+
+def test_card_conditioning_boost_capped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Card conditioning boost should be capped at MAX_CARD_CATEGORY_BOOST (0.25)."""
+    monkeypatch.setattr(retrieval, "get_settings", lambda: _settings())
+    monkeypatch.setattr(retrieval, "register_vector", lambda conn: None)
+
+    # Two chunks: education has much higher distance
+    # Even with extreme boost (1.0), it should be capped at 0.25
+    rows = [
+        ("cardA", "education", "Overview", None, "Education content", 0.50),
+        ("cardB", "project", "Overview", None, "Project content", 0.10),
+    ]
+
+    monkeypatch.setattr(retrieval.psycopg, "connect", lambda *a, **k: _Conn(rows))
+
+    class _Provider:
+        def embed(self, texts: list[str]):
+            return [[0.0, 0.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(retrieval, "get_embedding_provider", lambda **k: _Provider())
+
+    # With extreme boost (1.0), it should be capped at 0.25
+    # education: 0.50 - 0.25 = 0.25 (still worse than 0.10)
+    # Project should still come first
+    chunks = retrieval.retrieve_for_category(
+        "test",
+        routing_category="Education and formal background",
+        budget=2,
+        card_conditioning={"boost": ["education"], "weight": 1.0},
+    )
+    assert chunks[0].card_category == "project"
+
+
+def test_card_conditioning_combined_with_section_weights(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Card conditioning should work correctly with section weights."""
+    monkeypatch.setattr(retrieval, "get_settings", lambda: _settings())
+    monkeypatch.setattr(retrieval, "register_vector", lambda conn: None)
+
+    # Two chunks: different card_category and different section
+    rows = [
+        ("cardA", "education", "Degrees", None, "Education degrees", 0.30),
+        ("cardB", "project", "Overview", None, "Project overview", 0.10),
+    ]
+
+    monkeypatch.setattr(retrieval.psycopg, "connect", lambda *a, **k: _Conn(rows))
+
+    class _Provider:
+        def embed(self, texts: list[str]):
+            return [[0.0, 0.0, 0.0] for _ in texts]
+
+    monkeypatch.setattr(retrieval, "get_embedding_provider", lambda **k: _Provider())
+
+    # With both section weights and card conditioning:
+    # education/Degrees: 0.30 - 0.15 (section) - 0.20 (card) = -0.05 -> capped at 0.01
+    # project/Overview: 0.10 (no boosts)
+    # Education should come first
+    chunks = retrieval.retrieve_for_category(
+        "test",
+        routing_category="Education and formal background",
+        budget=2,
+        section_weights={"degrees": 0.15},
+        card_conditioning={"boost": ["education"], "weight": 0.20},
+    )
+    assert chunks[0].card_category == "education"
+    assert chunks[0].section == "Degrees"

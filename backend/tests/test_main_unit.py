@@ -381,6 +381,7 @@ def test_chat_multi_category_routes_on_original_question(
         budget: int,
         conversation_topic: str | None = None,
         section_weights: dict[str, float] | None = None,
+        card_conditioning: dict[str, list[str] | float] | None = None,
     ):
         calls.append((routing_category, budget))
         return [
@@ -429,6 +430,7 @@ def test_chat_multi_category_routes_on_original_question(
             multi_category_intent_budget_policy="intent_rules_v1",
             multi_category_pinning_rules={},
             multi_category_section_weights={},
+            multi_category_card_conditioning={},
         ),
     )
     monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
@@ -497,6 +499,7 @@ def test_chat_multi_category_empty_pinning_rules_no_change(
         budget: int,
         conversation_topic: str | None = None,
         section_weights: dict[str, float] | None = None,
+        card_conditioning: dict[str, list[str] | float] | None = None,
     ):
         calls.append((routing_category, budget))
         return [
@@ -576,6 +579,7 @@ def test_chat_multi_category_empty_pinning_rules_no_change(
             multi_category_intent_budget_policy="intent_rules_v1",
             multi_category_pinning_rules={},  # EMPTY pinning rules
             multi_category_section_weights={},  # EMPTY section weights
+            multi_category_card_conditioning={},  # EMPTY card conditioning
         ),
     )
     monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
@@ -652,6 +656,7 @@ def test_chat_multi_category_enforces_coverage_after_synthesis_omits_category(
         budget: int,
         conversation_topic: str | None = None,
         section_weights: dict[str, float] | None = None,
+        card_conditioning: dict[str, list[str] | float] | None = None,
     ):
         return [
             RetrievedChunk(
@@ -719,6 +724,7 @@ def test_chat_multi_category_enforces_coverage_after_synthesis_omits_category(
             multi_category_intent_budget_policy="intent_rules_v1",
             multi_category_pinning_rules={},
             multi_category_section_weights={},
+            multi_category_card_conditioning={},
         ),
     )
     monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
@@ -1055,6 +1061,7 @@ def test_chat_multi_category_router_fallback(
         budget: int,
         conversation_topic: str | None = None,
         section_weights: dict[str, float] | None = None,
+        card_conditioning: dict[str, list[str] | float] | None = None,
     ):
         captured["fallback_category"] = routing_category
         return [
@@ -1103,6 +1110,7 @@ def test_chat_multi_category_router_fallback(
             multi_category_budget_policy="deterministic",
             multi_category_pinning_rules={},
             multi_category_section_weights={},
+            multi_category_card_conditioning={},
         ),
     )
     monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
@@ -1160,6 +1168,7 @@ def test_chat_multi_category_non_deterministic_budget_policy(
         budget: int,
         conversation_topic: str | None = None,
         section_weights: dict[str, float] | None = None,
+        card_conditioning: dict[str, list[str] | float] | None = None,
     ):
         captured_budgets.append(budget)
         return [
@@ -1209,6 +1218,7 @@ def test_chat_multi_category_non_deterministic_budget_policy(
             multi_category_budget_policy="unknown_policy",  # Non-deterministic
             multi_category_pinning_rules={},
             multi_category_section_weights={},
+            multi_category_card_conditioning={},
         ),
     )
     monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
@@ -1279,6 +1289,7 @@ def test_chat_quality_rules_validation(
         budget: int,
         conversation_topic: str | None = None,
         section_weights: dict[str, float] | None = None,
+        card_conditioning: dict[str, list[str] | float] | None = None,
     ):
         return [
             RetrievedChunk(
@@ -1326,6 +1337,7 @@ def test_chat_quality_rules_validation(
             multi_category_budget_policy="deterministic",
             multi_category_pinning_rules={},
             multi_category_section_weights={},
+            multi_category_card_conditioning={},
             multi_category_quality_rules={
                 "Education and formal background": {
                     "min_tokens": ["degree", "university"],
@@ -1352,3 +1364,217 @@ def test_chat_quality_rules_validation(
 
     # Quality validation should have been called
     assert len(quality_called) > 0
+
+
+def test_extract_distinctive_tokens() -> None:
+    """Test _extract_distinctive_tokens extracts expected tokens."""
+    from app.main import _extract_distinctive_tokens
+
+    # Test numbers with suffixes
+    tokens = _extract_distinctive_tokens("I have 20+ years of experience")
+    assert "20+" in tokens
+
+    # Test years
+    tokens = _extract_distinctive_tokens("I graduated in 2010 and worked until 2020")
+    assert "2010" in tokens
+    assert "2020" in tokens
+
+    # Test capitalized named entities (consecutive capitalized words only)
+    tokens = _extract_distinctive_tokens("I worked at Google and Microsoft Corporation")
+    # "Microsoft Corporation" is a consecutive capitalized sequence
+    assert "microsoft corporation" in tokens
+    # "Google and Microsoft" is NOT matched because "and" is lowercase
+
+    # Test multiple consecutive capitalized words
+    tokens = _extract_distinctive_tokens("Studied at Warsaw University")
+    assert "warsaw university" in tokens
+
+    # Test empty/None input
+    assert _extract_distinctive_tokens("") == set()
+    assert _extract_distinctive_tokens(None) == set()  # type: ignore[arg-type]
+
+
+def test_check_semantic_coverage() -> None:
+    """Test _check_semantic_coverage detects coverage correctly."""
+    from app.main import _check_semantic_coverage
+
+    # Create mock chunks with distinctive tokens
+    chunk1 = RetrievedChunk(
+        card_id="card1",
+        card_category="education",
+        section="Overview",
+        source_url=None,
+        content="I have a PhD from Warsaw University in 2010.",
+        distance=0.1,
+        origin_routing_categories=["Education and formal background"],
+        origin_routing_category="Education and formal background",
+    )
+    chunk2 = RetrievedChunk(
+        card_id="card2",
+        card_category="project",
+        section="Overview",
+        source_url=None,
+        content="I built 20+ production systems.",
+        distance=0.2,
+        origin_routing_categories=["Hands-on engineering"],
+        origin_routing_category="Hands-on engineering",
+    )
+
+    # Answer that includes distinctive tokens from both chunks
+    # "2010" is a year from chunk1, "20+" is a number with suffix from chunk2
+    answer = "I have a PhD from 2010 and built 20+ systems."
+    coverage = _check_semantic_coverage(
+        answer=answer,
+        chunks=[chunk1, chunk2],
+        used_chunk_indices=[0, 1],
+        routed_categories=["Education and formal background", "Hands-on engineering"],
+    )
+    assert coverage["Education and formal background"] is True
+    assert coverage["Hands-on engineering"] is True
+
+    # Answer that only includes tokens from first chunk
+    answer_partial = "I have a PhD from 2010."
+    coverage_partial = _check_semantic_coverage(
+        answer=answer_partial,
+        chunks=[chunk1, chunk2],
+        used_chunk_indices=[0, 1],
+        routed_categories=["Education and formal background", "Hands-on engineering"],
+    )
+    assert coverage_partial["Education and formal background"] is True
+    assert coverage_partial["Hands-on engineering"] is False
+
+    # Empty answer
+    coverage_empty = _check_semantic_coverage(
+        answer="",
+        chunks=[chunk1, chunk2],
+        used_chunk_indices=[0, 1],
+        routed_categories=["Education and formal background", "Hands-on engineering"],
+    )
+    assert all(not covered for covered in coverage_empty.values())
+
+
+def test_chat_semantic_coverage_triggers_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that missing semantic coverage triggers a retry."""
+    synthesis_call_count: list[int] = [0]
+
+    monkeypatch.setattr("app.main.rewrite_question", lambda q, messages=None: q)
+
+    def _route_categories(q: str):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            routing_categories=[
+                SimpleNamespace(
+                    routing_category=RoutingCategory.education_and_formal_background,
+                    confidence=Confidence.high,
+                    budget=None,
+                ),
+                SimpleNamespace(
+                    routing_category=RoutingCategory.hands_on_engineering,
+                    confidence=Confidence.medium,
+                    budget=None,
+                ),
+            ]
+        )
+
+    monkeypatch.setattr("app.main.route_categories", _route_categories)
+
+    def _retrieve_for_category(
+        question: str,
+        *,
+        routing_category: str,
+        budget: int,
+        conversation_topic: str | None = None,
+        section_weights: dict[str, float] | None = None,
+        card_conditioning: dict[str, list[str] | float] | None = None,
+    ):
+        return [
+            RetrievedChunk(
+                card_id=f"{routing_category}-card",
+                card_category="cat",
+                section="Overview",
+                source_url=None,
+                content=f"chunk for {routing_category} with 20+ items",
+                distance=0.10,
+                origin_routing_categories=[routing_category],
+                origin_routing_category=routing_category,
+                pinned=False,
+            )
+        ]
+
+    monkeypatch.setattr("app.main.retrieve_for_category", _retrieve_for_category)
+
+    def _synthesize_answer(
+        question: str,
+        chunks: list[RetrievedChunk],
+        routing_category,
+        conversation_topic: str | None = None,
+        conversation_messages: list[dict] | None = None,
+        routing=None,
+        **kwargs,
+    ):
+        synthesis_call_count[0] += 1
+        # First call: answer only has tokens from first category
+        if synthesis_call_count[0] == 1:
+            return SynthesisResult(
+                answer="I have education background.",  # No distinctive tokens
+                why_this_matters="Test why.",
+                confidence=Confidence.medium,
+                confidence_reason=None,
+                used_chunk_indices=[0, 1],
+            )
+        # Retry: answer has tokens from both
+        return SynthesisResult(
+            answer="I have education from 2010 and 20+ years experience.",
+            why_this_matters="Test why.",
+            confidence=Confidence.medium,
+            confidence_reason=None,
+            used_chunk_indices=[0, 1],
+        )
+
+    monkeypatch.setattr("app.main.synthesize_answer", _synthesize_answer)
+
+    monkeypatch.setattr(
+        "app.main.get_settings",
+        lambda: SimpleNamespace(
+            router_model="router",
+            synthesis_model="synth",
+            synthesis_temperature=0.1,
+            embeddings_provider="stub",
+            embeddings_model="stub",
+            ip_hash_salt="salt",
+            interaction_log_include_llm_context=True,
+            retrieval_per_card_cap=2,
+            multi_category_retrieval_enabled=True,
+            multi_category_rollout_percent=100,
+            multi_category_max_categories=2,
+            multi_category_max_total_chunks=5,
+            multi_category_allow_six_chunks=False,
+            multi_category_budget_policy="deterministic",
+            multi_category_pinning_rules={},
+            multi_category_section_weights={},
+            multi_category_card_conditioning={},
+        ),
+    )
+    monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
+    monkeypatch.setattr("app.main.write_interaction_log", lambda *a, **k: None)
+    monkeypatch.setattr("app.main.get_request_id", lambda: "req-1")
+
+    http_request = _make_http_request()
+    chat_request = ChatRequest(
+        question="What is your education and experience?",
+        messages=[],
+        context=ConversationContext(conversation_id="c1", last_topic=None),
+    )
+
+    response = chat(
+        http_request=http_request,
+        request=chat_request,
+        background_tasks=BackgroundTasks(),
+    )
+
+    # Should have triggered retry due to missing semantic coverage
+    assert synthesis_call_count[0] == 2
+    assert response.answer is not None

@@ -454,7 +454,7 @@ def synthesize_answer(
             "- Do not output generic filler.\n"
         )
 
-    # Multi-category coverage requirement.
+    # Multi-category coverage requirement with structured synthesis.
     if (
         routing is not None
         and len(getattr(routing, "routing_categories", []) or []) > 1
@@ -466,14 +466,36 @@ def synthesize_answer(
             "\n\nMulti-category requirement:\n"
             f"- This question was routed to {len(routing_category_names)} routing categories: {', '.join(routing_category_names)}.\n"
             "- You MUST use at least one chunk from EACH routed category.\n"
-            "- Include at least one sentence grounded in evidence from each category.\n"
+            "- If possible, structure your answer into short paragraphs/sections, one per routed category in order.\n"
+            "- Each paragraph must be grounded in evidence from its corresponding category.\n"
         )
 
-    # Bind category hints at system level to reduce model guessing/drift.
-    if style_hint:
-        system_prompt += f"\n\nStyle hint:\n{style_hint}\n"
-    if why_hint:
-        system_prompt += f"\n\nWhy-this-matters hint:\n{why_hint}\n"
+        # Add per-category mini-hints derived from STYLE_HINTS/WHY_HINTS.
+        per_category_hints: list[str] = []
+        for item in routing.routing_categories:
+            cat_name = str(item.routing_category.value)
+            cat_style = STYLE_HINTS.get(cat_name, "")
+            cat_why = WHY_HINTS.get(cat_name, "")
+            if cat_style or cat_why:
+                hint_parts = [f"For '{cat_name}':"]
+                if cat_style:
+                    # Truncate style hint to first sentence for brevity
+                    first_sentence = cat_style.split(". ")[0] + "."
+                    hint_parts.append(f"  Style: {first_sentence}")
+                if cat_why:
+                    # Truncate why hint to first sentence for brevity
+                    first_sentence = cat_why.split(". ")[0] + "."
+                    hint_parts.append(f"  Focus: {first_sentence}")
+                per_category_hints.append("\n".join(hint_parts))
+
+        if per_category_hints:
+            system_prompt += "\n\nPer-category hints:\n" + "\n".join(per_category_hints)
+    else:
+        # Single-category: bind category hints at system level to reduce model guessing/drift.
+        if style_hint:
+            system_prompt += f"\n\nStyle hint:\n{style_hint}\n"
+        if why_hint:
+            system_prompt += f"\n\nWhy-this-matters hint:\n{why_hint}\n"
     context_block = ""
     if conversation_messages:
         trimmed = conversation_messages[-6:]

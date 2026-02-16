@@ -179,6 +179,51 @@ def _parse_quality_rules(value: str | None) -> dict[str, dict[str, list[str] | i
     return {}
 
 
+def _parse_card_conditioning(
+    value: str | None,
+) -> dict[str, dict[str, list[str] | float]]:
+    """Parse card category conditioning from JSON environment variable.
+
+    Args:
+        value: JSON string mapping RoutingCategory values to card_category boost configs.
+            Example: '{"education_and_formal_background": {"boost": ["education"], "weight": 0.15}}'
+
+    Returns:
+        Dict mapping RoutingCategory values to card conditioning configs. Empty dict if not set.
+        Each config can contain:
+        - boost: list of card_category values to boost during retrieval
+        - weight: distance bonus (subtracted from distance) for matching cards
+    """
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, dict):
+            parsed = _normalize_router_category_map(parsed)
+            # Validate structure: dict[str, dict]
+            result: dict[str, dict[str, list[str] | float]] = {}
+            for category, config in parsed.items():
+                if isinstance(category, str) and isinstance(config, dict):
+                    validated_config: dict[str, list[str] | float] = {}
+                    # Validate boost (list of card_category strings)
+                    boost = config.get("boost")
+                    if isinstance(boost, list):
+                        validated_config["boost"] = [
+                            str(b).strip().lower() for b in boost if b
+                        ]
+                    # Validate weight (float, capped at 0.25)
+                    weight = config.get("weight")
+                    if isinstance(weight, (int, float)):
+                        # Cap weight to prevent weak chunks from jumping strong ones
+                        validated_config["weight"] = max(0.0, min(0.25, float(weight)))
+                    if validated_config:
+                        result[category] = validated_config
+            return result
+    except json.JSONDecodeError:
+        pass
+    return {}
+
+
 @dataclass(frozen=True)
 class Settings:
     # Deployment environment (used for safety checks)
@@ -296,6 +341,33 @@ class Settings:
     # NOTE: In v1, quality rules are LOG-ONLY (no retry trigger).
     # This allows monitoring false positives before enabling enforcement.
     multi_category_quality_rules: dict[str, dict[str, list[str] | int]] = field(
+        default_factory=dict
+    )
+
+    # Multi-category card category conditioning.
+    #
+    # This mapping allows routing_category-specific boosting/filtering of retrieval
+    # based on card_category (content taxonomy). This is a general mechanism applicable
+    # to any routing category and any card.
+    #
+    # Configuration:
+    # - Map RoutingCategory values to card_category boost configs
+    # - Set via MULTI_CATEGORY_CARD_CONDITIONING environment variable (JSON format)
+    # - Example: '{"education_and_formal_background": {"boost": ["education"], "weight": 0.15}}'
+    #
+    # How it works:
+    # - boost: list of card_category values to boost during retrieval
+    # - weight: distance bonus (subtracted from distance) for matching cards
+    # - weight is capped at 0.25 to prevent weak chunks from jumping strong ones
+    #
+    # Use cases:
+    # - Boost "education" cards for education_and_formal_background routing
+    # - Boost "research" cards for research_and_academic_credibility routing
+    # - Boost "project" cards for hands_on_engineering routing
+    #
+    # NOTE: This is a SOFT boost, not a hard filter. Non-matching cards can still
+    # be retrieved if they have strong semantic similarity.
+    multi_category_card_conditioning: dict[str, dict[str, list[str] | float]] = field(
         default_factory=dict
     )
 
@@ -439,6 +511,12 @@ def get_settings() -> Settings:
         os.getenv("MULTI_CATEGORY_QUALITY_RULES")
     )
 
+    # Multi-category card category conditioning (parsed from JSON env var).
+    # Empty by default - no card category boosting unless explicitly configured.
+    multi_category_card_conditioning = _parse_card_conditioning(
+        os.getenv("MULTI_CATEGORY_CARD_CONDITIONING")
+    )
+
     # Logging metadata
     ip_hash_salt = os.getenv("IP_HASH_SALT", "")
     if app_env in {"prod", "production"} and not ip_hash_salt.strip():
@@ -495,6 +573,7 @@ def get_settings() -> Settings:
         multi_category_pinning_rules=multi_category_pinning_rules,
         multi_category_section_weights=multi_category_section_weights,
         multi_category_quality_rules=multi_category_quality_rules,
+        multi_category_card_conditioning=multi_category_card_conditioning,
         ip_hash_salt=ip_hash_salt,
         trusted_proxy_cidrs=trusted_proxy_cidrs,
         interaction_log_include_llm_context=interaction_log_include_llm_context,

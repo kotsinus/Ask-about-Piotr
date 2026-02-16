@@ -309,6 +309,7 @@ def retrieve_for_category(
     budget: int,
     conversation_topic: str | None = None,
     section_weights: dict[str, float] | None = None,
+    card_conditioning: dict[str, list[str] | float] | None = None,
 ) -> list[RetrievedChunk]:
     """Retrieve up to `budget` chunks for a specific routed category.
 
@@ -316,6 +317,7 @@ def retrieve_for_category(
     - Uses a fixed oversample factor for the DB candidate limit.
     - Applies the standard per-card cap semantics within this category run.
     - Section weights are POSITIVE values that BOOST section ranking (subtract from distance).
+    - Card conditioning provides SOFT boosting based on card_category (content taxonomy).
     - The `routing_category` parameter is a ROUTER category (intent taxonomy), NOT a card category
       (content taxonomy). Retrieval is semantic-first and does NOT filter by card category.
       See docs/ARCHITECTURE.md for the distinction between these two taxonomies.
@@ -407,6 +409,7 @@ def retrieve_for_category(
 
     # Maximum bonus cap to prevent weak chunks from jumping strong ones
     MAX_SECTION_BONUS = 0.25
+    MAX_CARD_CATEGORY_BONUS = 0.25
 
     card_has_substantive: dict[str, bool] = {}
     card_max_substantive_len: dict[str, int] = {}
@@ -437,6 +440,19 @@ def retrieve_for_category(
     short_section_len = 120
     short_substantive_penalty = 0.18
 
+    # Parse card conditioning config
+    card_category_boost: set[str] = set()
+    card_category_weight: float = 0.0
+    if card_conditioning:
+        boost_list = card_conditioning.get("boost")
+        if isinstance(boost_list, list):
+            card_category_boost = {str(b).strip().lower() for b in boost_list if b}
+        weight_val = card_conditioning.get("weight")
+        if isinstance(weight_val, (int, float)):
+            card_category_weight = min(
+                max(0.0, float(weight_val)), MAX_CARD_CATEGORY_BONUS
+            )
+
     def _adjusted_distance(row: tuple) -> tuple[float, float]:
         """
         Returns (adjusted_distance, raw_distance).
@@ -445,12 +461,13 @@ def retrieve_for_category(
 
         Where:
         - penalty >= 0 (for low-signal sections)
-        - bonus >= 0 (for category-specific section weights)
-        - bonus is capped at MAX_SECTION_BONUS
+        - bonus >= 0 (for category-specific section weights and card category boosting)
+        - bonus is capped at MAX_SECTION_BONUS + MAX_CARD_CATEGORY_BONUS
         """
         distance = float(row[5])
         card_id = row[0]
         section = _norm_section(row[2])
+        card_cat = (row[1] or "").strip().lower()
 
         # Calculate penalty (only when card has substantive alternatives)
         penalty = 0.0
@@ -472,7 +489,11 @@ def retrieve_for_category(
             }
             raw_weight = normalized_weights.get(section, 0.0)
             # Cap bonus to prevent weak chunks from jumping strong ones
-            bonus = min(max(0.0, raw_weight), MAX_SECTION_BONUS)
+            bonus += min(max(0.0, raw_weight), MAX_SECTION_BONUS)
+
+        # Apply card category boosting (soft boost based on content taxonomy)
+        if card_category_boost and card_cat in card_category_boost:
+            bonus += card_category_weight
 
         adjusted = distance + penalty - bonus
         return (adjusted, distance)

@@ -512,6 +512,84 @@ def format_answer(
     )
 
 
+def _extract_distinctive_tokens(text: str) -> set[str]:
+    """Extract distinctive fact tokens from text.
+
+    Distinctive tokens are language-agnostic indicators of specific facts:
+    - Numbers with suffixes (e.g., "20+", "10+")
+    - Years (4-digit numbers between 1990-2030)
+    - Capitalized named entities (multi-word sequences)
+
+    Returns a set of normalized tokens for comparison.
+    """
+    tokens: set[str] = set()
+
+    if not text:
+        return tokens
+
+    # Extract numbers with suffixes like "20+", "10+"
+    # Note: \b after + doesn't work since + is not a word character
+    for match in re.finditer(r"\b(\d+)\+(?=\s|$|[,.])", text):
+        tokens.add(match.group(0).lower())
+
+    # Extract years (4-digit numbers in reasonable range)
+    for match in re.finditer(r"\b(19[89]\d|20[0-2]\d)\b", text):
+        tokens.add(match.group(0))
+
+    # Extract capitalized multi-word sequences (named entities)
+    # This is language-agnostic: looks for 2+ consecutive capitalized words
+    for match in re.finditer(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b", text):
+        tokens.add(match.group(1).lower())
+
+    return tokens
+
+
+def _check_semantic_coverage(
+    answer: str,
+    chunks: list,
+    used_chunk_indices: list[int],
+    routed_categories: list[str],
+) -> dict[str, bool]:
+    """Check semantic coverage for each routed category.
+
+    For each routed category, checks if the answer contains at least one
+    distinctive fact token drawn from a used chunk whose origin matches that category.
+
+    Returns a dict mapping category -> coverage status (True if covered).
+    """
+    coverage: dict[str, bool] = {cat: False for cat in routed_categories}
+
+    if not used_chunk_indices or not chunks:
+        return coverage
+
+    # Extract tokens from answer
+    answer_tokens = _extract_distinctive_tokens(answer)
+
+    if not answer_tokens:
+        return coverage
+
+    # For each used chunk, check if its distinctive tokens appear in the answer
+    for idx in used_chunk_indices:
+        if not isinstance(idx, int) or idx < 0 or idx >= len(chunks):
+            continue
+
+        chunk = chunks[idx]
+        chunk_tokens = _extract_distinctive_tokens(chunk.content)
+
+        # Check if any chunk token appears in answer
+        if chunk_tokens and answer_tokens.intersection(chunk_tokens):
+            # Mark coverage for all origin categories of this chunk
+            origins = set(chunk.origin_routing_categories or [])
+            if chunk.origin_routing_category:
+                origins.add(chunk.origin_routing_category)
+
+            for origin in origins:
+                if origin in coverage:
+                    coverage[origin] = True
+
+    return coverage
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(
     http_request: Request,
@@ -751,6 +829,10 @@ def chat(
         all_section_weights = (
             getattr(settings, "multi_category_section_weights", {}) or {}
         )
+        # Get all card conditioning from settings
+        all_card_conditioning = (
+            getattr(settings, "multi_category_card_conditioning", {}) or {}
+        )
 
         for item in routing.routing_categories:
             budget = int(item.budget or 1)
@@ -760,12 +842,16 @@ def chat(
             # Get category-specific section weights (if any)
             category_section_weights = all_section_weights.get(category_label)
 
+            # Get category-specific card conditioning (if any)
+            category_card_conditioning = all_card_conditioning.get(category_label)
+
             selected = retrieve_for_category(
                 standalone_question,
                 routing_category=category_label,
                 budget=budget,
                 conversation_topic=conversation_topic,
                 section_weights=category_section_weights,
+                card_conditioning=category_card_conditioning,
             )
             chunks_by_category[category_label] = selected
             logger.info(
@@ -779,6 +865,7 @@ def chat(
                     ),
                     "duration_ms": round((time.perf_counter() - t_cat) * 1000, 2),
                     "section_weighting_enabled": bool(category_section_weights),
+                    "card_conditioning_enabled": bool(category_card_conditioning),
                 },
             )
 
@@ -874,14 +961,16 @@ def chat(
             "retrieval_chunk_count": len(chunks),
         },
     )
+    # NOTE: We intentionally do NOT pass conversation_messages to synthesis.
+    # The question has already been rewritten to standalone form by rewrite_question().
+    # Including previous answers in synthesis context can cause the LLM to "continue"
+    # from the previous answer instead of answering the new question independently.
     synthesis = synthesize_answer(
         standalone_question,
         chunks,
         routing_category,
         conversation_topic=conversation_topic,
-        conversation_messages=[message.model_dump() for message in request.messages]
-        if request.messages
-        else None,
+        conversation_messages=None,
         routing=routing if use_multi_category else None,
     )
 
@@ -914,20 +1003,37 @@ def chat(
                 if expected and not expected.issubset(used_origins):
                     failure_reasons.append("missing_category_coverage")
 
+            # Semantic coverage: check that answer contains distinctive facts from each category.
+            if len(routing.routing_categories) > 1 and synthesis.used_chunk_indices:
+                routed_category_names = [
+                    str(i.routing_category.value) for i in routing.routing_categories
+                ]
+                semantic_coverage = _check_semantic_coverage(
+                    answer=synthesis.answer or "",
+                    chunks=chunks,
+                    used_chunk_indices=synthesis.used_chunk_indices,
+                    routed_categories=routed_category_names,
+                )
+                uncovered_categories = [
+                    cat for cat, covered in semantic_coverage.items() if not covered
+                ]
+                if uncovered_categories:
+                    failure_reasons.append(
+                        f"missing_semantic_coverage:{','.join(uncovered_categories)}"
+                    )
+
         passed = not failure_reasons
         retry_attempted = False
         if not passed:
             retry_attempted = True
+            # NOTE: Same as primary synthesis - no conversation_messages to avoid
+            # the LLM "continuing" from previous answers.
             synthesis_retry = synthesize_answer(
                 standalone_question,
                 chunks,
                 routing_category,
                 conversation_topic=conversation_topic,
-                conversation_messages=[
-                    message.model_dump() for message in request.messages
-                ]
-                if request.messages
-                else None,
+                conversation_messages=None,
                 routing=routing if use_multi_category else None,
                 temperature_override=0,
                 strict_facts_first=True,
