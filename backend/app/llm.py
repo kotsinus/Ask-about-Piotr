@@ -259,6 +259,7 @@ def synthesize_answer(
     *,
     temperature_override: float | None = None,
     strict_facts_first: bool = False,
+    force_use_chunk_indices: list[int] | None = None,
 ) -> SynthesisResult:
     """Generate a strict, grounded answer from retrieved chunks."""
 
@@ -395,19 +396,26 @@ def synthesize_answer(
         ),
     }
 
+    multi_category = bool(
+        routing is not None
+        and len(getattr(routing, "routing_categories", []) or []) > 1
+    )
+
     category_key = _normalize_routing_category(routing_category)
     style_hint = STYLE_HINTS.get(category_key, "")
     why_hint = WHY_HINTS.get(category_key, "")
 
-    # Keep hints in the user prompt as well (helps debuggability and keeps
-    # behavior stable for existing tests/captures).
+    # Keep hints in the user prompt for SINGLE-category only.
+    # For multi-category, per-category hints are appended to the system prompt
+    # to avoid a primary-category bias.
     hint_block = ""
-    if style_hint:
-        hint_block += f"Answer style hint: {style_hint}\n"
-    if why_hint:
-        hint_block += f"Why-this-matters hint: {why_hint}\n"
-    if hint_block:
-        hint_block += "\n"
+    if not multi_category:
+        if style_hint:
+            hint_block += f"Answer style hint: {style_hint}\n"
+        if why_hint:
+            hint_block += f"Why-this-matters hint: {why_hint}\n"
+        if hint_block:
+            hint_block += "\n"
 
     # Include current date so LLM knows past dates are in the past
     now = datetime.now(UTC)
@@ -455,10 +463,7 @@ def synthesize_answer(
         )
 
     # Multi-category coverage requirement with structured synthesis.
-    if (
-        routing is not None
-        and len(getattr(routing, "routing_categories", []) or []) > 1
-    ):
+    if multi_category:
         routing_category_names = [
             str(item.routing_category.value) for item in routing.routing_categories
         ]
@@ -469,6 +474,20 @@ def synthesize_answer(
             "- If possible, structure your answer into short paragraphs/sections, one per routed category in order.\n"
             "- Each paragraph must be grounded in evidence from its corresponding category.\n"
         )
+
+        if force_use_chunk_indices:
+            forced = [
+                int(i)
+                for i in force_use_chunk_indices
+                if isinstance(i, int) and 0 <= int(i) < len(chunks)
+            ]
+            if forced:
+                forced_str = ", ".join(str(i) for i in forced)
+                system_prompt += (
+                    "\nHard evidence-use requirement (retry):\n"
+                    f"- You MUST include at least one concrete fact from EACH of these evidence items: {forced_str}.\n"
+                    "- Ensure the answer text explicitly reflects those facts (do not just cite them).\n"
+                )
 
         # Add per-category mini-hints derived from STYLE_HINTS/WHY_HINTS.
         per_category_hints: list[str] = []

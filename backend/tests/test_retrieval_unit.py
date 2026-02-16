@@ -363,10 +363,6 @@ def test_apply_pinning_multiple_categories() -> None:
     def mock_retrieve_for_card(
         card_id: str, limit: int, pin_for_category: str
     ) -> list[retrieval.RetrievedChunk]:
-        category_map = {
-            "education-facts": "education",
-            "certifications-facts": "Certifications",
-        }
         return [
             retrieval.RetrievedChunk(
                 card_id=card_id,

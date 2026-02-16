@@ -58,10 +58,12 @@ def test_apply_pinning_sets_origin_to_category_being_pinned_for() -> None:
     assert len(out) == 2
 
     by_id = {c.card_id: c for c in out}
-    assert by_id["education-facts"].origin_routing_category == "education_and_formal_background"
+    assert (
+        by_id["education-facts"].origin_routing_category
+        == "education_and_formal_background"
+    )
     assert by_id["skills-core"].origin_routing_category == "hands_on_engineering"
 
     # Ensure we passed the correct category to the retrieval callback.
     assert ("education-facts", 1, "education_and_formal_background") in calls
     assert ("skills-core", 1, "hands_on_engineering") in calls
-

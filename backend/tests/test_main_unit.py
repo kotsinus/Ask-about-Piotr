@@ -674,6 +674,8 @@ def test_chat_multi_category_enforces_coverage_after_synthesis_omits_category(
 
     monkeypatch.setattr("app.main.retrieve_for_category", _retrieve_for_category)
 
+    forced_seen: list[list[int]] = []
+
     def _synthesize_answer(
         question: str,
         chunks: list[RetrievedChunk],
@@ -684,6 +686,22 @@ def test_chat_multi_category_enforces_coverage_after_synthesis_omits_category(
         **kwargs,
     ):
         synthesis_call_count[0] += 1
+
+        # If the pipeline performs a forced synthesis pass, respect it.
+        forced = kwargs.get("force_use_chunk_indices")
+        if isinstance(forced, list) and forced:
+            forced_seen.append([int(x) for x in forced])
+            # Simulate a model that now uses both the original and forced evidence.
+            # We include index 0 (primary) and the forced one(s).
+            indices = [0] + [int(x) for x in forced if int(x) != 0]
+            return SynthesisResult(
+                answer="Answer includes both categories.",
+                why_this_matters="Test why.",
+                confidence=Confidence.medium,
+                confidence_reason=None,
+                used_chunk_indices=indices,
+            )
+
         # First call: only use chunk from first category (index 0)
         # This simulates the bug where synthesis ignores the second category
         if synthesis_call_count[0] == 1:
@@ -756,6 +774,10 @@ def test_chat_multi_category_enforces_coverage_after_synthesis_omits_category(
     assert "Hands-on engineering-card" in evidence_card_ids, (
         f"Expected hands-on engineering category in evidence, got: {evidence_card_ids}"
     )
+
+    # Ensure we actually ran the forced synthesis pass.
+    assert synthesis_call_count[0] >= 3
+    assert forced_seen, "Expected force_use_chunk_indices to be passed to synthesis"
 
     # Verify we have evidence from both categories
     assert len(response.evidence) >= 2, (

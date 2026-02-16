@@ -38,7 +38,6 @@ from app.interaction_logging import InteractionLog, write_interaction_log
 from app.llm import (
     RoutedCategory,
     RoutingResult,
-    SynthesisResult,
     clean_why,
     rewrite_question,
     route_categories,
@@ -565,6 +564,28 @@ def _extract_distinctive_tokens(text: str) -> set[str]:
     for match in re.finditer(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b", text):
         tokens.add(match.group(1).lower())
 
+    # Extract common abbreviations / dotted acronyms (e.g., "M.Sc.", "Ph.D.").
+    for match in re.finditer(r"\b([A-Za-z]{1,4}\.(?:[A-Za-z]{1,4}\.)+)\b", text):
+        tokens.add(match.group(1).lower())
+
+    # Extract all-caps acronyms (e.g., "RAG", "LLM", "SQL").
+    for match in re.finditer(r"\b([A-Z]{2,})\b", text):
+        tokens.add(match.group(1).lower())
+
+    # Extract camelCase / PascalCase identifiers (e.g., "OpenAIClient", "pgVector").
+    for match in re.finditer(r"\b([A-Za-z]+[A-Z][A-Za-z0-9]*)\b", text):
+        tokens.add(match.group(1).lower())
+
+    # Extract hyphenated technical tokens (e.g., "text-embedding-3-small").
+    for match in re.finditer(r"\b([A-Za-z0-9]+(?:-[A-Za-z0-9]+)+)\b", text):
+        tokens.add(match.group(1).lower())
+
+    # Lightweight degree/certification markers (helps education coverage).
+    for match in re.finditer(
+        r"\b(phd|msc|m\.sc|bsc|b\.sc|mba|xmba)\b", text, flags=re.IGNORECASE
+    ):
+        tokens.add(match.group(1).lower())
+
     return tokens
 
 
@@ -866,12 +887,16 @@ def chat(
 
             # Get category-specific section weights (if any)
             category_section_weights = all_section_weights.get(category_label) or (
-                all_section_weights.get(category_settings_key) if category_settings_key else None
+                all_section_weights.get(category_settings_key)
+                if category_settings_key
+                else None
             )
 
             # Get category-specific card conditioning (if any)
             category_card_conditioning = all_card_conditioning.get(category_label) or (
-                all_card_conditioning.get(category_settings_key) if category_settings_key else None
+                all_card_conditioning.get(category_settings_key)
+                if category_settings_key
+                else None
             )
 
             selected = retrieve_for_category(
@@ -900,6 +925,7 @@ def chat(
             )
 
         merged, dedup_collisions = merge_dedup_preserve_provenance(chunks_by_category)
+        post_merge_count = len(merged)
 
         # Apply pinning: ensure required cards are included for routed categories.
         # Pipeline: retrieve per category → merge → pin → re-dedup → cap → synthesis
@@ -915,9 +941,9 @@ def chat(
             # IMPORTANT: the pinned chunk must carry provenance for the category
             # it is pinned FOR, not always the primary routed category.
             key = _router_category_settings_key(pin_for_category)
-            section_weights_for_pin = all_section_weights.get(pin_for_category) or all_section_weights.get(
-                key
-            )
+            section_weights_for_pin = all_section_weights.get(
+                pin_for_category
+            ) or all_section_weights.get(key)
             return retrieve_for_card(
                 standalone_question,
                 card_id=card_id,
@@ -934,12 +960,15 @@ def chat(
             retrieve_for_card_fn=_retrieve_for_pinning,
             max_total_chunks=max_total,
         )
+        post_pin_count = len(merged)
 
         # Re-dedup after pinning: pinned chunks may duplicate existing chunks.
         # Use a wrapper dict to reuse the merge_dedup_preserve_provenance function.
         if pinned_card_ids:
             merged_after_pin, _ = merge_dedup_preserve_provenance({"_pinned": merged})
             merged = merged_after_pin
+
+        post_rededup_count = len(merged)
 
         # Log pinning event if any cards were pinned.
         if pinned_card_ids:
@@ -961,7 +990,9 @@ def chat(
             "chat_retrieve_merge",
             extra={
                 "pre_dedup_count": sum(len(v) for v in chunks_by_category.values()),
-                "post_dedup_count": len(merged),
+                "post_merge_count": post_merge_count,
+                "post_pin_count": post_pin_count,
+                "post_rededup_count": post_rededup_count,
                 "dedup_collisions": dedup_collisions,
                 "final_chunk_count": len(chunks),
                 "pinned_card_ids": pinned_card_ids,
@@ -1075,9 +1106,9 @@ def chat(
             },
         )
 
-        # Hard post-condition: enforce multi-category coverage after retry.
         # If synthesis still doesn't use chunks from all routed categories,
-        # force inclusion of at least one chunk from each missing category.
+        # run one more synthesis with a HARD requirement to incorporate concrete
+        # facts from representative chunks of each missing category.
         if len(routing.routing_categories) > 1 and synthesis.used_chunk_indices:
             used = [
                 chunks[idx]
@@ -1096,36 +1127,36 @@ def chat(
             missing_categories = expected - used_origins
 
             if missing_categories:
-                # Find one chunk from each missing category and force inclusion.
                 forced_indices: list[int] = []
                 for missing_cat in missing_categories:
                     for idx, ch in enumerate(chunks):
                         ch_origins = set(ch.origin_routing_categories or [])
                         if ch.origin_routing_category:
                             ch_origins.add(ch.origin_routing_category)
-                        if (
-                            missing_cat in ch_origins
-                            and idx not in synthesis.used_chunk_indices
-                        ):
+                        if missing_cat in ch_origins:
                             forced_indices.append(idx)
                             break
 
                 if forced_indices:
-                    # Merge forced indices with existing ones.
-                    new_indices = list(synthesis.used_chunk_indices) + forced_indices
-                    synthesis = SynthesisResult(
-                        answer=synthesis.answer,
-                        why_this_matters=synthesis.why_this_matters,
-                        confidence=synthesis.confidence,
-                        confidence_reason=synthesis.confidence_reason,
-                        used_chunk_indices=new_indices,
+                    synthesis = synthesize_answer(
+                        standalone_question,
+                        chunks,
+                        routing_category,
+                        conversation_topic=conversation_topic,
+                        conversation_messages=None,
+                        routing=routing,
+                        temperature_override=0,
+                        strict_facts_first=True,
+                        force_use_chunk_indices=forced_indices,
                     )
                     logger.info(
-                        "chat_multi_category_forced_coverage",
+                        "chat_multi_category_forced_synthesis",
                         extra={
                             "missing_categories": list(missing_categories),
                             "forced_indices": forced_indices,
-                            "final_used_chunk_indices_count": len(new_indices),
+                            "used_chunk_indices_count": len(
+                                synthesis.used_chunk_indices or []
+                            ),
                         },
                     )
 
