@@ -790,7 +790,9 @@ def test_build_llm_context_messages_edge_cases() -> None:
 
     # Content is truncated
     long_content = "x" * 5000
-    result = _build_llm_context_messages([{"role": "user", "content": long_content}], max_content_chars=100)
+    result = _build_llm_context_messages(
+        [{"role": "user", "content": long_content}], max_content_chars=100
+    )
     assert result is not None
     assert len(result[0]["content"]) == 100
 
@@ -929,7 +931,7 @@ def test_deterministic_budget_policy_three_categories() -> None:
 
 def test_clamp_budgets() -> None:
     """Test _clamp_budgets function."""
-    from app.main import _clamp_budgets, RoutedCategory
+    from app.main import RoutedCategory, _clamp_budgets
 
     categories = [
         RoutedCategory(
@@ -1115,7 +1117,7 @@ def test_chat_multi_category_router_fallback(
         context=ConversationContext(conversation_id="c1", last_topic=None),
     )
 
-    response = chat(
+    chat(
         http_request=http_request,
         request=chat_request,
         background_tasks=BackgroundTasks(),
@@ -1220,7 +1222,7 @@ def test_chat_multi_category_non_deterministic_budget_policy(
         context=ConversationContext(conversation_id="c1", last_topic=None),
     )
 
-    response = chat(
+    chat(
         http_request=http_request,
         request=chat_request,
         background_tasks=BackgroundTasks(),
@@ -1342,7 +1344,7 @@ def test_chat_quality_rules_validation(
         context=ConversationContext(conversation_id="c1", last_topic=None),
     )
 
-    response = chat(
+    chat(
         http_request=http_request,
         request=chat_request,
         background_tasks=BackgroundTasks(),

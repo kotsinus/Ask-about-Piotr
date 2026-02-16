@@ -797,7 +797,9 @@ def test_clean_why_with_prefix_patterns() -> None:
     assert "important to note" not in result.lower()
 
     # Test "This demonstrates" removal
-    result = llm.clean_why("This demonstrates the value.", RoutingCategory.hands_on_engineering)
+    result = llm.clean_why(
+        "This demonstrates the value.", RoutingCategory.hands_on_engineering
+    )
     # Should fall back because result is too short after removal
     assert result in {
         "It affects how I build and debug production systems.",
@@ -807,7 +809,10 @@ def test_clean_why_with_prefix_patterns() -> None:
 
 def test_clean_why_removes_to_prefix() -> None:
     """Test clean_why removes 'to ' prefix artifacts."""
-    result = llm.clean_why("to build better systems we need good practices", RoutingCategory.hands_on_engineering)
+    result = llm.clean_why(
+        "to build better systems we need good practices",
+        RoutingCategory.hands_on_engineering,
+    )
     # After removing "to " prefix, should still be valid or fall back
     assert result  # Should return something
 

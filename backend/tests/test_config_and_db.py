@@ -108,7 +108,9 @@ def test_parse_pinning_rules_valid_json(monkeypatch: pytest.MonkeyPatch) -> None
     from app.config import _parse_pinning_rules
 
     # Valid JSON with proper structure
-    result = _parse_pinning_rules('{"education_and_formal_background": ["card1", "card2"]}')
+    result = _parse_pinning_rules(
+        '{"education_and_formal_background": ["card1", "card2"]}'
+    )
     assert result == {"education_and_formal_background": ["card1", "card2"]}
 
     # Empty string returns empty dict
@@ -159,7 +161,9 @@ def test_parse_section_weights_valid_json(monkeypatch: pytest.MonkeyPatch) -> No
     from app.config import _parse_section_weights
 
     # Valid JSON with proper structure
-    result = _parse_section_weights('{"education_and_formal_background": {"degrees": 0.15}}')
+    result = _parse_section_weights(
+        '{"education_and_formal_background": {"degrees": 0.15}}'
+    )
     assert result == {"education_and_formal_background": {"degrees": 0.15}}
 
     # Weight clamped to max 0.5
@@ -190,8 +194,15 @@ def test_parse_quality_rules_valid_json(monkeypatch: pytest.MonkeyPatch) -> None
     from app.config import _parse_quality_rules
 
     # Valid JSON with proper structure
-    result = _parse_quality_rules('{"education_and_formal_background": {"min_tokens": ["degree", "university"], "min_token_count": 2}}')
-    assert result == {"education_and_formal_background": {"min_tokens": ["degree", "university"], "min_token_count": 2}}
+    result = _parse_quality_rules(
+        '{"education_and_formal_background": {"min_tokens": ["degree", "university"], "min_token_count": 2}}'
+    )
+    assert result == {
+        "education_and_formal_background": {
+            "min_tokens": ["degree", "university"],
+            "min_token_count": 2,
+        }
+    }
 
     # Empty string returns empty dict
     assert _parse_quality_rules("") == {}
@@ -212,7 +223,9 @@ def test_parse_quality_rules_valid_json(monkeypatch: pytest.MonkeyPatch) -> None
     assert result == {"cat": {"min_token_count": 2}}
 
 
-def test_get_settings_openai_timeout_and_retries(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_settings_openai_timeout_and_retries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Test OPENAI_TIMEOUT_S and OPENAI_MAX_RETRIES parsing."""
     monkeypatch.setenv("DATABASE_URL", "postgresql://x")
 
@@ -280,7 +293,9 @@ def test_get_settings_multi_category_parsing(monkeypatch: pytest.MonkeyPatch) ->
     assert settings.multi_category_max_total_chunks == 1
 
 
-def test_get_settings_production_embedding_checks(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_settings_production_embedding_checks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Test production environment checks for embeddings."""
     monkeypatch.setenv("DATABASE_URL", "postgresql://x")
     monkeypatch.setenv("APP_ENV", "prod")
@@ -306,16 +321,20 @@ def test_get_settings_production_embedding_checks(monkeypatch: pytest.MonkeyPatc
 def test_get_settings_custom_pinning_rules(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test custom pinning rules override default."""
     monkeypatch.setenv("DATABASE_URL", "postgresql://x")
-    monkeypatch.setenv("MULTI_CATEGORY_PINNING_RULES", '{"custom_category": ["custom-card"]}')
+    monkeypatch.setenv(
+        "MULTI_CATEGORY_PINNING_RULES", '{"custom_category": ["custom-card"]}'
+    )
 
     settings = get_settings()
     assert settings.multi_category_pinning_rules == {"custom_category": ["custom-card"]}
 
 
-def test_get_settings_empty_pinning_rules_uses_default(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_settings_empty_pinning_rules_uses_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Test that empty pinning rules JSON uses default."""
     monkeypatch.setenv("DATABASE_URL", "postgresql://x")
-    monkeypatch.setenv("MULTI_CATEGORY_PINNING_RULES", '{}')
+    monkeypatch.setenv("MULTI_CATEGORY_PINNING_RULES", "{}")
 
     settings = get_settings()
     # Empty env value falls back to default

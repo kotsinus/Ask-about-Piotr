@@ -235,7 +235,10 @@ def test_write_interaction_log_table_create_already_attempted_retry_fails_undefi
     monkeypatch.setattr(il, "_ensure_interaction_logs_table_exists", lambda: False)
 
     il.write_interaction_log(_row())
-    assert il._INTERACTION_LOGGING_DISABLED_REASON == "table_missing_create_already_attempted"
+    assert (
+        il._INTERACTION_LOGGING_DISABLED_REASON
+        == "table_missing_create_already_attempted"
+    )
 
 
 def test_write_interaction_log_table_create_already_attempted_retry_fails_other_error(

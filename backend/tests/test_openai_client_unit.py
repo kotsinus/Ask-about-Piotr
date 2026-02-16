@@ -60,7 +60,7 @@ def test_get_openai_client_creates_client_with_timeout_and_retries(
     )
     monkeypatch.setattr(openai_client, "OpenAI", _MockOpenAI)
 
-    client = openai_client.get_openai_client()
+    openai_client.get_openai_client()
     assert created_kwargs["api_key"] == "test-key"
     assert created_kwargs["timeout"] == 30.0
     assert created_kwargs["max_retries"] == 3
@@ -99,7 +99,7 @@ def test_get_openai_client_fallback_on_typeerror(
     )
     monkeypatch.setattr(openai_client, "OpenAI", _OpenAIWithTypeError)
 
-    client = openai_client.get_openai_client()
+    openai_client.get_openai_client()
     # Should have been called twice: once with full args, once with just api_key
     assert _OpenAIWithTypeError.call_count == 2
 
@@ -111,7 +111,9 @@ def test_chat_completions_create_logs_and_reraises_on_exception(
 
     class _MockClient:
         def __init__(self):
-            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+            self.chat = SimpleNamespace(
+                completions=SimpleNamespace(create=self._create)
+            )
 
         def _create(self, **kwargs):
             raise RuntimeError("API error")
@@ -130,7 +132,9 @@ def test_chat_completions_create_cached_bypasses_cache_when_disabled(
 
     class _MockClient:
         def __init__(self):
-            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+            self.chat = SimpleNamespace(
+                completions=SimpleNamespace(create=self._create)
+            )
 
         def _create(self, **kwargs):
             calls.append(kwargs)
@@ -145,7 +149,7 @@ def test_chat_completions_create_cached_bypasses_cache_when_disabled(
         lambda: SimpleNamespace(prompt_cache_enabled=False),
     )
 
-    result = openai_client.chat_completions_create_cached(
+    openai_client.chat_completions_create_cached(
         cache_namespace="test", model="gpt", messages=[], temperature=0
     )
     assert len(calls) == 1
@@ -159,7 +163,9 @@ def test_chat_completions_create_cached_bypasses_cache_with_nonzero_temperature(
 
     class _MockClient:
         def __init__(self):
-            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+            self.chat = SimpleNamespace(
+                completions=SimpleNamespace(create=self._create)
+            )
 
         def _create(self, **kwargs):
             calls.append(kwargs)
@@ -174,7 +180,7 @@ def test_chat_completions_create_cached_bypasses_cache_with_nonzero_temperature(
         lambda: SimpleNamespace(prompt_cache_enabled=True),
     )
 
-    result = openai_client.chat_completions_create_cached(
+    openai_client.chat_completions_create_cached(
         cache_namespace="test", model="gpt", messages=[], temperature=0.5
     )
     assert len(calls) == 1
@@ -188,12 +194,16 @@ def test_chat_completions_create_cached_uses_cache_on_hit(
 
     class _MockClient:
         def __init__(self):
-            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+            self.chat = SimpleNamespace(
+                completions=SimpleNamespace(create=self._create)
+            )
 
         def _create(self, **kwargs):
             calls.append(kwargs)
             return SimpleNamespace(
-                choices=[SimpleNamespace(message=SimpleNamespace(content="fresh response"))]
+                choices=[
+                    SimpleNamespace(message=SimpleNamespace(content="fresh response"))
+                ]
             )
 
     monkeypatch.setattr(openai_client, "_client", _MockClient())
@@ -205,14 +215,20 @@ def test_chat_completions_create_cached_uses_cache_on_hit(
 
     # First call should hit the API
     result1 = openai_client.chat_completions_create_cached(
-        cache_namespace="test", model="gpt", messages=[{"role": "user", "content": "hello"}], temperature=0
+        cache_namespace="test",
+        model="gpt",
+        messages=[{"role": "user", "content": "hello"}],
+        temperature=0,
     )
     assert len(calls) == 1
     assert result1.choices[0].message.content == "fresh response"
 
     # Second call with same params should return cached response
     result2 = openai_client.chat_completions_create_cached(
-        cache_namespace="test", model="gpt", messages=[{"role": "user", "content": "hello"}], temperature=0
+        cache_namespace="test",
+        model="gpt",
+        messages=[{"role": "user", "content": "hello"}],
+        temperature=0,
     )
     assert len(calls) == 1  # No additional API call
     assert result2.choices[0].message.content == "fresh response"
@@ -226,7 +242,9 @@ def test_chat_completions_create_cached_handles_non_serializable_payload(
 
     class _MockClient:
         def __init__(self):
-            self.chat = SimpleNamespace(completions=SimpleNamespace(create=self._create))
+            self.chat = SimpleNamespace(
+                completions=SimpleNamespace(create=self._create)
+            )
 
         def _create(self, **kwargs):
             calls.append(kwargs)
@@ -245,7 +263,7 @@ def test_chat_completions_create_cached_handles_non_serializable_payload(
     class NonSerializable:
         pass
 
-    result = openai_client.chat_completions_create_cached(
+    openai_client.chat_completions_create_cached(
         cache_namespace="test",
         model="gpt",
         messages=[],
