@@ -920,27 +920,21 @@ def chat(
         max_total = int(getattr(settings, "multi_category_max_total_chunks", 5) or 5)
         max_total = max(1, max_total)
 
-        # Get section weights for the first routed category (primary category for pinning).
-        # This ensures pinned cards select the most relevant sections, not just low-distance
-        # low-signal sections like "Category".
-        primary_category_section_weights = None
-        if routed_category_names:
-            primary_key = _router_category_settings_key(routed_category_names[0])
-            primary_category_section_weights = all_section_weights.get(
-                primary_key
-            ) or all_section_weights.get(routed_category_names[0])
-
         # Create a retrieval function for pinning that captures the current context.
-        def _retrieve_for_pinning(card_id: str, limit: int):
+        def _retrieve_for_pinning(card_id: str, limit: int, pin_for_category: str):
+            # IMPORTANT: the pinned chunk must carry provenance for the category
+            # it is pinned FOR, not always the primary routed category.
+            key = _router_category_settings_key(pin_for_category)
+            section_weights_for_pin = all_section_weights.get(key) or all_section_weights.get(
+                pin_for_category
+            )
             return retrieve_for_card(
                 standalone_question,
                 card_id=card_id,
                 limit=limit,
-                origin_routing_category=routed_category_names[0]
-                if routed_category_names
-                else "",
+                origin_routing_category=pin_for_category,
                 conversation_topic=conversation_topic,
-                section_weights=primary_category_section_weights,
+                section_weights=section_weights_for_pin,
             )
 
         merged, pinned_card_ids = apply_pinning(
@@ -955,7 +949,9 @@ def chat(
         # If the settings dict uses snake_case keys, the lookup in apply_pinning
         # won't match human-readable routed category labels.
         # Retry pinning with normalized keys if first pass pinned nothing.
-        if (not pinned_card_ids) and getattr(settings, "multi_category_pinning_rules", None):
+        if (not pinned_card_ids) and getattr(
+            settings, "multi_category_pinning_rules", None
+        ):
             normalized_rules = {
                 _router_category_settings_key(k): v
                 for k, v in (settings.multi_category_pinning_rules or {}).items()
@@ -1001,7 +997,9 @@ def chat(
             normalized_routed = [
                 _router_category_settings_key(c) for c in routed_category_names if c
             ]
-            if normalized_routed and set(normalized_routed) != set(routed_category_names):
+            if normalized_routed and set(normalized_routed) != set(
+                routed_category_names
+            ):
                 chunks = cap_chunks_with_coverage(
                     chunks=chunks,
                     routed_categories=normalized_routed,
@@ -1197,9 +1195,9 @@ def chat(
                 category_validation_failures.append(
                     {
                         "routing_category": category_label,
-                            "failures": result.failure_reasons,
-                        }
-                    )
+                        "failures": result.failure_reasons,
+                    }
+                )
 
             if category_validation_failures:
                 logger.info(

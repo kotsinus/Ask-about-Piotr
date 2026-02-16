@@ -51,6 +51,33 @@ class RetrievedChunk(BaseModel):
     pinned: bool = False
 
 
+def _question_mentions_problem(question: str) -> bool:
+    """Heuristic: does the user explicitly ask about the problem/challenge?
+
+    Used to avoid penalizing the `Problem` section when it is likely the most
+    relevant evidence.
+    """
+
+    q = " ".join((question or "").strip().lower().split())
+    if not q:
+        return False
+    triggers = (
+        "problem",
+        "challenge",
+        "pain",
+        "issue",
+        "bottleneck",
+        "constraint",
+        "trade-off",
+        "tradeoff",
+        "solve",
+        "solved",
+        "fix",
+        "fixed",
+    )
+    return any(t in q for t in triggers)
+
+
 def _norm_section(section: str) -> str:
     return " ".join((section or "").strip().lower().split())
 
@@ -407,6 +434,15 @@ def retrieve_for_category(
         "tech stack",
     }
 
+    penalize_problem_section = False
+    if not _question_mentions_problem(question):
+        # If the caller provides weights that explicitly boost "What I built",
+        # prefer those factual/detail sections over generic template-y "Problem".
+        # This keeps behavior generic and avoids hardcoding routing categories.
+        if section_weights:
+            if any(_norm_section(k) == "what i built" for k in section_weights.keys()):
+                penalize_problem_section = True
+
     # Maximum bonus cap to prevent weak chunks from jumping strong ones
     MAX_SECTION_BONUS = 0.25
     MAX_CARD_CATEGORY_BONUS = 0.25
@@ -473,6 +509,10 @@ def retrieve_for_category(
         penalty = 0.0
         if card_has_substantive.get(card_id, False):
             penalty = section_penalty.get(section, 0.0)
+
+            if penalize_problem_section and section == "problem":
+                penalty += 0.12
+
             if section not in low_signal_sections:
                 if (
                     card_max_substantive_len.get(card_id, 0) >= long_section_len
@@ -621,6 +661,12 @@ def retrieve_for_card(
         "tech stack",
     }
 
+    penalize_problem_section = False
+    if not _question_mentions_problem(question):
+        if section_weights:
+            if any(_norm_section(k) == "what i built" for k in section_weights.keys()):
+                penalize_problem_section = True
+
     # Maximum bonus cap to prevent weak chunks from jumping strong ones
     MAX_SECTION_BONUS = 0.25
 
@@ -670,6 +716,10 @@ def retrieve_for_card(
         penalty = 0.0
         if card_has_substantive.get(card_id, False):
             penalty = section_penalty.get(section, 0.0)
+
+            if penalize_problem_section and section == "problem":
+                penalty += 0.12
+
             if section not in low_signal_sections:
                 if (
                     card_max_substantive_len.get(card_id, 0) >= long_section_len
@@ -713,7 +763,7 @@ def apply_pinning(
     chunks: list[RetrievedChunk],
     pinning_rules: dict[str, list[str]],
     routed_categories: list[str],
-    retrieve_for_card_fn: Callable[[str, int], list[RetrievedChunk]],
+    retrieve_for_card_fn: Callable[[str, int, str], list[RetrievedChunk]],
     max_total_chunks: int = 5,
 ) -> tuple[list[RetrievedChunk], list[str]]:
     """Apply pinning rules to ensure required cards are included.
@@ -764,8 +814,10 @@ def apply_pinning(
                 )
                 continue
 
-            # Retrieve the best chunk for this card
-            retrieved_chunks = retrieve_for_card_fn(card_id, 1)
+            # Retrieve the best chunk for this card.
+            # IMPORTANT: pass the routing category we are pinning FOR so provenance
+            # is correct (coverage capping + diagnostics depend on it).
+            retrieved_chunks = retrieve_for_card_fn(card_id, 1, routing_category)
 
             if not retrieved_chunks:
                 logger.warning(
@@ -788,6 +840,10 @@ def apply_pinning(
                 pinned_chunk.origin_routing_categories.append(routing_category)
 
             if not pinned_chunk.origin_routing_category:
+                pinned_chunk.origin_routing_category = routing_category
+            else:
+                # Ensure best-origin category matches the category that caused the pin.
+                # This avoids misattribution to the primary routed category.
                 pinned_chunk.origin_routing_category = routing_category
 
             chunks.append(pinned_chunk)

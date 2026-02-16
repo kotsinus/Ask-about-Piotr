@@ -262,7 +262,7 @@ def test_apply_pinning_adds_missing_card() -> None:
     routed_categories = ["education"]
 
     def mock_retrieve_for_card(
-        card_id: str, limit: int
+        card_id: str, limit: int, pin_for_category: str
     ) -> list[retrieval.RetrievedChunk]:
         return [
             retrieval.RetrievedChunk(
@@ -271,8 +271,8 @@ def test_apply_pinning_adds_missing_card() -> None:
                 section="Degrees",
                 content="Education content",
                 distance=0.3,
-                origin_routing_categories=["education"],
-                origin_routing_category="education",
+                origin_routing_categories=[pin_for_category],
+                origin_routing_category=pin_for_category,
             )
         ]
 
@@ -311,7 +311,7 @@ def test_apply_pinning_skips_if_card_already_present() -> None:
     call_count = 0
 
     def mock_retrieve_for_card(
-        card_id: str, limit: int
+        card_id: str, limit: int, pin_for_category: str
     ) -> list[retrieval.RetrievedChunk]:
         nonlocal call_count
         call_count += 1
@@ -322,8 +322,8 @@ def test_apply_pinning_skips_if_card_already_present() -> None:
                 section="Other",
                 content="Should not be added",
                 distance=0.5,
-                origin_routing_categories=["education"],
-                origin_routing_category="education",
+                origin_routing_categories=[pin_for_category],
+                origin_routing_category=pin_for_category,
             )
         ]
 
@@ -361,7 +361,7 @@ def test_apply_pinning_multiple_categories() -> None:
     routed_categories = ["education", "Certifications"]
 
     def mock_retrieve_for_card(
-        card_id: str, limit: int
+        card_id: str, limit: int, pin_for_category: str
     ) -> list[retrieval.RetrievedChunk]:
         category_map = {
             "education-facts": "education",
@@ -374,8 +374,8 @@ def test_apply_pinning_multiple_categories() -> None:
                 section="Overview",
                 content=f"Content for {card_id}",
                 distance=0.3,
-                origin_routing_categories=[category_map.get(card_id, "Unknown")],
-                origin_routing_category=category_map.get(card_id, "Unknown"),
+                origin_routing_categories=[pin_for_category],
+                origin_routing_category=pin_for_category,
             )
         ]
 
@@ -411,7 +411,7 @@ def test_apply_pinning_empty_rules() -> None:
     routed_categories = ["education"]
 
     def mock_retrieve_for_card(
-        card_id: str, limit: int
+        card_id: str, limit: int, pin_for_category: str
     ) -> list[retrieval.RetrievedChunk]:
         raise AssertionError("Should not be called with empty rules")
 
@@ -449,7 +449,7 @@ def test_apply_pinning_no_matching_category() -> None:
     routed_categories = ["Leadership", "Research"]  # Different categories
 
     def mock_retrieve_for_card(
-        card_id: str, limit: int
+        card_id: str, limit: int, pin_for_category: str
     ) -> list[retrieval.RetrievedChunk]:
         raise AssertionError("Should not be called when no categories match")
 
