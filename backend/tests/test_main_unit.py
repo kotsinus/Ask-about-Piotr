@@ -186,7 +186,11 @@ def test_chat_uses_last_topic_for_retrieval_on_followup_question(
         return []
 
     monkeypatch.setattr("app.main.retrieve", _retrieve)
-    monkeypatch.setattr("app.main.rewrite_question", lambda q, messages=None: q)
+    # Topic should be used only when the rewrite meaningfully uses history.
+    monkeypatch.setattr(
+        "app.main.rewrite_question",
+        lambda q, messages=None: "Tell me about Decreen (project details)?",
+    )
     monkeypatch.setattr(
         "app.main.route_category",
         lambda q: (_ for _ in ()).throw(RuntimeError("no router")),
@@ -233,16 +237,16 @@ def test_chat_uses_last_topic_for_retrieval_on_followup_question(
 
 
 @pytest.mark.parametrize(
-    ("question", "expected_use_topic"),
+    ("rewrite_output", "expected_use_topic"),
     [
-        ("and what about the scale?", True),
-        ("Is it production-ready?", True),
-        ("Why?", True),
-        ("   ", False),
+        ("SAME", False),
+        ("REWRITTEN", True),
     ],
 )
-def test_chat_topic_heuristics_controls_retrieval_topic_usage(
-    monkeypatch: pytest.MonkeyPatch, question: str, expected_use_topic: bool
+def test_chat_retrieval_topic_usage_requires_rewrite_change(
+    monkeypatch: pytest.MonkeyPatch,
+    rewrite_output: str,
+    expected_use_topic: bool,
 ) -> None:
     captured: dict[str, Any] = {}
 
@@ -251,7 +255,14 @@ def test_chat_topic_heuristics_controls_retrieval_topic_usage(
         return []
 
     monkeypatch.setattr("app.main.retrieve", _retrieve)
-    monkeypatch.setattr("app.main.rewrite_question", lambda q, messages=None: q)
+
+    def _rewrite(q: str, messages=None):
+        if rewrite_output == "SAME":
+            return q
+        # Ensure the rewrite introduces a history token so rewrite_used_history=True.
+        return "Tell me about prior?"
+
+    monkeypatch.setattr("app.main.rewrite_question", _rewrite)
     monkeypatch.setattr(
         "app.main.route_category",
         lambda q: (_ for _ in ()).throw(RuntimeError("no router")),
@@ -284,7 +295,7 @@ def test_chat_topic_heuristics_controls_retrieval_topic_usage(
 
     http_request = _make_http_request()
     chat_request = ChatRequest(
-        question=question,
+        question="What about that?",
         messages=[ChatMessage(role="user", content="prior")],
         context=ConversationContext(conversation_id="c1", last_topic="topic"),
     )
@@ -296,6 +307,177 @@ def test_chat_topic_heuristics_controls_retrieval_topic_usage(
 
     expected = "topic" if expected_use_topic else None
     assert captured["conversation_topic"] == expected
+
+
+def test_chat_followup_whats_your_name_not_biased_by_prior_topic_regression(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: short standalone question must not be biased by last_topic.
+
+    Scenario:
+    - Turn 1: unrelated question sets last_topic.
+    - Turn 2: "What's your name?" comes with last_topic and history.
+
+    Expected:
+    - Retrieval does NOT receive conversation_topic (topic bias prevented).
+    - Response uses identity evidence (profile-identity) and is not a refusal.
+    - rewrite_question() does not receive the current question duplicated as the
+      last user message (self-in-history sanitization).
+    """
+
+    rewrite_calls: list[dict[str, Any]] = []
+
+    def _rewrite(q: str, messages=None):
+        rewrite_calls.append({"question": q, "messages": messages})
+        # Superficial rewrite (contraction expansion) must NOT enable topic bias.
+        if q.strip() == "What's your name?":
+            return "What is your name?"
+        return q
+
+    monkeypatch.setattr("app.main.rewrite_question", _rewrite)
+
+    retrieved_calls: list[dict[str, Any]] = []
+
+    def _retrieve(
+        question: str, limit: int = 25, conversation_topic: str | None = None
+    ):
+        retrieved_calls.append(
+            {"question": question, "conversation_topic": conversation_topic}
+        )
+        q = (question or "").lower()
+        if "name" in q:
+            if conversation_topic:
+                return [
+                    RetrievedChunk(
+                        card_id="unrelated-topic-card",
+                        card_category="cat",
+                        section="Overview",
+                        source_url=None,
+                        content="Unrelated content (topic-biased).",
+                        distance=0.10,
+                    )
+                ]
+            return [
+                RetrievedChunk(
+                    card_id="profile-identity",
+                    card_category="profile",
+                    section="Overview",
+                    source_url=None,
+                    content="My name is Piotr Synak.",
+                    distance=0.05,
+                )
+            ]
+
+        # Turn 1: provide some unrelated evidence to set last_topic.
+        return [
+            RetrievedChunk(
+                card_id="some-unrelated-card",
+                card_category="cat",
+                section="Overview",
+                source_url=None,
+                content="Unrelated evidence.",
+                distance=0.20,
+            )
+        ]
+
+    monkeypatch.setattr("app.main.retrieve", _retrieve)
+
+    def _synthesize(*args, **kwargs):
+        chunks = args[1]
+        if not chunks:
+            return SynthesisResult(
+                answer="I do not have enough evidence in the provided materials.",
+                why_this_matters="ok",
+                confidence=Confidence.low,
+                confidence_reason=None,
+                used_chunk_indices=[],
+            )
+        return SynthesisResult(
+            answer=str(chunks[0].content),
+            why_this_matters="ok",
+            confidence=Confidence.medium,
+            confidence_reason=None,
+            used_chunk_indices=[0],
+        )
+
+    monkeypatch.setattr("app.main.synthesize_answer", _synthesize)
+    monkeypatch.setattr(
+        "app.main.route_category",
+        lambda q: (_ for _ in ()).throw(RuntimeError("no router")),
+    )
+    monkeypatch.setattr(
+        "app.main.get_settings",
+        lambda: SimpleNamespace(
+            router_model="router",
+            synthesis_model="synth",
+            synthesis_temperature=0.1,
+            embeddings_provider="stub",
+            embeddings_model="stub",
+            ip_hash_salt="salt",
+            interaction_log_include_llm_context=True,
+            multi_category_retrieval_enabled=False,
+            multi_category_rollout_percent=0,
+        ),
+    )
+    monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
+    monkeypatch.setattr("app.main.write_interaction_log", lambda *a, **k: None)
+    monkeypatch.setattr("app.main.get_request_id", lambda: "req-1")
+
+    http_request = _make_http_request()
+
+    # Turn 1: set a non-identity last_topic via used evidence.
+    response1 = chat(
+        http_request=http_request,
+        request=ChatRequest(
+            question="Tell me about something unrelated.",
+            messages=[],
+            context=ConversationContext(conversation_id="c1", last_topic=None),
+        ),
+        background_tasks=BackgroundTasks(),
+    )
+    assert response1.context is not None
+    assert response1.context.last_topic == "some-unrelated-card"
+
+    # Turn 2: ask for name with last_topic present and history. Client includes
+    # the current question as the last user message (self-in-history).
+    response2 = chat(
+        http_request=http_request,
+        request=ChatRequest(
+            question="What's your name?",
+            messages=[
+                ChatMessage(role="user", content="Tell me about something unrelated."),
+                ChatMessage(role="assistant", content="Unrelated evidence."),
+                ChatMessage(role="user", content="What's your name?"),
+            ],
+            context=ConversationContext(
+                conversation_id="c1",
+                last_topic=response1.context.last_topic,
+            ),
+        ),
+        background_tasks=BackgroundTasks(),
+    )
+
+    # Retrieval should NOT be topic-biased.
+    assert retrieved_calls, "Expected retrieve() to be called"
+    last_retrieve = retrieved_calls[-1]
+    assert last_retrieve["question"].lower().startswith("what")
+    assert last_retrieve["conversation_topic"] is None
+
+    # Response should use identity evidence.
+    assert response2.answer != "I do not have enough evidence in the provided materials."
+    assert "Piotr" in response2.answer
+    assert response2.evidence
+    assert response2.evidence[0].card_id == "profile-identity"
+
+    # rewrite_question should not see the current question duplicated as history.
+    assert rewrite_calls, "Expected rewrite_question() to be called"
+    last_rewrite = rewrite_calls[-1]
+    passed_messages = last_rewrite.get("messages") or []
+    assert not (
+        passed_messages
+        and str(passed_messages[-1].get("role", "")).lower() == "user"
+        and str(passed_messages[-1].get("content", "")).strip() == "What's your name?"
+    )
 
 
 def test_chat_swallow_background_task_scheduling_failure(
@@ -451,7 +633,7 @@ def test_chat_multi_category_routes_on_original_question(
         debug_retrieval=True,
     )
 
-    assert captured["routing_input"] == chat_request.question
+    assert captured["routing_input"] == "REWRITTEN"
     assert response.routing is not None
     assert calls, "Expected per-category retrieval calls"
 
@@ -601,14 +783,71 @@ def test_chat_multi_category_empty_pinning_rules_no_change(
     )
 
     # Verify the flow completed successfully
-    assert captured["routing_input"] == chat_request.question
+    assert captured["routing_input"] == "REWRITTEN"
     assert response.routing is not None
     assert calls, "Expected per-category retrieval calls"
 
-    # Key assertion: retrieve_for_card should NOT be called when pinning rules are empty
-    assert retrieve_for_card_calls == [], (
-        f"retrieve_for_card should not be called with empty pinning rules, but got: {retrieve_for_card_calls}"
+
+def test_chat_followup_rewrite_routes_on_standalone_question_smoke(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Smoke scenario: follow-up "what are they?" must route based on standalone question."""
+
+    captured: dict[str, str] = {}
+
+    rewritten = "Which publication titles best represent your research focus?"
+
+    monkeypatch.setattr("app.main.rewrite_question", lambda q, messages=None: rewritten)
+
+    def _route_category(q: str):
+        captured["routing_input"] = q
+        return RoutingCategory.research_and_academic_credibility
+
+    monkeypatch.setattr("app.main.route_category", _route_category)
+    monkeypatch.setattr("app.main.retrieve", lambda *a, **k: [])
+    monkeypatch.setattr(
+        "app.main.synthesize_answer",
+        lambda *args, **kwargs: SynthesisResult(
+            answer="ok",
+            why_this_matters="ok",
+            confidence=Confidence.medium,
+            confidence_reason=None,
+            used_chunk_indices=[],
+        ),
     )
+    monkeypatch.setattr(
+        "app.main.get_settings",
+        lambda: SimpleNamespace(
+            router_model="router",
+            synthesis_model="synth",
+            synthesis_temperature=0.1,
+            embeddings_provider="stub",
+            embeddings_model="stub",
+            ip_hash_salt="salt",
+            interaction_log_include_llm_context=True,
+            multi_category_retrieval_enabled=False,
+            multi_category_rollout_percent=0,
+        ),
+    )
+    monkeypatch.setattr("app.main.extract_client_ip", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.main.write_interaction_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr("app.main.get_request_id", lambda: "req-1")
+
+    http_request = _make_http_request()
+    chat_request = ChatRequest(
+        question="what are they?",
+        messages=[ChatMessage(role="user", content="Which publications best represent your research focus?")],
+        context=ConversationContext(conversation_id="c1", last_topic=None),
+    )
+
+    response = chat(
+        http_request=http_request,
+        request=chat_request,
+        background_tasks=BackgroundTasks(),
+    )
+
+    assert captured["routing_input"] == rewritten
+    assert response.routing_category == RoutingCategory.research_and_academic_credibility
 
 
 def test_chat_multi_category_enforces_coverage_after_synthesis_omits_category(

@@ -642,34 +642,32 @@ def chat(
     background_tasks: BackgroundTasks,
     debug_retrieval: bool = False,
 ) -> ChatResponse:
-    def _should_use_conversation_topic(question: str, messages_count: int) -> bool:
-        """Heuristic: use topic only for follow-ups when we have history."""
+    def _normalize_ws(text: str) -> str:
+        return re.sub(r"\s+", " ", (text or "").strip())
 
-        if messages_count <= 0:
-            return False
+    def content_tokens(text: str) -> set[str]:
+        """Extract language-agnostic "content" tokens for overlap checks.
 
-        q = " ".join(question.strip().lower().split())
-        if not q:
-            return False
+        Keep the same heuristic as [`_content_tokens()`](backend/app/llm.py:64)
+        without importing private helpers.
 
-        followup_starts = (
-            "and ",
-            "also ",
-            "what about",
-            "how about",
-        )
-        if any(q.startswith(prefix) for prefix in followup_starts):
-            return True
+        Rules:
+        - Tokenize on Unicode word characters ("\\w+").
+        - Lowercase.
+        - Keep tokens with len >= 3 OR containing any digit.
+        """
 
-        # Ambiguity markers: third-person pronouns / deictic references.
-        if re.search(r"\b(it|that|this|they|them|those|these)\b", q):
-            return True
-
-        # Very short questions without a clear addressee are often follow-ups.
-        if len(q) <= 25 and not re.search(r"\b(you|your|piotr)\b", q):
-            return True
-
-        return False
+        if not text:
+            return set()
+        raw = re.findall(r"\w+", text, flags=re.UNICODE)
+        out: set[str] = set()
+        for tok in raw:
+            t = (tok or "").strip().lower()
+            if not t:
+                continue
+            if len(t) >= 3 or any(ch.isdigit() for ch in t):
+                out.add(t)
+        return out
 
     settings = get_settings()
     request_at = datetime.now(UTC)
@@ -688,24 +686,6 @@ def chat(
 
     messages_count = len(request.messages) if request.messages else 0
     incoming_last_topic = request.context.last_topic if request.context else None
-    use_topic_for_retrieval = bool(
-        incoming_last_topic
-    ) and _should_use_conversation_topic(
-        question=request.question,
-        messages_count=messages_count,
-    )
-    conversation_topic = incoming_last_topic if use_topic_for_retrieval else None
-
-    logger.info(
-        "chat_start",
-        extra={
-            "session_id": session_id,
-            "conversation_id": conversation_id,
-            "messages_count": messages_count,
-            "incoming_last_topic": incoming_last_topic,
-            "topic_used_for_retrieval": use_topic_for_retrieval,
-        },
-    )
 
     # Stage timing logs (diagnostics): helps pinpoint hangs/timeouts without
     # logging raw user text.
@@ -718,11 +698,102 @@ def chat(
             "messages_count": messages_count,
         },
     )
-    standalone_question = rewrite_question(
-        request.question,
+
+    # Rewrite inputs are derived from request.messages, but we defensively avoid
+    # passing the current question as "history" (self-in-history) because some
+    # clients include it as the last user message.
+    conversation_messages_payload = (
         [message.model_dump() for message in request.messages]
         if request.messages
-        else None,
+        else None
+    )
+    rewrite_messages_payload = conversation_messages_payload
+    rewrite_self_in_history_omitted = False
+    if rewrite_messages_payload:
+        last = rewrite_messages_payload[-1]
+        if (
+            isinstance(last, dict)
+            and str(last.get("role", "")).strip().lower() == "user"
+            and _normalize_ws(str(last.get("content", ""))).lower()
+            == _normalize_ws(request.question).lower()
+        ):
+            rewrite_messages_payload = rewrite_messages_payload[:-1]
+            rewrite_self_in_history_omitted = True
+
+    rewrite_history_count = len(rewrite_messages_payload) if rewrite_messages_payload else 0
+
+    # Rewrite input (diagnostics): last 2–4 user questions + original question.
+    # Truncate for bounded logs.
+    last_user_questions: list[str] = []
+    if rewrite_messages_payload:
+        for message in rewrite_messages_payload:
+            if str(message.get("role", "")).strip().lower() != "user":
+                continue
+            content = str(message.get("content", "") or "").strip()
+            if content:
+                last_user_questions.append(content)
+    last_user_questions = last_user_questions[-4:]
+
+    rewrite_input: dict = {
+        "original_question": _truncate_text(request.question, 500),
+        "last_user_questions": [_truncate_text(q, 500) for q in last_user_questions[-4:]],
+    }
+
+    standalone_question = rewrite_question(
+        request.question,
+        rewrite_messages_payload if rewrite_messages_payload else None,
+    )
+
+    rewrite_changed = (
+        _normalize_ws(standalone_question).lower() != _normalize_ws(request.question).lower()
+    )
+    rewrite_was_followup = bool(rewrite_changed)
+
+    # Root fix: superficial rewrites must NOT enable topic bias.
+    # We only append `Conversation topic: ...` to the retrieval query when the
+    # rewrite meaningfully USED history.
+    #
+    # Signal definition:
+    # - new_tokens = standalone_tokens - orig_tokens
+    # - rewrite_used_history = bool(new_tokens ∩ history_tokens)
+    orig_tokens = content_tokens(request.question)
+    standalone_tokens = content_tokens(standalone_question)
+    history_tokens: set[str] = set()
+    for q in last_user_questions:
+        history_tokens |= content_tokens(q)
+    new_tokens = standalone_tokens - orig_tokens
+    rewrite_used_history = bool(new_tokens & history_tokens)
+
+    use_topic_for_retrieval = bool(
+        incoming_last_topic
+        and messages_count > 0
+        and rewrite_used_history
+    )
+    conversation_topic = incoming_last_topic if use_topic_for_retrieval else None
+
+    logger.info(
+        "chat_start",
+        extra={
+            "session_id": session_id,
+            "conversation_id": conversation_id,
+            "messages_count": messages_count,
+            "incoming_last_topic": incoming_last_topic,
+            "topic_used_for_retrieval": use_topic_for_retrieval,
+            "rewrite_used_history": bool(rewrite_used_history),
+        },
+    )
+
+    logger.info(
+        "chat_rewrite",
+        extra={
+            "rewrite_input": rewrite_input,
+            "rewrite_was_followup": bool(rewrite_was_followup),
+            "rewrite_changed": bool(rewrite_changed),
+            "rewrite_used_history": bool(rewrite_used_history),
+            "rewrite_history_count": int(rewrite_history_count),
+            "rewrite_self_in_history_omitted": bool(rewrite_self_in_history_omitted),
+            "standalone_question": _truncate_text(standalone_question or "", 500),
+        },
     )
     logger.info(
         "chat_stage",
@@ -752,8 +823,8 @@ def chat(
     retry_attempted: bool = False
 
     if use_multi_category:
-        # IMPORTANT: route on the original user question (not rewritten).
-        routing_question = request.question
+        # IMPORTANT: route strictly on the standalone question.
+        routing_question = standalone_question
         try:
             routing = route_categories(routing_question)
         except Exception:
@@ -842,6 +913,7 @@ def chat(
         logger.info(
             "chat_routing",
             extra={
+                "routing_input_question": _truncate_text(standalone_question or "", 500),
                 "routing_categories": [
                     {
                         "routing_category": str(item.routing_category.value),
@@ -1229,7 +1301,10 @@ def chat(
         SourceRef(card_id=chunk.card_id, section=chunk.section) for chunk in used_chunks
     ]
 
-    resolved_topic = chunks[0].card_id if chunks else conversation_topic
+    # Topic propagation: advance the topic only when evidence was actually used.
+    # If there was a refusal / no used evidence, keep the incoming topic.
+    base_topic = incoming_last_topic or conversation_topic
+    resolved_topic = used_chunks[0].card_id if used_chunks else base_topic
 
     response = ChatResponse(
         routing_category=routing_category,
@@ -1257,7 +1332,12 @@ def chat(
                     budget=int(item.budget or 0),
                 )
                 for item in (routing.routing_categories if routing else [])
-            ]
+            ],
+            routing_input_question=standalone_question,
+            standalone_question=standalone_question,
+            rewrite_input=rewrite_input,
+            rewrite_was_followup=bool(rewrite_was_followup),
+            rewrite_used_history=bool(rewrite_used_history),
         )
         if (debug_retrieval and use_multi_category and routing is not None)
         else None,
@@ -1288,6 +1368,8 @@ def chat(
         client_ip = extract_client_ip(http_request, settings)
         user_agent = http_request.headers.get("user-agent")
 
+        # NOTE: interaction logging stores the raw client-provided messages window.
+        # The rewrite path may use a sanitized subset (`rewrite_messages_payload`).
         conversation_messages_payload = (
             [message.model_dump() for message in request.messages]
             if request.messages
@@ -1306,6 +1388,9 @@ def chat(
 
         if use_multi_category and routing is not None:
             routing_dict = {
+                "rewrite_input": rewrite_input,
+                "rewrite_was_followup": bool(rewrite_was_followup),
+                "routing_input_question": standalone_question,
                 "routing_categories": [
                     {
                         "routing_category": str(item.routing_category.value),
