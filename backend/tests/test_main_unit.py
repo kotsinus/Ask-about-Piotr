@@ -464,7 +464,9 @@ def test_chat_followup_whats_your_name_not_biased_by_prior_topic_regression(
     assert last_retrieve["conversation_topic"] is None
 
     # Response should use identity evidence.
-    assert response2.answer != "I do not have enough evidence in the provided materials."
+    assert (
+        response2.answer != "I do not have enough evidence in the provided materials."
+    )
     assert "Piotr" in response2.answer
     assert response2.evidence
     assert response2.evidence[0].card_id == "profile-identity"
@@ -836,7 +838,12 @@ def test_chat_followup_rewrite_routes_on_standalone_question_smoke(
     http_request = _make_http_request()
     chat_request = ChatRequest(
         question="what are they?",
-        messages=[ChatMessage(role="user", content="Which publications best represent your research focus?")],
+        messages=[
+            ChatMessage(
+                role="user",
+                content="Which publications best represent your research focus?",
+            )
+        ],
         context=ConversationContext(conversation_id="c1", last_topic=None),
     )
 
@@ -847,7 +854,9 @@ def test_chat_followup_rewrite_routes_on_standalone_question_smoke(
     )
 
     assert captured["routing_input"] == rewritten
-    assert response.routing_category == RoutingCategory.research_and_academic_credibility
+    assert (
+        response.routing_category == RoutingCategory.research_and_academic_credibility
+    )
 
 
 def test_chat_multi_category_enforces_coverage_after_synthesis_omits_category(

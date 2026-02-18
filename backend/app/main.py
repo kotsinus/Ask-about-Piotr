@@ -720,7 +720,9 @@ def chat(
             rewrite_messages_payload = rewrite_messages_payload[:-1]
             rewrite_self_in_history_omitted = True
 
-    rewrite_history_count = len(rewrite_messages_payload) if rewrite_messages_payload else 0
+    rewrite_history_count = (
+        len(rewrite_messages_payload) if rewrite_messages_payload else 0
+    )
 
     # Rewrite input (diagnostics): last 2–4 user questions + original question.
     # Truncate for bounded logs.
@@ -736,7 +738,9 @@ def chat(
 
     rewrite_input: dict = {
         "original_question": _truncate_text(request.question, 500),
-        "last_user_questions": [_truncate_text(q, 500) for q in last_user_questions[-4:]],
+        "last_user_questions": [
+            _truncate_text(q, 500) for q in last_user_questions[-4:]
+        ],
     }
 
     standalone_question = rewrite_question(
@@ -745,7 +749,8 @@ def chat(
     )
 
     rewrite_changed = (
-        _normalize_ws(standalone_question).lower() != _normalize_ws(request.question).lower()
+        _normalize_ws(standalone_question).lower()
+        != _normalize_ws(request.question).lower()
     )
     rewrite_was_followup = bool(rewrite_changed)
 
@@ -765,9 +770,7 @@ def chat(
     rewrite_used_history = bool(new_tokens & history_tokens)
 
     use_topic_for_retrieval = bool(
-        incoming_last_topic
-        and messages_count > 0
-        and rewrite_used_history
+        incoming_last_topic and messages_count > 0 and rewrite_used_history
     )
     conversation_topic = incoming_last_topic if use_topic_for_retrieval else None
 
@@ -913,7 +916,9 @@ def chat(
         logger.info(
             "chat_routing",
             extra={
-                "routing_input_question": _truncate_text(standalone_question or "", 500),
+                "routing_input_question": _truncate_text(
+                    standalone_question or "", 500
+                ),
                 "routing_categories": [
                     {
                         "routing_category": str(item.routing_category.value),

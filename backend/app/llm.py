@@ -183,7 +183,11 @@ def _is_ambiguous_standalone(
     # only when the candidate is extremely short (otherwise we risk false
     # positives for standalone short questions when the client sends a trimmed
     # message window).
-    if history_tokens and len(candidate_tokens) <= 2 and not (candidate_tokens & history_tokens):
+    if (
+        history_tokens
+        and len(candidate_tokens) <= 2
+        and not (candidate_tokens & history_tokens)
+    ):
         return True
 
     return False
@@ -331,7 +335,9 @@ def rewrite_question(question: str, messages: list[dict] | None = None) -> str:
             unrelated_introduced = {
                 tok
                 for tok in introduced
-                if not any(_is_token_derived(tok, allowed) for allowed in allowed_tokens)
+                if not any(
+                    _is_token_derived(tok, allowed) for allowed in allowed_tokens
+                )
             }
             if unrelated_introduced:
                 validation_failures.append("introduced_new_tokens")
