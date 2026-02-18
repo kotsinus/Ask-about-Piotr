@@ -430,7 +430,7 @@ def synthesize_answer(
         "- Conversation context may help interpret the question but is NOT evidence.\n"
         "- If evidence is insufficient, return the exact refusal message and nothing else.\n"
         "- If you use evidence, you MUST list which evidence items were used via their indices.\n"
-        "- When evidence says something is 'completed' or has a date in the past, do NOT say it is 'expected' or 'planned'.\n\n"
+        "- If evidence states a degree or certification is completed, you must state it as completed. You must not change its completion status or tense in any way.\n\n"
         "Style rules (important):\n"
         "- Write like a person speaking, not like a CV or an essay.\n"
         "- The 'answer' field MUST be facts-first.\n"
