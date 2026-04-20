@@ -106,22 +106,22 @@ flowchart LR
   %% Note: GitHub Mermaid does not support Mermaid C4 macros like C4Context.
   %% This is a C4-style diagram expressed as a standard flowchart for portability.
 
-  user[User\nAsks questions about Piotr]
+  user[User<br/>Asks questions about Piotr]
 
   subgraph s1[Ask-about-Piotr]
-    web[Web UI\nNext.js app]
-    api[RAG API\nFastAPI service]
-    db[(Knowledge and logs store\nPostgres with pgvector)]
+    web[Web UI<br/>Next.js app]
+    api[RAG API<br/>FastAPI service]
+    db[(Knowledge and logs store<br/>Postgres with pgvector)]
   end
 
-  llm[LLM and embeddings provider\nPluggable provider with OpenAI implementation]
-  geoip[GeoIP provider\nOptional external lookup]
+  llm[LLM and embeddings provider<br/>Pluggable provider with OpenAI implementation]
+  geoip[GeoIP provider<br/>Optional external lookup]
 
   user -->|Uses browser| web
-  web -->|HTTPS REST\nPOST /chat| api
-  api -->|SQL\nretrieval and logging| db
-  api -->|HTTPS API\nembeddings and chat completions| llm
-  api -->|HTTPS API\ncountry lookup when enabled| geoip
+  web -->|HTTPS REST<br/>POST /chat| api
+  api -->|SQL<br/>retrieval and logging| db
+  api -->|HTTPS API<br/>embeddings and chat completions| llm
+  api -->|HTTPS API<br/>country lookup when enabled| geoip
 ```
 
 ### C4 Container
@@ -131,24 +131,24 @@ flowchart LR
   %% Note: GitHub Mermaid does not support Mermaid C4 macros like C4Container.
   %% This is a C4-style diagram expressed as a standard flowchart for portability.
 
-  user[User\nBrowser client]
+  user[User<br/>Browser client]
 
   subgraph s1[Ask-about-Piotr]
-    frontend[Frontend\nNext.js 16\nRenders chat UI and calls backend]
-    backend[Backend API\nFastAPI on Uvicorn\nOrchestrates rewrite routing retrieval synthesis formatting logging]
-    postgres[(Database\nPostgres 18 with pgvector\nStores knowledge_chunks and interaction_logs)]
-    knowledge[Knowledge base\nMarkdown files on disk\nSource of truth ingested into pgvector]
+    frontend[Frontend<br/>Next.js 16<br/>Renders chat UI and calls backend]
+    backend[Backend API<br/>FastAPI on Uvicorn<br/>Orchestrates rewrite routing retrieval synthesis formatting logging]
+    postgres[(Database<br/>Postgres 18 with pgvector<br/>Stores knowledge_chunks and interaction_logs)]
+    knowledge[Knowledge base<br/>Markdown files on disk<br/>Source of truth ingested into pgvector]
   end
 
-  provider[External model provider\nOpenAI implementation in repo\nPluggable design target]
-  geoip[GeoIP provider\nOptional]
+  provider[External model provider<br/>OpenAI implementation in repo<br/>Pluggable design target]
+  geoip[GeoIP provider<br/>Optional]
 
   user -->|Uses| frontend
-  frontend -->|HTTP\nPOST /chat with cookie session| backend
-  backend -->|SQL\nsimilarity search and best effort logging| postgres
-  backend -->|HTTPS\nembeddings and chat completions| provider
-  backend -->|HTTPS\ncountry lookup| geoip
-  knowledge -->|Volume mount or local filesystem\nread only for runtime| backend
+  frontend -->|HTTP<br/>POST /chat with cookie session| backend
+  backend -->|SQL<br/>similarity search and best effort logging| postgres
+  backend -->|HTTPS<br/>embeddings and chat completions| provider
+  backend -->|HTTPS<br/>country lookup| geoip
+  knowledge -->|Volume mount or local filesystem<br/>read only for runtime| backend
 ```
 
 ### C4 Component — backend
@@ -161,15 +161,15 @@ flowchart LR
   %% This is a C4-style diagram expressed as a standard flowchart for portability.
 
   subgraph api[Backend FastAPI app]
-    entry[API endpoints and middleware\nFastAPI\nRoutes /healthz and /chat and request middleware]
-    cfg[Runtime configuration\nPython module\nReads env vars and enforces required settings]
-    priv[Privacy helpers\nPython module\nExtracts client IP with trusted proxy model and anonymizes]
-    obs[Request ID context\nPython module\nContextvar based request id propagation]
-    logs[Interaction logging\nPython module\nBest effort write to Postgres via SQLAlchemy]
-    retr[Retrieval\nPython module\npgvector similarity search using psycopg]
-    embed[Embeddings provider\nPython module\nProvider interface with OpenAI implementation]
-    synth[Synthesis and routing\nPython module\nCategory routing and grounded answer synthesis]
-    geo[GeoIP lookup\nPython module\nOptional country lookup]
+    entry[API endpoints and middleware<br/>FastAPI<br/>Routes /healthz and /chat and request middleware]
+    cfg[Runtime configuration<br/>Python module<br/>Reads env vars and enforces required settings]
+    priv[Privacy helpers<br/>Python module<br/>Extracts client IP with trusted proxy model and anonymizes]
+    obs[Request ID context<br/>Python module<br/>Contextvar based request id propagation]
+    logs[Interaction logging<br/>Python module<br/>Best effort write to Postgres via SQLAlchemy]
+    retr[Retrieval<br/>Python module<br/>pgvector similarity search using psycopg]
+    embed[Embeddings provider<br/>Python module<br/>Provider interface with OpenAI implementation]
+    synth[Synthesis and routing<br/>Python module<br/>Category routing and grounded answer synthesis]
+    geo[GeoIP lookup<br/>Python module<br/>Optional country lookup]
   end
 
   entry -->|Reads settings| cfg
