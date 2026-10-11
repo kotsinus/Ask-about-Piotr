@@ -8,7 +8,6 @@ experience
 Teaching and academic collaboration require communicating complex topics clearly and grounding theory in practical exercises. For software and AI, the challenge is to connect algorithms and data structures to real engineering constraints.
 
 # My role
-Context:
 - Organization: Polish-Japanese Academy of Information Technology
 - Role: Assistant / Adjunct Professor
 - Timeframe: 1996–2009
@@ -19,7 +18,7 @@ I served as assistant/adjunct professor at the Polish-Japanese Academy of Inform
 I developed course materials, taught practical labs, and mentored students through applied problem-solving. This experience shaped how I explain technical concepts to mixed audiences, including non-specialists and cross-functional stakeholders.
 
 # Scale and impact
-The impact is sustained ability to communicate rigorously and mentor effectively, which carries into leadership and onboarding practices in industry. It also aligns with a long publication record and participation in multiple research projects and grants.
+This experience strengthened my ability to communicate complex technical topics and mentor students. It also aligns with a long publication record and participation in multiple research projects and grants.
 
 # Tech stack
 Coursework covered AI and data mining fundamentals, algorithms, and systems programming in C++ and Java. The work emphasized reproducible reasoning and clear problem decomposition.

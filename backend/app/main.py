@@ -669,6 +669,67 @@ def chat(
                 out.add(t)
         return out
 
+    def _token_jaccard(a: set[str], b: set[str]) -> float:
+        if not a and not b:
+            return 1.0
+        union = a | b
+        if not union:
+            return 0.0
+        return len(a & b) / len(union)
+
+    def _rewrite_drifted_from_short_followup(
+        original_question: str,
+        rewritten_question: str,
+        history_questions: list[str],
+    ) -> bool:
+        """Language-agnostic guardrail for short follow-up rewrite drift.
+
+        Reject rewrites that:
+        - strongly diverge from the original short question, and
+        - mostly introduce tokens from previous turns (topic drift).
+        """
+
+        orig_tokens = content_tokens(original_question)
+        rewritten_tokens = content_tokens(rewritten_question)
+        history_tokens: set[str] = set()
+        for q in history_questions:
+            history_tokens |= content_tokens(q)
+
+        if not rewritten_tokens:
+            return False
+
+        original_is_short = (
+            len(_normalize_ws(original_question)) <= 80 or len(orig_tokens) <= 4
+        )
+        if not original_is_short:
+            return False
+
+        overlap_with_original = _token_jaccard(orig_tokens, rewritten_tokens)
+        new_tokens = rewritten_tokens - orig_tokens
+        if not new_tokens:
+            return False
+
+        # Strong language-agnostic divergence signal for extremely short prompts:
+        # if the rewrite is much longer and shares almost nothing with original,
+        # treat it as likely intent drift.
+        if len(orig_tokens) <= 2 and len(rewritten_tokens) >= 6:
+            if overlap_with_original < 0.15:
+                return True
+
+        if not history_tokens:
+            return False
+
+        introduced_from_history_count = len(new_tokens & history_tokens)
+        introduced_from_history_ratio = introduced_from_history_count / len(new_tokens)
+        rewrite_expands_scope = len(rewritten_tokens) >= (len(orig_tokens) + 3)
+
+        return (
+            overlap_with_original < 0.35
+            and rewrite_expands_scope
+            and introduced_from_history_count >= 1
+            and (introduced_from_history_ratio >= 0.2 or len(orig_tokens) <= 2)
+        )
+
     settings = get_settings()
     request_at = datetime.now(UTC)
     start = time.perf_counter()
@@ -743,10 +804,27 @@ def chat(
         ],
     }
 
-    standalone_question = rewrite_question(
+    rewritten_question = rewrite_question(
         request.question,
         rewrite_messages_payload if rewrite_messages_payload else None,
     )
+    standalone_question = rewritten_question
+
+    # Language-agnostic guardrail: reject large rewrite drift for short follow-ups
+    # when the rewrite mostly pulls in previous-topic tokens.
+    if _rewrite_drifted_from_short_followup(
+        request.question,
+        rewritten_question,
+        last_user_questions,
+    ):
+        standalone_question = request.question
+        logger.info(
+            "chat_rewrite_guardrail_intent_preserved",
+            extra={
+                "original_question": _truncate_text(request.question, 200),
+                "rewritten_question": _truncate_text(rewritten_question, 200),
+            },
+        )
 
     rewrite_changed = (
         _normalize_ws(standalone_question).lower()

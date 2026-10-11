@@ -309,18 +309,18 @@ def test_chat_retrieval_topic_usage_requires_rewrite_change(
     assert captured["conversation_topic"] == expected
 
 
-def test_chat_followup_whats_your_name_not_biased_by_prior_topic_regression(
+def test_chat_followup_short_non_english_question_preserves_intent_regression(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Regression: short standalone question must not be biased by last_topic.
+    """Regression: short follow-up in any language must not drift to prior topic.
 
     Scenario:
     - Turn 1: unrelated question sets last_topic.
-    - Turn 2: "What's your name?" comes with last_topic and history.
+    - Turn 2: a short non-English follow-up comes with last_topic and history.
 
     Expected:
     - Retrieval does NOT receive conversation_topic (topic bias prevented).
-    - Response uses identity evidence (profile-identity) and is not a refusal.
+    - Response uses short-question evidence and is not a refusal.
     - rewrite_question() does not receive the current question duplicated as the
       last user message (self-in-history sanitization).
     """
@@ -329,9 +329,10 @@ def test_chat_followup_whats_your_name_not_biased_by_prior_topic_regression(
 
     def _rewrite(q: str, messages=None):
         rewrite_calls.append({"question": q, "messages": messages})
-        # Superficial rewrite (contraction expansion) must NOT enable topic bias.
-        if q.strip() == "What's your name?":
-            return "What is your name?"
+        # Regression shape: short follow-up is incorrectly rewritten to prior-topic
+        # publications intent; guardrail should reject this drift.
+        if q.strip() == "A on?":
+            return "Jakie są tytuły twoich trzech najważniejszych publikacji?"
         return q
 
     monkeypatch.setattr("app.main.rewrite_question", _rewrite)
@@ -344,8 +345,7 @@ def test_chat_followup_whats_your_name_not_biased_by_prior_topic_regression(
         retrieved_calls.append(
             {"question": question, "conversation_topic": conversation_topic}
         )
-        q = (question or "").lower()
-        if "name" in q:
+        if (question or "").strip().lower() == "a on?":
             if conversation_topic:
                 return [
                     RetrievedChunk(
@@ -359,11 +359,11 @@ def test_chat_followup_whats_your_name_not_biased_by_prior_topic_regression(
                 ]
             return [
                 RetrievedChunk(
-                    card_id="profile-identity",
+                    card_id="profile-short-qa",
                     card_category="profile",
                     section="Overview",
                     source_url=None,
-                    content="My name is Piotr Synak.",
+                    content="Krótka odpowiedź: to pytanie dotyczy tożsamości.",
                     distance=0.05,
                 )
             ]
@@ -438,16 +438,16 @@ def test_chat_followup_whats_your_name_not_biased_by_prior_topic_regression(
     assert response1.context is not None
     assert response1.context.last_topic == "some-unrelated-card"
 
-    # Turn 2: ask for name with last_topic present and history. Client includes
+    # Turn 2: short follow-up with last_topic present and history. Client includes
     # the current question as the last user message (self-in-history).
     response2 = chat(
         http_request=http_request,
         request=ChatRequest(
-            question="What's your name?",
+            question="A on?",
             messages=[
                 ChatMessage(role="user", content="Tell me about something unrelated."),
                 ChatMessage(role="assistant", content="Unrelated evidence."),
-                ChatMessage(role="user", content="What's your name?"),
+                ChatMessage(role="user", content="A on?"),
             ],
             context=ConversationContext(
                 conversation_id="c1",
@@ -460,16 +460,16 @@ def test_chat_followup_whats_your_name_not_biased_by_prior_topic_regression(
     # Retrieval should NOT be topic-biased.
     assert retrieved_calls, "Expected retrieve() to be called"
     last_retrieve = retrieved_calls[-1]
-    assert last_retrieve["question"].lower().startswith("what")
+    assert last_retrieve["question"] == "A on?"
     assert last_retrieve["conversation_topic"] is None
 
-    # Response should use identity evidence.
+    # Response should use short-question evidence.
     assert (
         response2.answer != "I do not have enough evidence in the provided materials."
     )
-    assert "Piotr" in response2.answer
+    assert "tożsamości" in response2.answer
     assert response2.evidence
-    assert response2.evidence[0].card_id == "profile-identity"
+    assert response2.evidence[0].card_id == "profile-short-qa"
 
     # rewrite_question should not see the current question duplicated as history.
     assert rewrite_calls, "Expected rewrite_question() to be called"
@@ -478,8 +478,91 @@ def test_chat_followup_whats_your_name_not_biased_by_prior_topic_regression(
     assert not (
         passed_messages
         and str(passed_messages[-1].get("role", "")).lower() == "user"
-        and str(passed_messages[-1].get("content", "")).strip() == "What's your name?"
+        and str(passed_messages[-1].get("content", "")).strip() == "A on?"
     )
+
+
+def test_chat_publications_query_still_uses_publications_intent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Guardrail must not interfere with normal publications flow."""
+
+    captured: dict[str, Any] = {}
+
+    monkeypatch.setattr(
+        "app.main.rewrite_question",
+        lambda q, messages=None: "What are the titles of your three most important publications?",
+    )
+
+    def _route_category(q: str):
+        captured["routing_input"] = q
+        return RoutingCategory.research_and_academic_credibility
+
+    def _retrieve(
+        question: str, limit: int = 25, conversation_topic: str | None = None
+    ):
+        captured["retrieve_question"] = question
+        return [
+            RetrievedChunk(
+                card_id="research-key-publications",
+                card_category="research",
+                section="Publications",
+                source_url=None,
+                content="Key publications include A, B, and C.",
+                distance=0.05,
+            )
+        ]
+
+    monkeypatch.setattr("app.main.route_category", _route_category)
+    monkeypatch.setattr("app.main.retrieve", _retrieve)
+    monkeypatch.setattr(
+        "app.main.synthesize_answer",
+        lambda *args, **kwargs: SynthesisResult(
+            answer="Top publications are A, B, and C.",
+            why_this_matters="ok",
+            confidence=Confidence.high,
+            confidence_reason=None,
+            used_chunk_indices=[0],
+        ),
+    )
+    monkeypatch.setattr(
+        "app.main.get_settings",
+        lambda: SimpleNamespace(
+            router_model="router",
+            synthesis_model="synth",
+            synthesis_temperature=0.1,
+            embeddings_provider="stub",
+            embeddings_model="stub",
+            ip_hash_salt="salt",
+            interaction_log_include_llm_context=True,
+            multi_category_retrieval_enabled=False,
+            multi_category_rollout_percent=0,
+        ),
+    )
+    monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
+    monkeypatch.setattr("app.main.write_interaction_log", lambda *a, **k: None)
+    monkeypatch.setattr("app.main.get_request_id", lambda: "req-1")
+
+    response = chat(
+        http_request=_make_http_request(),
+        request=ChatRequest(
+            question="What are the titles of your three most important publications?",
+            messages=[],
+            context=ConversationContext(conversation_id="c1", last_topic=None),
+        ),
+        background_tasks=BackgroundTasks(),
+    )
+
+    assert (
+        captured["routing_input"]
+        == "What are the titles of your three most important publications?"
+    )
+    assert (
+        captured["retrieve_question"]
+        == "What are the titles of your three most important publications?"
+    )
+    assert response.routing_category == RoutingCategory.research_and_academic_credibility
+    assert response.answer == "Top publications are A, B, and C."
 
 
 def test_chat_swallow_background_task_scheduling_failure(
