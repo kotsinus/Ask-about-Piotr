@@ -163,9 +163,7 @@ jobs:
             ...laws.map((law) => '- ' + law.sourceId + ': ' + (law.sourceRef || '')),
           ];
           fs.mkdirSync(path.dirname(promptPath), { recursive: true });
-          fs.writeFileSync(promptPath, lines.join('
-') + '
-');
+          fs.writeFileSync(promptPath, lines.join('\n') + '\n');
           NODE
 
       - name: Run configured Judge agent setup
@@ -230,8 +228,7 @@ jobs:
             if (typeof verdict.rationale !== 'string' || verdict.rationale.trim() === '') errors.push('missing rationale for ' + (id || index));
           }
           for (const expectedId of expectedIds) if (!seen.has(expectedId)) errors.push('missing verdict for ' + expectedId);
-          if (errors.length) { console.error(errors.map((e) => '- ' + e).join('
-')); process.exit(1); }
+          if (errors.length) { console.error(errors.map((e) => '- ' + e).join('\n')); process.exit(1); }
           console.log('Validated ' + verdicts.length + ' Judge verdicts');
           NODE
 
@@ -248,20 +245,16 @@ jobs:
             counts.set(key, (counts.get(key) || 0) + 1);
           }
           const actionable = verdicts.filter((verdict) => ['VIOLATION','NEW-DECISION','MODEL-GAP'].includes(verdict.classification) || ['violated','cannot-judge','orphan'].includes(verdict.result));
-          console.log('## Decreen Judge PR Run
-');
-          console.log('### Verdict Counts
-');
+          console.log('## Decreen Judge PR Run\n');
+          console.log('### Verdict Counts\n');
           for (const [key, value] of [...counts.entries()].sort()) console.log('- ' + key + ': ' + value);
-          console.log('
-### Actionable Findings
-');
+          console.log('\n### Actionable Findings\n');
           if (actionable.length === 0) console.log('- none');
           else {
             console.log('| Source | Classification | Result | Rationale |');
             console.log('| --- | --- | --- | --- |');
             for (const verdict of actionable.slice(0, 20)) {
-              const rationale = String(verdict.rationale || '').replace(/s+/g, ' ').replace(/|/g, '\|');
+              const rationale = String(verdict.rationale || '').replace(/\s+/g, ' ').replace(/\|/g, '\\|');
               console.log('| ' + (verdict.sourceId || verdict.invariantId || 'unknown') + ' | ' + (verdict.classification || 'unknown') + ' | ' + (verdict.result || 'unknown') + ' | ' + rationale.slice(0, 500) + ' |');
             }
           }
