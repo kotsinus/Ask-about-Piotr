@@ -1,0 +1,1323 @@
+{
+  "kind": "decreen.invariants-index.v1",
+  "runId": "2026-10-12T17-16-49-bootstrap",
+  "inventoryRunId": "26624350-517a-473e-8d7d-48de5ee69238",
+  "corpusRef": ".decreen/analysis/doctrine-corpus.md",
+  "indexHeadCommit": "78fcb9977729e94a05d7611d3b41ce8fb9200695",
+  "assessmentRunId": "26624350-517a-473e-8d7d-48de5ee69238-code-assessment",
+  "assessmentVerifiedAtCommit": "78fcb9977729e94a05d7611d3b41ce8fb9200695",
+  "assessmentCompatibility": "ok",
+  "entries": [
+    {
+      "sourceId": "IMPORT-readme-line-16",
+      "sourceRef": "README.md#core-guarantees",
+      "tier": "scoped",
+      "territory": [
+        "backend/db/init.sql",
+        "backend/app/db.py",
+        "backend/app/models.py",
+        "backend/scripts/ingest_cards.py",
+        "frontend/src/features/diagrams/**/Node.js",
+        "frontend/src/features/diagrams/**/Next.js"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "README.md",
+          "status": "code_refs",
+          "fileCount": 6,
+          "symbolCount": 0,
+          "pathCount": 6
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:grounded-rag-answer-synthesis"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-readme-line-17",
+      "sourceRef": "README.md#core-guarantees",
+      "tier": "scoped",
+      "territory": [
+        "backend/db/init.sql",
+        "backend/app/db.py",
+        "backend/app/models.py",
+        "backend/scripts/ingest_cards.py",
+        "frontend/src/features/diagrams/**/Node.js",
+        "frontend/src/features/diagrams/**/Next.js"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "README.md",
+          "status": "code_refs",
+          "fileCount": 6,
+          "symbolCount": 0,
+          "pathCount": 6
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:knowledge-management-citation-contract"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-readme-line-18",
+      "sourceRef": "README.md#core-guarantees",
+      "tier": "scoped",
+      "territory": [
+        "backend/db/init.sql",
+        "backend/app/db.py",
+        "backend/app/models.py",
+        "backend/scripts/ingest_cards.py",
+        "frontend/src/features/diagrams/**/Node.js",
+        "frontend/src/features/diagrams/**/Next.js"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "README.md",
+          "status": "code_refs",
+          "fileCount": 6,
+          "symbolCount": 0,
+          "pathCount": 6
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:grounded-rag-answer-synthesis",
+        "capability:grounded-rag-quality-guardrails"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-readme-line-19",
+      "sourceRef": "README.md#core-guarantees",
+      "tier": "scoped",
+      "territory": [
+        "backend/db/init.sql",
+        "backend/app/db.py",
+        "backend/app/models.py",
+        "backend/scripts/ingest_cards.py",
+        "frontend/src/features/diagrams/**/Node.js",
+        "frontend/src/features/diagrams/**/Next.js"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "README.md",
+          "status": "code_refs",
+          "fileCount": 6,
+          "symbolCount": 0,
+          "pathCount": 6
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:grounded-rag-evidence-retrieval",
+        "capability:grounded-rag-answer-synthesis"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-readme-line-25",
+      "sourceRef": "README.md#what-this-system-is-not",
+      "tier": "scoped",
+      "territory": [
+        "backend/db/init.sql",
+        "backend/app/db.py",
+        "backend/app/models.py",
+        "backend/scripts/ingest_cards.py",
+        "frontend/src/features/diagrams/**/Node.js",
+        "frontend/src/features/diagrams/**/Next.js"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "README.md",
+          "status": "code_refs",
+          "fileCount": 6,
+          "symbolCount": 0,
+          "pathCount": 6
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:grounded-rag-answer-synthesis"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-readme-line-27",
+      "sourceRef": "README.md#what-this-system-is-not",
+      "tier": "scoped",
+      "territory": [
+        "backend/db/init.sql",
+        "backend/app/db.py",
+        "backend/app/models.py",
+        "backend/scripts/ingest_cards.py",
+        "frontend/src/features/diagrams/**/Node.js",
+        "frontend/src/features/diagrams/**/Next.js"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "README.md",
+          "status": "code_refs",
+          "fileCount": 6,
+          "symbolCount": 0,
+          "pathCount": 6
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:knowledge-management-curated-card-authoring",
+        "capability:grounded-rag-evidence-retrieval"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-readme-line-93",
+      "sourceRef": "README.md#interaction-logging-postgres",
+      "tier": "scoped",
+      "territory": [
+        "backend/db/init.sql",
+        "backend/app/db.py",
+        "backend/app/models.py",
+        "backend/scripts/ingest_cards.py",
+        "frontend/src/features/diagrams/**/Node.js",
+        "frontend/src/features/diagrams/**/Next.js"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "README.md",
+          "status": "code_refs",
+          "fileCount": 6,
+          "symbolCount": 0,
+          "pathCount": 6
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:privacy-observability-privacy-safe-metadata"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-readme-line-15",
+      "sourceRef": "knowledge/README.md#knowledge-card-schema-required",
+      "tier": "scoped",
+      "territory": [],
+      "territoryConfidence": "low",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "knowledge/README.md",
+          "status": "prose_only"
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:knowledge-management-curated-card-authoring"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-readme-line-30",
+      "sourceRef": "knowledge/README.md#content-rules",
+      "tier": "scoped",
+      "territory": [],
+      "territoryConfidence": "low",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "knowledge/README.md",
+          "status": "prose_only"
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:knowledge-management-curated-card-authoring"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-readme-line-36",
+      "sourceRef": "knowledge/README.md#chunking-and-metadata-model",
+      "tier": "scoped",
+      "territory": [],
+      "territoryConfidence": "low",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "knowledge/README.md",
+          "status": "prose_only"
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:knowledge-management-ingestion",
+        "capability:knowledge-management-citation-contract"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-decisions-line-7",
+      "sourceRef": "docs/DECISIONS.md#1-separate-retrieval-from-synthesis",
+      "tier": "scoped",
+      "territory": [
+        "backend/app/retrieval.py",
+        "backend/app/llm.py",
+        "backend/app/schemas.py",
+        "backend/app/main.py",
+        "backend/scripts/ingest_cards.py",
+        "backend/app/interaction_logging.py",
+        "backend/app/config.py",
+        "backend/app/quality.py"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "docs/DECISIONS.md",
+          "status": "code_refs",
+          "fileCount": 8,
+          "symbolCount": 0,
+          "pathCount": 8
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:grounded-rag-evidence-retrieval",
+        "capability:grounded-rag-answer-synthesis"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-decisions-line-15",
+      "sourceRef": "docs/DECISIONS.md#2-structured-schema-is-the-source-of-truth-not-free-text",
+      "tier": "scoped",
+      "territory": [
+        "backend/app/retrieval.py",
+        "backend/app/llm.py",
+        "backend/app/schemas.py",
+        "backend/app/main.py",
+        "backend/scripts/ingest_cards.py",
+        "backend/app/interaction_logging.py",
+        "backend/app/config.py",
+        "backend/app/quality.py"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "docs/DECISIONS.md",
+          "status": "code_refs",
+          "fileCount": 8,
+          "symbolCount": 0,
+          "pathCount": 8
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:knowledge-management-citation-contract",
+        "capability:answering-experience-answer-presentation"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-decisions-line-24",
+      "sourceRef": "docs/DECISIONS.md#3-conversation-history-is-untrusted",
+      "tier": "scoped",
+      "territory": [
+        "backend/app/retrieval.py",
+        "backend/app/llm.py",
+        "backend/app/schemas.py",
+        "backend/app/main.py",
+        "backend/scripts/ingest_cards.py",
+        "backend/app/interaction_logging.py",
+        "backend/app/config.py",
+        "backend/app/quality.py"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "docs/DECISIONS.md",
+          "status": "code_refs",
+          "fileCount": 8,
+          "symbolCount": 0,
+          "pathCount": 8
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:grounded-rag-question-routing-rewrite",
+        "capability:grounded-rag-answer-synthesis"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-decisions-line-31",
+      "sourceRef": "docs/DECISIONS.md#4-post-generation-guardrails-exist-as-deterministic-server-behavior",
+      "tier": "scoped",
+      "territory": [
+        "backend/app/retrieval.py",
+        "backend/app/llm.py",
+        "backend/app/schemas.py",
+        "backend/app/main.py",
+        "backend/scripts/ingest_cards.py",
+        "backend/app/interaction_logging.py",
+        "backend/app/config.py",
+        "backend/app/quality.py"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "docs/DECISIONS.md",
+          "status": "code_refs",
+          "fileCount": 8,
+          "symbolCount": 0,
+          "pathCount": 8
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:grounded-rag-quality-guardrails",
+        "capability:knowledge-management-citation-contract"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-decisions-line-47",
+      "sourceRef": "docs/DECISIONS.md#6-best-effort-interaction-logging-must-not-break-chat",
+      "tier": "scoped",
+      "territory": [
+        "backend/app/retrieval.py",
+        "backend/app/llm.py",
+        "backend/app/schemas.py",
+        "backend/app/main.py",
+        "backend/scripts/ingest_cards.py",
+        "backend/app/interaction_logging.py",
+        "backend/app/config.py",
+        "backend/app/quality.py"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "docs/DECISIONS.md",
+          "status": "code_refs",
+          "fileCount": 8,
+          "symbolCount": 0,
+          "pathCount": 8
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:privacy-observability-interaction-logging"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-decisions-line-59",
+      "sourceRef": "docs/DECISIONS.md#7-multi-category-routing-per-category-retrieval-is-flag-gated-and-budgeted-deterministically",
+      "tier": "scoped",
+      "territory": [
+        "backend/app/retrieval.py",
+        "backend/app/llm.py",
+        "backend/app/schemas.py",
+        "backend/app/main.py",
+        "backend/scripts/ingest_cards.py",
+        "backend/app/interaction_logging.py",
+        "backend/app/config.py",
+        "backend/app/quality.py"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "docs/DECISIONS.md",
+          "status": "code_refs",
+          "fileCount": 8,
+          "symbolCount": 0,
+          "pathCount": 8
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:grounded-rag-question-routing-rewrite"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-decisions-line-68",
+      "sourceRef": "docs/DECISIONS.md#8-multi-category-mechanisms-are-general-and-configurable",
+      "tier": "scoped",
+      "territory": [
+        "backend/app/retrieval.py",
+        "backend/app/llm.py",
+        "backend/app/schemas.py",
+        "backend/app/main.py",
+        "backend/scripts/ingest_cards.py",
+        "backend/app/interaction_logging.py",
+        "backend/app/config.py",
+        "backend/app/quality.py"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "docs/DECISIONS.md",
+          "status": "code_refs",
+          "fileCount": 8,
+          "symbolCount": 0,
+          "pathCount": 8
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:grounded-rag-question-routing-rewrite",
+        "capability:grounded-rag-evidence-retrieval"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-migrations-line-7",
+      "sourceRef": "docs/MIGRATIONS.md#goals",
+      "tier": "scoped",
+      "territory": [
+        "backend/db/init.sql",
+        "frontend/src/features/diagrams/**/init.sql",
+        "backend/scripts/run_migrations.py",
+        "backend/db/migrations/2026-02-10_add_interaction_log_context_columns.sql",
+        "frontend/src/features/diagrams/**/2026-03-01_add_user_feedback_table.sql",
+        "frontend/src/features/diagrams/**/run_migrations.py",
+        "frontend/src/features/diagrams/**/ensure_ingested.py",
+        "backend/scripts/ensure_ingested.py",
+        "backend/scripts/ingest_cards.py"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "docs/MIGRATIONS.md",
+          "status": "code_refs",
+          "fileCount": 9,
+          "symbolCount": 0,
+          "pathCount": 9
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:platform-operations-data-storage"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-migrations-line-75",
+      "sourceRef": "docs/MIGRATIONS.md#migration-file-conventions",
+      "tier": "scoped",
+      "territory": [
+        "backend/db/init.sql",
+        "frontend/src/features/diagrams/**/init.sql",
+        "backend/scripts/run_migrations.py",
+        "backend/db/migrations/2026-02-10_add_interaction_log_context_columns.sql",
+        "frontend/src/features/diagrams/**/2026-03-01_add_user_feedback_table.sql",
+        "frontend/src/features/diagrams/**/run_migrations.py",
+        "frontend/src/features/diagrams/**/ensure_ingested.py",
+        "backend/scripts/ensure_ingested.py",
+        "backend/scripts/ingest_cards.py"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "docs/MIGRATIONS.md",
+          "status": "code_refs",
+          "fileCount": 9,
+          "symbolCount": 0,
+          "pathCount": 9
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:platform-operations-data-storage"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-retention-line-13",
+      "sourceRef": "docs/RETENTION.md#knowledge-chunks-rag-evidence-store",
+      "tier": "scoped",
+      "territory": [
+        "backend/scripts/ingest_cards.py",
+        "backend/db/init.sql"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "docs/RETENTION.md",
+          "status": "code_refs",
+          "fileCount": 2,
+          "symbolCount": 0,
+          "pathCount": 2
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:knowledge-management-ingestion",
+        "capability:platform-operations-data-storage"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-retention-line-25",
+      "sourceRef": "docs/RETENTION.md#interaction-logs-privacy-first-operational-logs",
+      "tier": "scoped",
+      "territory": [
+        "backend/scripts/ingest_cards.py",
+        "backend/db/init.sql"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "docs/RETENTION.md",
+          "status": "code_refs",
+          "fileCount": 2,
+          "symbolCount": 0,
+          "pathCount": 2
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:privacy-observability-privacy-safe-metadata"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-retention-line-39",
+      "sourceRef": "docs/RETENTION.md#current-status",
+      "tier": "scoped",
+      "territory": [
+        "backend/scripts/ingest_cards.py",
+        "backend/db/init.sql"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "docs/RETENTION.md",
+          "status": "code_refs",
+          "fileCount": 2,
+          "symbolCount": 0,
+          "pathCount": 2
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:privacy-observability-interaction-logging"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-architecture-line-610",
+      "sourceRef": "docs/ARCHITECTURE.md#data-model-and-retention",
+      "tier": "scoped",
+      "territory": [
+        "frontend/src/features/diagrams/**/Next.js",
+        "backend/app/main.py",
+        "backend/app/config.py",
+        "backend/app/llm.py",
+        "backend/app/__init__.py",
+        "backend/app/retrieval.py",
+        "backend/app/embeddings.py",
+        "backend/app/privacy.py",
+        "backend/app/interaction_logging.py",
+        "backend/app/observability.py",
+        "backend/app/schemas.py",
+        "backend/db/init.sql",
+        "backend/app/models.py",
+        "backend/scripts/ingest_cards.py",
+        "backend/app/knowledge.py"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "docs/ARCHITECTURE.md",
+          "status": "code_refs",
+          "fileCount": 25,
+          "symbolCount": 0,
+          "pathCount": 15
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:grounded-rag-question-routing-rewrite",
+        "capability:knowledge-management-citation-contract"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-architecture-line-648",
+      "sourceRef": "docs/ARCHITECTURE.md#data-model-and-retention",
+      "tier": "scoped",
+      "territory": [
+        "frontend/src/features/diagrams/**/Next.js",
+        "backend/app/main.py",
+        "backend/app/config.py",
+        "backend/app/llm.py",
+        "backend/app/__init__.py",
+        "backend/app/retrieval.py",
+        "backend/app/embeddings.py",
+        "backend/app/privacy.py",
+        "backend/app/interaction_logging.py",
+        "backend/app/observability.py",
+        "backend/app/schemas.py",
+        "backend/db/init.sql",
+        "backend/app/models.py",
+        "backend/scripts/ingest_cards.py",
+        "backend/app/knowledge.py"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "docs/ARCHITECTURE.md",
+          "status": "code_refs",
+          "fileCount": 25,
+          "symbolCount": 0,
+          "pathCount": 15
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:grounded-rag-evidence-retrieval"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "partial",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-skills-programming-languages-scale-and-impact",
+      "sourceRef": "knowledge/cards/skills-programming-languages.md#scale-and-impact",
+      "tier": "scoped",
+      "territory": [],
+      "territoryConfidence": "low",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "knowledge/cards/skills-programming-languages.md",
+          "status": "prose_only"
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:trust-governance-security-boundaries"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-experience-rag-design-principles-my-role",
+      "sourceRef": "knowledge/cards/experience-rag-design-principles.md#my-role",
+      "tier": "scoped",
+      "territory": [],
+      "territoryConfidence": "low",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "knowledge/cards/experience-rag-design-principles.md",
+          "status": "prose_only"
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:grounded-rag"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-experience-rag-design-principles-key-decisions-and-trade-offs",
+      "sourceRef": "knowledge/cards/experience-rag-design-principles.md#key-decisions-and-trade-offs",
+      "tier": "scoped",
+      "territory": [],
+      "territoryConfidence": "low",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "knowledge/cards/experience-rag-design-principles.md",
+          "status": "prose_only"
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:grounded-rag-quality-guardrails",
+        "capability:trust-governance-security-boundaries"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-project-ask-about-piotr-demo-scope-problem",
+      "sourceRef": "knowledge/cards/project-ask-about-piotr-demo-scope.md#problem",
+      "tier": "scoped",
+      "territory": [
+        "frontend/src/features/diagrams/**/Next.js"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "knowledge/cards/project-ask-about-piotr-demo-scope.md",
+          "status": "code_refs",
+          "fileCount": 1,
+          "symbolCount": 0,
+          "pathCount": 1
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:grounded-rag-answer-synthesis",
+        "capability:knowledge-management-curated-card-authoring"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-project-ask-about-piotr-demo-scope-scale-and-impact",
+      "sourceRef": "knowledge/cards/project-ask-about-piotr-demo-scope.md#scale-and-impact",
+      "tier": "scoped",
+      "territory": [
+        "frontend/src/features/diagrams/**/Next.js"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "knowledge/cards/project-ask-about-piotr-demo-scope.md",
+          "status": "code_refs",
+          "fileCount": 1,
+          "symbolCount": 0,
+          "pathCount": 1
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:grounded-rag-quality-guardrails",
+        "capability:knowledge-management-citation-contract"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-project-ask-about-piotr-demo-scope-tech-stack",
+      "sourceRef": "knowledge/cards/project-ask-about-piotr-demo-scope.md#tech-stack",
+      "tier": "scoped",
+      "territory": [
+        "frontend/src/features/diagrams/**/Next.js"
+      ],
+      "territoryConfidence": "high",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "knowledge/cards/project-ask-about-piotr-demo-scope.md",
+          "status": "code_refs",
+          "fileCount": 1,
+          "symbolCount": 0,
+          "pathCount": 1
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:knowledge-management-ingestion",
+        "capability:platform-operations-data-storage"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "supported",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-project-ksa-bed-occupancy-forecasting-problem",
+      "sourceRef": "knowledge/cards/project-ksa-bed-occupancy-forecasting.md#problem",
+      "tier": "scoped",
+      "territory": [],
+      "territoryConfidence": "low",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "knowledge/cards/project-ksa-bed-occupancy-forecasting.md",
+          "status": "prose_only"
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:trust-governance-security-boundaries"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-experience-databases-and-data-modeling-problem",
+      "sourceRef": "knowledge/cards/experience-databases-and-data-modeling.md#problem",
+      "tier": "scoped",
+      "territory": [],
+      "territoryConfidence": "low",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "knowledge/cards/experience-databases-and-data-modeling.md",
+          "status": "prose_only"
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:platform-operations-data-storage"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-experience-deepseas-securityondemand-anomaly-detection-problem",
+      "sourceRef": "knowledge/cards/experience-deepseas-securityondemand-anomaly-detection.md#problem",
+      "tier": "scoped",
+      "territory": [],
+      "territoryConfidence": "low",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "knowledge/cards/experience-deepseas-securityondemand-anomaly-detection.md",
+          "status": "prose_only"
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:platform-operations",
+        "capability:privacy-observability"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-skills-core-key-decisions-and-trade-offs",
+      "sourceRef": "knowledge/cards/skills-core.md#key-decisions-and-trade-offs",
+      "tier": "scoped",
+      "territory": [],
+      "territoryConfidence": "low",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "knowledge/cards/skills-core.md",
+          "status": "prose_only"
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:knowledge-management-curated-card-authoring",
+        "capability:grounded-rag-answer-synthesis"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-project-hedge-fund-ai-analyst-problem",
+      "sourceRef": "knowledge/cards/project-hedge-fund-ai-analyst.md#problem",
+      "tier": "scoped",
+      "territory": [],
+      "territoryConfidence": "low",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "knowledge/cards/project-hedge-fund-ai-analyst.md",
+          "status": "prose_only"
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:trust-governance-security-boundaries",
+        "capability:privacy-observability"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    },
+    {
+      "sourceId": "IMPORT-profile-professional-summary-key-decisions-and-trade-offs",
+      "sourceRef": "knowledge/cards/profile-professional-summary.md#key-decisions-and-trade-offs",
+      "tier": "scoped",
+      "territory": [],
+      "territoryConfidence": "low",
+      "territoryEvidence": [
+        {
+          "type": "source_ref_doc",
+          "ref": "knowledge/cards/profile-professional-summary.md",
+          "status": "prose_only"
+        }
+      ],
+      "pinnedCapabilities": [
+        "capability:trust-governance-security-boundaries",
+        "capability:privacy-observability"
+      ],
+      "bits": {
+        "documented": "yes",
+        "codeSupported": "unknown",
+        "trueInCode": "unknown",
+        "observed": "no"
+      },
+      "observerPresent": "n/a",
+      "lawQuality": "ok",
+      "derivation": "harvested",
+      "assessmentStatus": "not-assessed",
+      "assessmentStale": true
+    }
+  ],
+  "summary": {
+    "total": 36,
+    "tier": {
+      "scoped": 36
+    },
+    "bits": {
+      "documented": {
+        "yes": 36
+      },
+      "codeSupported": {
+        "unknown": 36
+      },
+      "observed": {
+        "no": 36
+      }
+    },
+    "observerPresent": {
+      "n/a": 36
+    },
+    "globalWithSignals": 0,
+    "assessmentCompatibility": "ok",
+    "assessmentStale": 36,
+    "notAssessed": 18,
+    "territoryConfidence": {
+      "high": 24,
+      "low": 12
+    },
+    "territoryTwoHop": 24,
+    "territoryHintsUsed": 0,
+    "territoryLazyDiagramsGlob": 0,
+    "territoryEmpty": 12,
+    "brokenObserverLinks": 0
+  }
+}

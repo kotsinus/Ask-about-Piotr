@@ -1,0 +1,528 @@
+{
+  "kind": "decreen.invariants-inventory.v1-draft",
+  "runId": "26624350-517a-473e-8d7d-48de5ee69238",
+  "corpusRef": ".decreen/analysis/doctrine-corpus.md",
+  "capabilitiesRunId": "7a712f3b-fdf1-4ed4-81d0-6a596835997d",
+  "verifiedAtCommit": "78fcb9977729e94a05d7611d3b41ce8fb9200695",
+  "entries": [
+    {
+      "sourceId": null,
+      "sourceRef": "README.md#core-guarantees",
+      "statement": "No answers beyond provided sources",
+      "pinnedCapabilities": [
+        "capability:grounded-rag-answer-synthesis"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/tests"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "README.md#core-guarantees",
+      "statement": "Every answer includes citations",
+      "pinnedCapabilities": [
+        "capability:knowledge-management-citation-contract"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/tests"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "README.md#core-guarantees",
+      "statement": "If evidence is insufficient, the system explicitly refuses",
+      "pinnedCapabilities": [
+        "capability:grounded-rag-answer-synthesis",
+        "capability:grounded-rag-quality-guardrails"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/tests"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "README.md#core-guarantees",
+      "statement": "The pipeline is retrieval → synthesis with strict boundaries",
+      "pinnedCapabilities": [
+        "capability:grounded-rag-evidence-retrieval",
+        "capability:grounded-rag-answer-synthesis"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "README.md#what-this-system-is-not",
+      "statement": "This is not a general-purpose chatbot.",
+      "pinnedCapabilities": [
+        "capability:grounded-rag-answer-synthesis"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "README.md#what-this-system-is-not",
+      "statement": "It does not use the open internet or external search.",
+      "pinnedCapabilities": [
+        "capability:knowledge-management-curated-card-authoring",
+        "capability:grounded-rag-evidence-retrieval"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "README.md#interaction-logging-postgres",
+      "statement": "Failures to write the log **must not** break the request path.",
+      "pinnedCapabilities": [
+        "capability:privacy-observability-interaction-logging"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/tests"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "README.md#interaction-logging-postgres",
+      "statement": "Raw IP addresses are never persisted.",
+      "pinnedCapabilities": [
+        "capability:privacy-observability-privacy-safe-metadata"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/tests/test_privacy.py"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "knowledge/README.md#knowledge-card-schema-required",
+      "statement": "Each card is a standalone Markdown file that MUST include the following sections",
+      "pinnedCapabilities": [
+        "capability:knowledge-management-curated-card-authoring"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/app/knowledge.py"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "knowledge/README.md#content-rules",
+      "statement": "Do not invent metrics, timelines, or scope.",
+      "pinnedCapabilities": [
+        "capability:knowledge-management-curated-card-authoring"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "knowledge/README.md#chunking-and-metadata-model",
+      "statement": "When cards are chunked, each chunk MUST include these metadata fields:",
+      "pinnedCapabilities": [
+        "capability:knowledge-management-ingestion",
+        "capability:knowledge-management-citation-contract"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/app/knowledge.py"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "docs/DECISIONS.md#1-separate-retrieval-from-synthesis",
+      "statement": "Retrieval selects evidence; synthesis produces language.",
+      "pinnedCapabilities": [
+        "capability:grounded-rag-evidence-retrieval",
+        "capability:grounded-rag-answer-synthesis"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "docs/DECISIONS.md#2-structured-schema-is-the-source-of-truth-not-free-text",
+      "statement": "The response contract is a strict structured schema (`answer`, `evidence`, `sources`, `confidence`).",
+      "pinnedCapabilities": [
+        "capability:knowledge-management-citation-contract",
+        "capability:answering-experience-answer-presentation"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/app/schemas.py"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "docs/DECISIONS.md#3-conversation-history-is-untrusted",
+      "statement": "The system allows using history only to resolve ambiguity (rewrite), but does not treat history as evidence.",
+      "pinnedCapabilities": [
+        "capability:grounded-rag-question-routing-rewrite",
+        "capability:grounded-rag-answer-synthesis"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/app/llm.py"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "docs/DECISIONS.md#4-post-generation-guardrails-exist-as-deterministic-server-behavior",
+      "statement": "The backend, not the LLM, decides what is included in `evidence[]` and `sources[]`.",
+      "pinnedCapabilities": [
+        "capability:grounded-rag-quality-guardrails",
+        "capability:knowledge-management-citation-contract"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/app/main.py"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "docs/DECISIONS.md#6-best-effort-interaction-logging-must-not-break-chat",
+      "statement": "Operational logging is useful, but it must never turn into an availability risk.",
+      "pinnedCapabilities": [
+        "capability:privacy-observability-interaction-logging"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/app/interaction_logging.py"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "docs/DECISIONS.md#7-multi-category-routing-per-category-retrieval-is-flag-gated-and-budgeted-deterministically",
+      "statement": "Routing is computed from the **original** user question (not the rewritten question).",
+      "pinnedCapabilities": [
+        "capability:grounded-rag-question-routing-rewrite"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/tests"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "docs/DECISIONS.md#8-multi-category-mechanisms-are-general-and-configurable",
+      "statement": "All multi-category routing mechanisms are implemented as **general, configurable systems** rather than category-specific hardcoded logic.",
+      "pinnedCapabilities": [
+        "capability:grounded-rag-question-routing-rewrite",
+        "capability:grounded-rag-evidence-retrieval"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/app/config.py"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "docs/MIGRATIONS.md#goals",
+      "statement": "**No data loss** for existing production DB volumes.",
+      "pinnedCapabilities": [
+        "capability:platform-operations-data-storage"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "docs/MIGRATIONS.md#migration-file-conventions",
+      "statement": "Avoid `DROP COLUMN`, `TRUNCATE`, `DELETE`, etc. If you must do a destructive change, create a dedicated migration and document the operator steps.",
+      "pinnedCapabilities": [
+        "capability:platform-operations-data-storage"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "docs/RETENTION.md#knowledge-chunks-rag-evidence-store",
+      "statement": "Retention model: **rebuild by design**.",
+      "pinnedCapabilities": [
+        "capability:knowledge-management-ingestion",
+        "capability:platform-operations-data-storage"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/scripts/ingest_cards.py"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "docs/RETENTION.md#interaction-logs-privacy-first-operational-logs",
+      "statement": "Raw IP addresses are never stored; only privacy-minimized derived fields.",
+      "pinnedCapabilities": [
+        "capability:privacy-observability-privacy-safe-metadata"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/tests/test_privacy.py"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "docs/RETENTION.md#current-status",
+      "statement": "Operators should define a retention window and enforce it outside the app (e.g., scheduled job).",
+      "pinnedCapabilities": [
+        "capability:privacy-observability-interaction-logging"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "docs/ARCHITECTURE.md#data-model-and-retention",
+      "statement": "This system uses **two intentionally different category taxonomies** for different purposes. They must NOT be conflated.",
+      "pinnedCapabilities": [
+        "capability:grounded-rag-question-routing-rewrite",
+        "capability:knowledge-management-citation-contract"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/app/card_category.py; backend/app/routing_category.py"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "docs/ARCHITECTURE.md#data-model-and-retention",
+      "statement": "**Retrieval functions** in [`backend/app/retrieval.py`](backend/app/retrieval.py:1) must NOT filter by routing categories.",
+      "pinnedCapabilities": [
+        "capability:grounded-rag-evidence-retrieval"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/tests"
+      },
+      "tracksImplementation": true,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "knowledge/cards/skills-programming-languages.md#scale-and-impact",
+      "statement": "Languages reflect production systems and long-lived codebases, not only prototypes.",
+      "pinnedCapabilities": [
+        "capability:trust-governance-security-boundaries"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "knowledge/cards/experience-rag-design-principles.md#my-role",
+      "statement": "I design RAG and agentic systems with explicit retrieval layers, constrained generation, and clear fallbacks.",
+      "pinnedCapabilities": [
+        "capability:grounded-rag"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "knowledge/cards/experience-rag-design-principles.md#key-decisions-and-trade-offs",
+      "statement": "I avoid using LLMs where correctness must be exact and verification is hard (e.g., authorization decisions, financial calculations without explicit sources, or critical incident response without human review).",
+      "pinnedCapabilities": [
+        "capability:grounded-rag-quality-guardrails",
+        "capability:trust-governance-security-boundaries"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "knowledge/cards/project-ask-about-piotr-demo-scope.md#problem",
+      "statement": "This demo needs an AI assistant that answers only from curated, verifiable knowledge and refuses outside-scope questions gracefully.",
+      "pinnedCapabilities": [
+        "capability:grounded-rag-answer-synthesis",
+        "capability:knowledge-management-curated-card-authoring"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "backend/tests"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "knowledge/cards/project-ask-about-piotr-demo-scope.md#scale-and-impact",
+      "statement": "The impact is better evaluation: the 100 sample questions can be mapped to specific cards, and out-of-scope questions can reliably trigger refusal.",
+      "pinnedCapabilities": [
+        "capability:grounded-rag-quality-guardrails",
+        "capability:knowledge-management-citation-contract"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "knowledge/cards/project-ask-about-piotr-demo-scope.md#tech-stack",
+      "statement": "Knowledge base: Markdown cards mounted read-only and ingested into pgvector for retrieval.",
+      "pinnedCapabilities": [
+        "capability:knowledge-management-ingestion",
+        "capability:platform-operations-data-storage"
+      ],
+      "enforcement": {
+        "status": "watched",
+        "observer": "docker-compose.yml; backend/scripts/ingest_cards.py"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "knowledge/cards/project-ksa-bed-occupancy-forecasting.md#problem",
+      "statement": "Hospitals need reliable short-horizon capacity forecasts at ward level to support operational decision-making.",
+      "pinnedCapabilities": [
+        "capability:trust-governance-security-boundaries"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "knowledge/cards/experience-databases-and-data-modeling.md#problem",
+      "statement": "Data-intensive products must balance correctness, performance, and evolution as schemas and features change.",
+      "pinnedCapabilities": [
+        "capability:platform-operations-data-storage"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "knowledge/cards/experience-deepseas-securityondemand-anomaly-detection.md#problem",
+      "statement": "Systems must be fast, resilient, and cost-effective because latency and false alarms directly impact response workflows.",
+      "pinnedCapabilities": [
+        "capability:platform-operations",
+        "capability:privacy-observability"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "knowledge/cards/skills-core.md#key-decisions-and-trade-offs",
+      "statement": "Lists only what is explicitly stated in the source documents; does not add “nice-to-have” skills without evidence.",
+      "pinnedCapabilities": [
+        "capability:knowledge-management-curated-card-authoring",
+        "capability:grounded-rag-answer-synthesis"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "knowledge/cards/project-hedge-fund-ai-analyst.md#problem",
+      "statement": "A useful AI assistant must orchestrate many steps, track progress, and preserve auditability and tenant isolation.",
+      "pinnedCapabilities": [
+        "capability:trust-governance-security-boundaries",
+        "capability:privacy-observability"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    },
+    {
+      "sourceId": null,
+      "sourceRef": "knowledge/cards/profile-professional-summary.md#key-decisions-and-trade-offs",
+      "statement": "Focused on building systems that are reliable in production, measurable, and grounded in empirical evaluation rather than prototypes or research-only implementations.",
+      "pinnedCapabilities": [
+        "capability:trust-governance-security-boundaries",
+        "capability:privacy-observability"
+      ],
+      "enforcement": {
+        "status": "unwatched"
+      },
+      "tracksImplementation": false,
+      "derivation": "harvested"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "repo": {
+    "provider": "github",
+    "fullName": "kotsinus/Ask-about-Piotr",
+    "defaultBranch": "multi-category-routing-detection",
+    "remote": "https://github.com/kotsinus/Ask-about-Piotr.git"
+  },
+  "decreen": {
+    "workspaceId": "fcb96d52-9a4c-47c4-be2a-84bb7a19ef32",
+    "workspaceLifecycle": "persistent",
+    "workspaceUrl": "https://carto-prototype-qa.vercel.app/w/fcb96d52-9a4c-47c4-be2a-84bb7a19ef32/diagrams?view=facet%3Ac4",
+    "workspaceFocusUrl": null,
+    "expiresAt": null,
+    "claimAvailable": false,
+    "claimedAt": "2026-06-15T22:09:58.650Z"
+  },
+  "analysis": {
+    "lastCommitSha": "d6626840f1b66ced6e69a903d34d72676bcc5130",
+    "lastAnalyzedAt": "2026-06-15T22:07:15.421563+00:00",
+    "nodeCount": 21,
+    "edgeCount": 20,
+    "sourceEvidencePath": ".decreen/runs/latest.source-evidence.json"
+  }
+}
