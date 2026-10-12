@@ -49,3 +49,23 @@ Thumbs.db
 # Diagnostic scripts (temporary)
 scripts/
 
+
+.codegraphcontext/
+.cursor/
+.kilo/
+
+# Decreen local runtime state (@decreen/local setup)
+.decreen/manifest.json
+.decreen/deepen-runs/
+.decreen/cache/
+.decreen/tmp/
+.decreen/analysis/
+.decreen/*.local.json
+.decreen/.agent-install.json
+.decreen/runs/
+.decreen/inv-runs/
+.decreen/capabilities-runs/
+
+.claude/
+
+.claude/

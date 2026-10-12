@@ -1,0 +1,268 @@
+name: "Decreen: Judge PR"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: "Base ref/SHA for manual runs"
+        required: false
+        default: "main"
+      head_ref:
+        description: "Head ref/SHA for manual runs"
+        required: false
+        default: "HEAD"
+      trusted_execution:
+        description: "Allow configured agent for this manual run"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  judge-pr:
+    name: Judge PR
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      DECREEN_JUDGE_AGENT_COMMAND: ${{ vars.DECREEN_JUDGE_AGENT_COMMAND }}
+      DECREEN_JUDGE_AGENT_SETUP_COMMAND: ${{ vars.DECREEN_JUDGE_AGENT_SETUP_COMMAND }}
+      DECREEN_JUDGE_BUNDLE: .decreen/analysis/latest.judge-bundle.json
+      DECREEN_JUDGE_PROMPT: .decreen/analysis/latest.judge-agent-prompt.md
+      DECREEN_JUDGE_VERDICTS: .decreen/analysis/latest.judge-verdicts.json
+      HAS_NPM_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
+      HAS_DECREEN_JUDGE_AGENT_COMMAND: ${{ vars.DECREEN_JUDGE_AGENT_COMMAND != '' }}
+      HAS_DECREEN_JUDGE_AGENT_SETUP_COMMAND: ${{ vars.DECREEN_JUDGE_AGENT_SETUP_COMMAND != '' }}
+
+    steps:
+      - name: Resolve Judge execution mode
+        id: mode
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ] && [ "${{ inputs.trusted_execution }}" = "true" ]; then
+            echo "trusted=true" >> "$GITHUB_OUTPUT"
+            echo "reason=manual workflow_dispatch with trusted_execution" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "trusted=false" >> "$GITHUB_OUTPUT"
+            echo "reason=manual workflow_dispatch without trusted_execution" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.pull_request.head.repo.full_name }}" = "${{ github.repository }}" ]; then
+            echo "trusted=true" >> "$GITHUB_OUTPUT"
+            echo "reason=same-repository pull request" >> "$GITHUB_OUTPUT"
+          else
+            echo "trusted=false" >> "$GITHUB_OUTPUT"
+            echo "reason=fork pull request" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout trusted PR head
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Checkout manual head ref
+        if: github.event_name != 'pull_request'
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.head_ref }}
+          fetch-depth: 0
+
+      - name: Checkout fork PR merge for smoke mode
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Configure npm access for Decreen
+        if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true'
+        shell: bash
+        run: |
+          echo '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}' > ~/.npmrc
+
+      - name: Check Decreen npm access
+        if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN != 'true'
+        shell: bash
+        run: |
+          echo "::error title=Decreen npm access not configured::NPM_TOKEN is required to install @decreen/demo@pilot in GitHub Actions. Add a repository secret named NPM_TOKEN with npm access to the @decreen scope."
+          exit 1
+
+      - name: Write untrusted smoke verdicts without Decreen package
+        if: steps.mode.outputs.trusted != 'true'
+        shell: bash
+        run: |
+          mkdir -p .decreen/analysis
+          echo '{"laws":[],"metadata":{"mode":"smoke-no-decreen-package"}}' > "$DECREEN_JUDGE_BUNDLE"
+          echo '{"verdicts":[],"metadata":{"mode":"smoke-no-decreen-package","reason":"NPM_TOKEN is unavailable for untrusted execution."}}' > "$DECREEN_JUDGE_VERDICTS"
+
+      - name: Resolve Judge refs
+        if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true'
+        id: refs
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "base=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+            echo "head=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "base=${{ inputs.base_ref }}" >> "$GITHUB_OUTPUT"
+            echo "head=${{ inputs.head_ref }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare Decreen Judge bundle
+        if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true'
+        shell: bash
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          mkdir -p .decreen/analysis
+          npx -y @decreen/demo@pilot judge prepare \
+            --base "${{ steps.refs.outputs.base }}" \
+            --head "${{ steps.refs.outputs.head }}" \
+            --frozen-authority \
+            --bundle-out "$DECREEN_JUDGE_BUNDLE"
+
+      - name: Build Judge agent prompt
+        if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true'
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const bundlePath = process.env.DECREEN_JUDGE_BUNDLE;
+          const promptPath = process.env.DECREEN_JUDGE_PROMPT;
+          const verdictsPath = process.env.DECREEN_JUDGE_VERDICTS;
+          const bundle = JSON.parse(fs.readFileSync(bundlePath, 'utf8'));
+          const laws = Array.isArray(bundle.laws) ? bundle.laws : [];
+          const lines = [
+            '# Decreen Judge PR Task',
+            '',
+            'Read the prepared Judge bundle and write verdict JSON. Do not modify source files, the bundle, the index, or Git state.',
+            '',
+            'Bundle path: ' + bundlePath,
+            'Verdict output path: ' + verdictsPath,
+            '',
+            'Write JSON with shape: {"verdicts":[{"sourceId":"LAW-ID","result":"violated|touched|not-applicable|cannot-judge","classification":"VIOLATION|NEW-DECISION|MODEL-GAP|KNOWN-CONFORM","rationale":"...","evidence":[],"inspectedFiles":[]}]}',
+            '',
+            'Return exactly one verdict per bundle.laws[] entry.',
+            'Prefer MODEL-GAP/cannot-judge when evidence is insufficient.',
+            'Do not return KNOWN-CONFORM without affirmative evidence.',
+            '',
+            'Routed laws:',
+            ...laws.map((law) => '- ' + law.sourceId + ': ' + (law.sourceRef || '')),
+          ];
+          fs.mkdirSync(path.dirname(promptPath), { recursive: true });
+          fs.writeFileSync(promptPath, lines.join('
+') + '
+');
+          NODE
+
+      - name: Run configured Judge agent setup
+        if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND == 'true' && env.HAS_DECREEN_JUDGE_AGENT_SETUP_COMMAND == 'true'
+        shell: bash
+        env:
+          DECREEN_JUDGE_AGENT_TOKEN: ${{ secrets.DECREEN_JUDGE_AGENT_TOKEN }}
+        run: |
+          bash -lc "$DECREEN_JUDGE_AGENT_SETUP_COMMAND"
+
+      - name: Run configured Judge agent
+        if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND == 'true'
+        shell: bash
+        env:
+          DECREEN_JUDGE_AGENT_TOKEN: ${{ secrets.DECREEN_JUDGE_AGENT_TOKEN }}
+        run: |
+          bash -lc "$DECREEN_JUDGE_AGENT_COMMAND"
+
+      - name: Write smoke verdicts
+        if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND != 'true'
+        shell: bash
+        run: |
+          echo "Using smoke verdicts: ${{ steps.mode.outputs.reason }}"
+          node - <<'NODE'
+          const fs = require('fs');
+          const bundle = JSON.parse(fs.readFileSync(process.env.DECREEN_JUDGE_BUNDLE, 'utf8'));
+          const verdicts = (bundle.laws || []).map((law) => ({
+            sourceId: law.sourceId,
+            result: 'cannot-judge',
+            classification: 'MODEL-GAP',
+            rationale: 'No authenticated customer agent was configured in CI.',
+            evidence: [],
+            inspectedFiles: [],
+          }));
+          fs.writeFileSync(process.env.DECREEN_JUDGE_VERDICTS, JSON.stringify({ verdicts, metadata: { mode: 'smoke-no-agent' } }, null, 2));
+          NODE
+
+      - name: Note Judge agent not configured
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.mode.outputs.trusted == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND != 'true'
+        shell: bash
+        run: |
+          echo "::warning title=Decreen Judge agent not configured::Real agent verdicts were skipped because DECREEN_JUDGE_AGENT_COMMAND is missing. This run produced smoke MODEL-GAP/cannot-judge verdicts only. Configure DECREEN_JUDGE_AGENT_COMMAND and any agent-specific secret/setup needed by that command to enable real Judge analysis."
+
+      - name: Validate Judge verdicts
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const bundle = JSON.parse(fs.readFileSync(process.env.DECREEN_JUDGE_BUNDLE, 'utf8'));
+          const payload = JSON.parse(fs.readFileSync(process.env.DECREEN_JUDGE_VERDICTS, 'utf8'));
+          const verdicts = Array.isArray(payload.verdicts) ? payload.verdicts : [];
+          const expectedIds = new Set((bundle.laws || []).map((law) => law.sourceId));
+          const seen = new Set();
+          const errors = [];
+          for (const [index, verdict] of verdicts.entries()) {
+            const id = verdict.sourceId || verdict.invariantId;
+            if (!id) errors.push('verdict[' + index + '] missing sourceId');
+            if (id && seen.has(id)) errors.push('duplicate verdict for ' + id);
+            if (id) seen.add(id);
+            if (id && expectedIds.size > 0 && !expectedIds.has(id)) errors.push('unknown sourceId ' + id);
+            if (!['violated','touched','not-applicable','cannot-judge','orphan'].includes(verdict.result)) errors.push('invalid result for ' + (id || index));
+            if (typeof verdict.rationale !== 'string' || verdict.rationale.trim() === '') errors.push('missing rationale for ' + (id || index));
+          }
+          for (const expectedId of expectedIds) if (!seen.has(expectedId)) errors.push('missing verdict for ' + expectedId);
+          if (errors.length) { console.error(errors.map((e) => '- ' + e).join('
+')); process.exit(1); }
+          console.log('Validated ' + verdicts.length + ' Judge verdicts');
+          NODE
+
+      - name: Show Judge summary
+        shell: bash
+        run: |
+          node - <<'NODE' | tee "$GITHUB_STEP_SUMMARY"
+          const fs = require('fs');
+          const payload = JSON.parse(fs.readFileSync(process.env.DECREEN_JUDGE_VERDICTS, 'utf8'));
+          const verdicts = Array.isArray(payload.verdicts) ? payload.verdicts : [];
+          const counts = new Map();
+          for (const verdict of verdicts) {
+            const key = verdict.classification || verdict.result || 'unknown';
+            counts.set(key, (counts.get(key) || 0) + 1);
+          }
+          const actionable = verdicts.filter((verdict) => ['VIOLATION','NEW-DECISION','MODEL-GAP'].includes(verdict.classification) || ['violated','cannot-judge','orphan'].includes(verdict.result));
+          console.log('## Decreen Judge PR Run
+');
+          console.log('### Verdict Counts
+');
+          for (const [key, value] of [...counts.entries()].sort()) console.log('- ' + key + ': ' + value);
+          console.log('
+### Actionable Findings
+');
+          if (actionable.length === 0) console.log('- none');
+          else {
+            console.log('| Source | Classification | Result | Rationale |');
+            console.log('| --- | --- | --- | --- |');
+            for (const verdict of actionable.slice(0, 20)) {
+              const rationale = String(verdict.rationale || '').replace(/s+/g, ' ').replace(/|/g, '\|');
+              console.log('| ' + (verdict.sourceId || verdict.invariantId || 'unknown') + ' | ' + (verdict.classification || 'unknown') + ' | ' + (verdict.result || 'unknown') + ' | ' + rationale.slice(0, 500) + ' |');
+            }
+          }
+          NODE
