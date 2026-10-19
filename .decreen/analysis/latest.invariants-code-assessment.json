@@ -1,0 +1,344 @@
+{
+    "kind":  "decreen.invariants-code-assessment.v1",
+    "runId":  "26624350-517a-473e-8d7d-48de5ee69238-code-assessment",
+    "inventoryRunId":  "26624350-517a-473e-8d7d-48de5ee69238",
+    "repository":  "https://github.com/kotsinus/Ask-about-Piotr.git",
+    "verifiedAtCommit":  "78fcb9977729e94a05d7611d3b41ce8fb9200695",
+    "verifiedAt":  "2026-10-12T17:07:23Z",
+    "workingTreeClean":  true,
+    "method":  "decreen-inv-phase2-phase5",
+    "entries":  [
+                    {
+                        "sourceId":  "IMPORT-readme-line-16",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/tests",
+                                             "kind":  "test",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-readme-line-17",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/tests",
+                                             "kind":  "test",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-readme-line-18",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/tests",
+                                             "kind":  "test",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-readme-line-19",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-readme-line-25",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-readme-line-27",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-readme-line-93",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/tests/test_privacy.py",
+                                             "kind":  "test",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-readme-line-15",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/app/knowledge.py",
+                                             "kind":  "implementation",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-readme-line-30",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-readme-line-36",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/app/knowledge.py",
+                                             "kind":  "implementation",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-decisions-line-7",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-decisions-line-15",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/app/schemas.py",
+                                             "kind":  "implementation",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-decisions-line-24",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/app/llm.py",
+                                             "kind":  "implementation",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-decisions-line-31",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/app/main.py",
+                                             "kind":  "implementation",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-decisions-line-47",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/app/interaction_logging.py",
+                                             "kind":  "implementation",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-decisions-line-59",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/tests",
+                                             "kind":  "test",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-decisions-line-68",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/app/config.py",
+                                             "kind":  "implementation",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-migrations-line-7",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-migrations-line-75",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-retention-line-13",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/scripts/ingest_cards.py",
+                                             "kind":  "implementation",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-retention-line-25",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/tests/test_privacy.py",
+                                             "kind":  "test",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-retention-line-39",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-architecture-line-610",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/app/card_category.py",
+                                             "kind":  "implementation",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-architecture-line-648",
+                        "assessment":  "partial",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/tests",
+                                             "kind":  "test",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-skills-programming-languages-scale-and-impact",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-experience-rag-design-principles-my-role",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-experience-rag-design-principles-key-decisions-and-trade-offs",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-project-ask-about-piotr-demo-scope-problem",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "backend/tests",
+                                             "kind":  "test",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-project-ask-about-piotr-demo-scope-scale-and-impact",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-project-ask-about-piotr-demo-scope-tech-stack",
+                        "assessment":  "supported",
+                        "scope":  "partial",
+                        "confidence":  "medium",
+                        "evidence":  [
+                                         {
+                                             "path":  "docker-compose.yml",
+                                             "kind":  "config",
+                                             "relation":  "supports",
+                                             "reason":  "Observer or implementation path cited by the harvested doctrine entry exists in the repository."
+                                         }
+                                     ]
+                    },
+                    {
+                        "sourceId":  "IMPORT-project-ksa-bed-occupancy-forecasting-problem",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-experience-databases-and-data-modeling-problem",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-experience-deepseas-securityondemand-anomaly-detection-problem",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-skills-core-key-decisions-and-trade-offs",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-project-hedge-fund-ai-analyst-problem",
+                        "assessment":  "not-assessed"
+                    },
+                    {
+                        "sourceId":  "IMPORT-profile-professional-summary-key-decisions-and-trade-offs",
+                        "assessment":  "not-assessed"
+                    }
+                ],
+    "summary":  {
+                    "supported":  17,
+                    "contradicted":  0,
+                    "partial":  1,
+                    "unknown":  0,
+                    "notAssessed":  18,
+                    "scopeFull":  0
+                }
+}

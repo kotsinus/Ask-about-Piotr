@@ -50,20 +50,22 @@ Thumbs.db
 scripts/
 
 
-# Decreen local runtime state (@decreen/local init)
+# Local code graph cache
+.codegraphcontext/
+
+# Local assistant configuration
+.cursor/
+.kilo/
+.claude/
+
+# Decreen local runtime state
 .decreen/manifest.json
 .decreen/deepen-runs/
 .decreen/cache/
 .decreen/tmp/
+.decreen/analysis/
 .decreen/*.local.json
 .decreen/.agent-install.json
 .decreen/runs/
-.codegraphcontext/
-
-.kilo/
-.cursor/
-
-# Decreen local runtime state (@decreen/local setup)
-
-.decreen/analysis/
 .decreen/inv-runs/
+.decreen/capabilities-runs/
