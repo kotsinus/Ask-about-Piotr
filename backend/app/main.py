@@ -709,6 +709,26 @@ def chat(
         if not new_tokens:
             return False
 
+        # Added context lowers Jaccard similarity even when no original intent
+        # tokens are lost. Do not mistake a history-grounded expansion for drift.
+        if (
+            orig_tokens
+            and orig_tokens <= rewritten_tokens
+            and new_tokens & history_tokens
+        ):
+            return False
+
+        # Referential follow-ups can replace every original token. Require a
+        # close match to one actual history question, not pooled topic fragments.
+        if re.fullmatch(
+            r"(?:what|which|who)\s+(?:are|is)\s+(?:they|those|these|it)\??",
+            _normalize_ws(original_question).lower(),
+        ) and any(
+            _token_jaccard(content_tokens(q), rewritten_tokens) >= 0.5
+            for q in history_questions
+        ):
+            return False
+
         # Strong language-agnostic divergence signal for extremely short prompts:
         # if the rewrite is much longer and shares almost nothing with original,
         # treat it as likely intent drift.

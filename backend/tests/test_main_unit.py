@@ -877,14 +877,51 @@ def test_chat_multi_category_empty_pinning_rules_no_change(
     assert calls, "Expected per-category retrieval calls"
 
 
+@pytest.mark.parametrize(
+    ("question", "history", "rewritten", "accepted"),
+    [
+        (
+            "what are they?",
+            "Which publications best represent your research focus?",
+            "Which publication titles best represent your research focus?",
+            True,
+        ),
+        (
+            "In what languages?",
+            "Can you program?",
+            "In what programming languages can Piotr program?",
+            True,
+        ),
+        (
+            "What languages?",
+            "Which publications best represent your research focus?",
+            "Which publication titles best represent your research focus?",
+            False,
+        ),
+        (
+            "what is it?",
+            "Can you program?",
+            "Which publication titles best represent your research focus?",
+            False,
+        ),
+        (
+            "In what languages?",
+            "Can you program?",
+            "Which programming projects has Piotr built?",
+            False,
+        ),
+    ],
+)
 def test_chat_followup_rewrite_routes_on_standalone_question_smoke(
     monkeypatch: pytest.MonkeyPatch,
+    question: str,
+    history: str,
+    rewritten: str,
+    accepted: bool,
 ) -> None:
-    """Smoke scenario: follow-up "what are they?" must route based on standalone question."""
+    """Grounded follow-ups reach routing, retrieval and synthesis; drift does not."""
 
     captured: dict[str, str] = {}
-
-    rewritten = "Which publication titles best represent your research focus?"
 
     monkeypatch.setattr("app.main.rewrite_question", lambda q, messages=None: rewritten)
 
@@ -893,16 +930,26 @@ def test_chat_followup_rewrite_routes_on_standalone_question_smoke(
         return RoutingCategory.research_and_academic_credibility
 
     monkeypatch.setattr("app.main.route_category", _route_category)
-    monkeypatch.setattr("app.main.retrieve", lambda *a, **k: [])
-    monkeypatch.setattr(
-        "app.main.synthesize_answer",
-        lambda *args, **kwargs: SynthesisResult(
+
+    def _retrieve(q: str, **kwargs):
+        captured["retrieve_question"] = q
+        return []
+
+    monkeypatch.setattr("app.main.retrieve", _retrieve)
+
+    def _synthesize(q: str, *args, **kwargs):
+        captured["synthesis_question"] = q
+        return SynthesisResult(
             answer="ok",
             why_this_matters="ok",
             confidence=Confidence.medium,
             confidence_reason=None,
             used_chunk_indices=[],
-        ),
+        )
+
+    monkeypatch.setattr(
+        "app.main.synthesize_answer",
+        _synthesize,
     )
     monkeypatch.setattr(
         "app.main.get_settings",
@@ -924,11 +971,11 @@ def test_chat_followup_rewrite_routes_on_standalone_question_smoke(
 
     http_request = _make_http_request()
     chat_request = ChatRequest(
-        question="what are they?",
+        question=question,
         messages=[
             ChatMessage(
                 role="user",
-                content="Which publications best represent your research focus?",
+                content=history,
             )
         ],
         context=ConversationContext(conversation_id="c1", last_topic=None),
@@ -940,7 +987,10 @@ def test_chat_followup_rewrite_routes_on_standalone_question_smoke(
         background_tasks=BackgroundTasks(),
     )
 
-    assert captured["routing_input"] == rewritten
+    expected_question = rewritten if accepted else question
+    assert captured["routing_input"] == expected_question
+    assert captured["retrieve_question"] == expected_question
+    assert captured["synthesis_question"] == expected_question
     assert (
         response.routing_category == RoutingCategory.research_and_academic_credibility
     )
