@@ -491,7 +491,9 @@ def test_chat_publications_query_still_uses_publications_intent(
 
     monkeypatch.setattr(
         "app.main.rewrite_question",
-        lambda q, messages=None: "What are the titles of your three most important publications?",
+        lambda q, messages=None: (
+            "What are the titles of your three most important publications?"
+        ),
     )
 
     def _route_category(q: str):
@@ -561,7 +563,9 @@ def test_chat_publications_query_still_uses_publications_intent(
         captured["retrieve_question"]
         == "What are the titles of your three most important publications?"
     )
-    assert response.routing_category == RoutingCategory.research_and_academic_credibility
+    assert (
+        response.routing_category == RoutingCategory.research_and_academic_credibility
+    )
     assert response.answer == "Top publications are A, B, and C."
 
 
