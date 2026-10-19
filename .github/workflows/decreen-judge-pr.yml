@@ -201,7 +201,7 @@ jobs:
           NODE
 
       - name: Note Judge agent not configured
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.mode.outputs.trusted == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND != 'true'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND != 'true'
         shell: bash
         run: |
           echo "::warning title=Decreen Judge agent not configured::Real agent verdicts were skipped because DECREEN_JUDGE_AGENT_COMMAND is missing. This run produced smoke MODEL-GAP/cannot-judge verdicts only. Configure DECREEN_JUDGE_AGENT_COMMAND and any agent-specific secret/setup needed by that command to enable real Judge analysis."
@@ -239,16 +239,24 @@ jobs:
           const payload = JSON.parse(fs.readFileSync(process.env.DECREEN_JUDGE_VERDICTS, 'utf8'));
           const verdicts = Array.isArray(payload.verdicts) ? payload.verdicts : [];
           const counts = new Map();
+          const mode = payload.metadata?.mode;
+          const smoke = mode === 'smoke-no-decreen-package' || mode === 'smoke-no-agent';
           for (const verdict of verdicts) {
             const key = verdict.classification || verdict.result || 'unknown';
             counts.set(key, (counts.get(key) || 0) + 1);
           }
           const actionable = verdicts.filter((verdict) => ['VIOLATION','NEW-DECISION','MODEL-GAP'].includes(verdict.classification) || ['violated','cannot-judge','orphan'].includes(verdict.result));
           console.log('## Decreen Judge PR Run\n');
+          if (smoke) {
+            console.log('Mode: ' + mode);
+            console.log('PR not analyzed. This successful smoke check validates workflow execution only; it is not a Judge approval.');
+            console.log('Reason: ' + (payload.metadata?.reason || (mode === 'smoke-no-agent' ? 'No Judge agent was configured.' : 'Decreen package access is unavailable.')));
+          }
           console.log('### Verdict Counts\n');
           for (const [key, value] of [...counts.entries()].sort()) console.log('- ' + key + ': ' + value);
           console.log('\n### Actionable Findings\n');
-          if (actionable.length === 0) console.log('- none');
+          if (smoke) console.log('- not analyzed');
+          else if (actionable.length === 0) console.log('- none');
           else {
             console.log('| Source | Classification | Result | Rationale |');
             console.log('| --- | --- | --- | --- |');
