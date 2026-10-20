@@ -134,6 +134,7 @@ jobs:
 
       - name: Build Judge agent prompt
         if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true'
+        id: bundle
         shell: bash
         run: |
           node - <<'NODE'
@@ -144,6 +145,15 @@ jobs:
           const verdictsPath = process.env.DECREEN_JUDGE_VERDICTS;
           const bundle = JSON.parse(fs.readFileSync(bundlePath, 'utf8'));
           const laws = Array.isArray(bundle.laws) ? bundle.laws : [];
+          if (bundle.authorityDiagnostics?.length) {
+            console.log('::warning title=Decreen Judge incomplete authority::' + bundle.authorityDiagnostics.length + ' routed candidates were excluded because source authority could not be verified. See the Judge summary.');
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'has_laws=' + (laws.length > 0) + '\n');
+          if (laws.length === 0) {
+            const reason = 'No laws were routed. Check baseline authority and routing before treating this PR as assessed.';
+            fs.writeFileSync(verdictsPath, JSON.stringify({ verdicts: [], metadata: { mode: 'no-routed-laws', reason } }, null, 2));
+            console.log('::warning title=Decreen Judge analysis skipped::' + reason + ' The agent was not invoked.');
+          }
           const lines = [
             '# Decreen Judge PR Task',
             '',
@@ -157,6 +167,7 @@ jobs:
             'Return exactly one verdict per bundle.laws[] entry.',
             'Prefer MODEL-GAP/cannot-judge when evidence is insufficient.',
             'Do not return KNOWN-CONFORM without affirmative evidence.',
+            'Imported-source excerpts are not newly ratified doctrine. Respect their original subject and scope; do not turn biography, examples, or historical project descriptions into application obligations. Use MODEL-GAP/cannot-judge when normative status or applicability is unclear.',
             '',
             'Routed laws:',
             ...laws.map((law) => '- ' + law.sourceId + ': ' + (law.sourceRef || '')),
@@ -166,7 +177,7 @@ jobs:
           NODE
 
       - name: Run configured Judge agent setup
-        if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND == 'true' && env.HAS_DECREEN_JUDGE_AGENT_SETUP_COMMAND == 'true'
+        if: steps.bundle.outputs.has_laws == 'true' && steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND == 'true' && env.HAS_DECREEN_JUDGE_AGENT_SETUP_COMMAND == 'true'
         shell: bash
         env:
           DECREEN_JUDGE_AGENT_TOKEN: ${{ secrets.DECREEN_JUDGE_AGENT_TOKEN }}
@@ -174,7 +185,7 @@ jobs:
           bash -lc "$DECREEN_JUDGE_AGENT_SETUP_COMMAND"
 
       - name: Run configured Judge agent
-        if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND == 'true'
+        if: steps.bundle.outputs.has_laws == 'true' && steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND == 'true'
         shell: bash
         env:
           DECREEN_JUDGE_AGENT_TOKEN: ${{ secrets.DECREEN_JUDGE_AGENT_TOKEN }}
@@ -182,7 +193,7 @@ jobs:
           bash -lc "$DECREEN_JUDGE_AGENT_COMMAND"
 
       - name: Write smoke verdicts
-        if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND != 'true'
+        if: steps.bundle.outputs.has_laws == 'true' && steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND != 'true'
         shell: bash
         run: |
           echo "Using smoke verdicts: ${{ steps.mode.outputs.reason }}"
@@ -201,7 +212,7 @@ jobs:
           NODE
 
       - name: Note Judge agent not configured
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND != 'true'
+        if: steps.bundle.outputs.has_laws == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND != 'true'
         shell: bash
         run: |
           echo "::warning title=Decreen Judge agent not configured::Real agent verdicts were skipped because DECREEN_JUDGE_AGENT_COMMAND is missing. This run produced smoke MODEL-GAP/cannot-judge verdicts only. Configure DECREEN_JUDGE_AGENT_COMMAND and any agent-specific secret/setup needed by that command to enable real Judge analysis."
@@ -239,23 +250,30 @@ jobs:
           const payload = JSON.parse(fs.readFileSync(process.env.DECREEN_JUDGE_VERDICTS, 'utf8'));
           const verdicts = Array.isArray(payload.verdicts) ? payload.verdicts : [];
           const counts = new Map();
+          const bundle = JSON.parse(fs.readFileSync(process.env.DECREEN_JUDGE_BUNDLE, 'utf8'));
+          const diagnostics = Array.isArray(bundle.authorityDiagnostics) ? bundle.authorityDiagnostics : [];
           const mode = payload.metadata?.mode;
           const smoke = mode === 'smoke-no-decreen-package' || mode === 'smoke-no-agent';
+          const skipped = smoke || mode === 'no-routed-laws';
           for (const verdict of verdicts) {
             const key = verdict.classification || verdict.result || 'unknown';
             counts.set(key, (counts.get(key) || 0) + 1);
           }
           const actionable = verdicts.filter((verdict) => ['VIOLATION','NEW-DECISION','MODEL-GAP'].includes(verdict.classification) || ['violated','cannot-judge','orphan'].includes(verdict.result));
           console.log('## Decreen Judge PR Run\n');
-          if (smoke) {
+          if (diagnostics.length) {
+            console.log('Incomplete coverage: ' + diagnostics.length + ' routed candidates were excluded because source authority could not be verified.');
+            for (const diagnostic of diagnostics) console.log('- ' + JSON.stringify({ sourceId: diagnostic.sourceId, reason: diagnostic.reason }));
+          }
+          if (skipped) {
             console.log('Mode: ' + mode);
-            console.log('PR not analyzed. This successful smoke check validates workflow execution only; it is not a Judge approval.');
+            console.log('PR not analyzed. This successful workflow run is not a Judge approval.');
             console.log('Reason: ' + (payload.metadata?.reason || (mode === 'smoke-no-agent' ? 'No Judge agent was configured.' : 'Decreen package access is unavailable.')));
           }
           console.log('### Verdict Counts\n');
           for (const [key, value] of [...counts.entries()].sort()) console.log('- ' + key + ': ' + value);
           console.log('\n### Actionable Findings\n');
-          if (smoke) console.log('- not analyzed');
+          if (skipped) console.log('- not analyzed');
           else if (actionable.length === 0) console.log('- none');
           else {
             console.log('| Source | Classification | Result | Rationale |');
