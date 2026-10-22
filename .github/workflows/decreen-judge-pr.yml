@@ -182,7 +182,7 @@ jobs:
         env:
           DECREEN_JUDGE_AGENT_TOKEN: ${{ secrets.DECREEN_JUDGE_AGENT_TOKEN }}
         run: |
-          bash -lc "$DECREEN_JUDGE_AGENT_SETUP_COMMAND"
+          bash -lc "$(printf '%s' "$DECREEN_JUDGE_AGENT_SETUP_COMMAND" | tr -d '\r')"
 
       - name: Run configured Judge agent
         if: steps.bundle.outputs.has_laws == 'true' && steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND == 'true'
@@ -190,7 +190,7 @@ jobs:
         env:
           DECREEN_JUDGE_AGENT_TOKEN: ${{ secrets.DECREEN_JUDGE_AGENT_TOKEN }}
         run: |
-          bash -lc "$DECREEN_JUDGE_AGENT_COMMAND"
+          bash -lc "$(printf '%s' "$DECREEN_JUDGE_AGENT_COMMAND" | tr -d '\r')"
 
       - name: Write smoke verdicts
         if: steps.bundle.outputs.has_laws == 'true' && steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND != 'true'
