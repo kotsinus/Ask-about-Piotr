@@ -1652,27 +1652,36 @@ def test_chat_multi_category_non_deterministic_budget_policy(
     assert len(captured_budgets) == 2
 
 
+@pytest.mark.parametrize("legacy_keys", [False, True])
 def test_chat_quality_rules_validation(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    legacy_keys: bool,
 ) -> None:
-    """Test quality rules validation is called for multi-category responses."""
-    from app.quality import QualityValidationResult
+    """Configured rules retain every failure even when the last category passes."""
+    import json
 
-    quality_called: list[str] = []
+    from app.config import _parse_quality_rules
 
-    def _validate_quality(
-        answer: str,
-        routing_category: str,
-        quality_rules: dict,
-    ) -> QualityValidationResult:
-        quality_called.append(routing_category)
-        return QualityValidationResult(
-            passed=True,
-            failure_reasons=[],
-            routing_category=routing_category,
+    categories = [
+        RoutingCategory.education_and_formal_background,
+        RoutingCategory.research_and_academic_credibility,
+        RoutingCategory.hands_on_engineering,
+    ]
+    quality_rules = _parse_quality_rules(
+        json.dumps(
+            {
+                category.name if legacy_keys else category.value: {
+                    "min_tokens": [token],
+                }
+                for category, token in zip(
+                    categories, ["degree", "publication", "Python"], strict=True
+                )
+            }
         )
-
-    monkeypatch.setattr("app.main.validate_answer_quality", _validate_quality)
+    )
+    assert set(quality_rules) == {category.value for category in categories}
+    caplog.set_level("INFO", logger="app.main")
 
     monkeypatch.setattr("app.main.rewrite_question", lambda q, messages=None: q)
 
@@ -1680,10 +1689,11 @@ def test_chat_quality_rules_validation(
         return SimpleNamespace(
             routing_categories=[
                 SimpleNamespace(
-                    routing_category=RoutingCategory.education_and_formal_background,
+                    routing_category=category,
                     confidence=Confidence.high,
                     budget=2,
-                ),
+                )
+                for category in categories
             ]
         )
 
@@ -1700,11 +1710,11 @@ def test_chat_quality_rules_validation(
     ):
         return [
             RetrievedChunk(
-                card_id="test-card",
+                card_id=routing_category,
                 card_category="cat",
                 section="Overview",
                 source_url=None,
-                content="test content",
+                content=f"{routing_category} in 2010",
                 distance=0.10,
                 origin_routing_categories=[routing_category],
                 origin_routing_category=routing_category,
@@ -1714,16 +1724,19 @@ def test_chat_quality_rules_validation(
 
     monkeypatch.setattr("app.main.retrieve_for_category", _retrieve_for_category)
 
-    monkeypatch.setattr(
-        "app.main.synthesize_answer",
-        lambda *a, **k: SynthesisResult(
-            answer="I have a degree from university.",
+    synthesis_calls: list[dict] = []
+
+    def _synthesize_answer(*a, **k):
+        synthesis_calls.append(k)
+        return SynthesisResult(
+            answer="In 2010 I used Python to build reliable software systems.",
             why_this_matters="ok",
             confidence=Confidence.medium,
             confidence_reason=None,
-            used_chunk_indices=[0],
-        ),
-    )
+            used_chunk_indices=[0, 1, 2],
+        )
+
+    monkeypatch.setattr("app.main.synthesize_answer", _synthesize_answer)
 
     monkeypatch.setattr(
         "app.main.get_settings",
@@ -1738,18 +1751,14 @@ def test_chat_quality_rules_validation(
             retrieval_per_card_cap=2,
             multi_category_retrieval_enabled=True,
             multi_category_rollout_percent=100,
-            multi_category_max_categories=2,
+            multi_category_max_categories=3,
             multi_category_max_total_chunks=5,
             multi_category_allow_six_chunks=False,
             multi_category_budget_policy="deterministic",
             multi_category_pinning_rules={},
             multi_category_section_weights={},
             multi_category_card_conditioning={},
-            multi_category_quality_rules={
-                "Education and formal background": {
-                    "min_tokens": ["degree", "university"],
-                }
-            },
+            multi_category_quality_rules=quality_rules,
         ),
     )
     monkeypatch.setattr("app.main.extract_client_ip", lambda *a, **k: None)
@@ -1769,8 +1778,20 @@ def test_chat_quality_rules_validation(
         background_tasks=BackgroundTasks(),
     )
 
-    # Quality validation should have been called
-    assert len(quality_called) > 0
+    validation_logs = [
+        record
+        for record in caplog.records
+        if record.message == "chat_quality_rules_log_only"
+    ]
+    assert len(validation_logs) == 1
+    assert validation_logs[0].category_validation_failures == [
+        {
+            "routing_category": category.value,
+            "failures": ["missing_routing_category_tokens: found 0/1 required tokens"],
+        }
+        for category in categories[:2]
+    ]
+    assert len(synthesis_calls) == 1
 
 
 def test_extract_distinctive_tokens() -> None:

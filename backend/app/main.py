@@ -1342,19 +1342,23 @@ def chat(
             category_validation_failures: list[dict] = []
             for item in routing.routing_categories:
                 category_label = str(item.routing_category.value)
-                category_key = _router_category_settings_key(category_label)
+                category_key = (
+                    category_label
+                    if category_label in quality_rules
+                    else _router_category_settings_key(category_label)
+                )
                 result = validate_answer_quality(
                     answer=synthesis.answer or "",
                     routing_category=category_key,
                     quality_rules=quality_rules,
                 )
-            if not result.passed:
-                category_validation_failures.append(
-                    {
-                        "routing_category": category_label,
-                        "failures": result.failure_reasons,
-                    }
-                )
+                if not result.passed:
+                    category_validation_failures.append(
+                        {
+                            "routing_category": category_label,
+                            "failures": result.failure_reasons,
+                        }
+                    )
 
             if category_validation_failures:
                 logger.info(
