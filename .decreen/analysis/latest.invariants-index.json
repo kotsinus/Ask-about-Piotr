@@ -568,7 +568,7 @@
     },
     {
       "sourceId": "IMPORT-decisions-line-59",
-      "sourceRef": "docs/DECISIONS.md#7-multi-category-routing-per-category-retrieval-is-flag-gated-and-budgeted-deterministically",
+      "sourceRef": "docs/DECISIONS.md:59",
       "tier": "scoped",
       "territory": [
         "backend/app/retrieval.py",

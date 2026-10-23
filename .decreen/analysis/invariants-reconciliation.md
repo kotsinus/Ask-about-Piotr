@@ -37,10 +37,10 @@
 | `IMPORT-readme-line-93` | partial | medium | Raw IP addresses are never persisted. |
 | `IMPORT-readme-line-15` | partial | medium | Each card is a standalone Markdown file that MUST include the following sections |
 | `IMPORT-readme-line-36` | partial | medium | When cards are chunked, each chunk MUST include these metadata fields: |
-| `IMPORT-decisions-line-15` | partial | medium | The response contract is a strict structured schema (`answer`, `evidence`, `sources`, `confidence`). |
-| `IMPORT-decisions-line-24` | partial | medium | The system allows using history only to resolve ambiguity (rewrite), but does not treat history as evidence. |
-| `IMPORT-decisions-line-31` | partial | medium | The backend, not the LLM, decides what is included in `evidence[]` and `sources[]`. |
-| `IMPORT-decisions-line-47` | partial | medium | Operational logging is useful, but it must never turn into an availability risk. |
+| `IMPORT-decisions-line-15` | partial | medium | The response contract is a strict structured schema (`answer`, `evidence`, `sources`, `confidence`). `formatted_answer`  |
+| `IMPORT-decisions-line-24` | partial | medium | Conversation history can contain prompt injection attempts. The system allows using history only to resolve ambiguity (r |
+| `IMPORT-decisions-line-31` | partial | medium | The backend, not the LLM, decides what is included in `evidence[]` and `sources[]`. Only retrieved chunks actually used  |
+| `IMPORT-decisions-line-47` | partial | medium | Operational logging is useful, but it must never turn into an availability risk. The system schedules logging as a backg |
 | `IMPORT-decisions-line-59` | partial | medium | Routing is computed from the **original** user question (not the rewritten question). |
 | `IMPORT-decisions-line-68` | partial | medium | All multi-category routing mechanisms are implemented as **general, configurable systems** rather than category-specific |
 | `IMPORT-retention-line-13` | partial | medium | Retention model: **rebuild by design**. |
@@ -179,7 +179,7 @@ _None._
 | `IMPORT-readme-line-25` | partial | — | This is not a general-purpose chatbot. |
 | `IMPORT-readme-line-27` | partial | — | It does not use the open internet or external search. |
 | `IMPORT-readme-line-30` | partial | — | Do not invent metrics, timelines, or scope. |
-| `IMPORT-decisions-line-7` | partial | — | Retrieval selects evidence; synthesis produces language. |
+| `IMPORT-decisions-line-7` | partial | — | Retrieval selects evidence; synthesis produces language. Keeping these stages separate makes failures diagnosable (bad r |
 | `IMPORT-migrations-line-7` | partial | — | **No data loss** for existing production DB volumes. |
 | `IMPORT-migrations-line-75` | partial | — | Avoid `DROP COLUMN`, `TRUNCATE`, `DELETE`, etc. If you must do a destructive change, create a dedicated migration and do |
 | `IMPORT-retention-line-39` | partial | — | Operators should define a retention window and enforce it outside the app (e.g., scheduled job). |

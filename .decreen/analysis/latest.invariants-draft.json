@@ -162,7 +162,7 @@
     {
       "sourceId": null,
       "sourceRef": "docs/DECISIONS.md#1-separate-retrieval-from-synthesis",
-      "statement": "Retrieval selects evidence; synthesis produces language.",
+      "statement": "Retrieval selects evidence; synthesis produces language. Keeping these stages separate makes failures diagnosable (bad retrieval vs. bad synthesis) and allows deterministic rules around evidence handling. It also makes it possible to test retrieval behavior without requiring an LLM.",
       "pinnedCapabilities": [
         "capability:grounded-rag-evidence-retrieval",
         "capability:grounded-rag-answer-synthesis"
@@ -176,7 +176,7 @@
     {
       "sourceId": null,
       "sourceRef": "docs/DECISIONS.md#2-structured-schema-is-the-source-of-truth-not-free-text",
-      "statement": "The response contract is a strict structured schema (`answer`, `evidence`, `sources`, `confidence`).",
+      "statement": "The response contract is a strict structured schema (`answer`, `evidence`, `sources`, `confidence`). `formatted_answer` is derived on the server for human readability, but it is not the authoritative contract. This reduces ambiguity for clients and makes automated validation possible.",
       "pinnedCapabilities": [
         "capability:knowledge-management-citation-contract",
         "capability:answering-experience-answer-presentation"
@@ -191,7 +191,7 @@
     {
       "sourceId": null,
       "sourceRef": "docs/DECISIONS.md#3-conversation-history-is-untrusted",
-      "statement": "The system allows using history only to resolve ambiguity (rewrite), but does not treat history as evidence.",
+      "statement": "Conversation history can contain prompt injection attempts. The system allows using history only to resolve ambiguity (rewrite), but does not treat history as evidence. Evidence must come from curated knowledge chunks.",
       "pinnedCapabilities": [
         "capability:grounded-rag-question-routing-rewrite",
         "capability:grounded-rag-answer-synthesis"
@@ -206,7 +206,7 @@
     {
       "sourceId": null,
       "sourceRef": "docs/DECISIONS.md#4-post-generation-guardrails-exist-as-deterministic-server-behavior",
-      "statement": "The backend, not the LLM, decides what is included in `evidence[]` and `sources[]`.",
+      "statement": "The backend, not the LLM, decides what is included in `evidence[]` and `sources[]`. Only retrieved chunks actually used in the answer are returned. This avoids returning “citations” that were not used and keeps the response auditable.",
       "pinnedCapabilities": [
         "capability:grounded-rag-quality-guardrails",
         "capability:knowledge-management-citation-contract"
@@ -221,7 +221,7 @@
     {
       "sourceId": null,
       "sourceRef": "docs/DECISIONS.md#6-best-effort-interaction-logging-must-not-break-chat",
-      "statement": "Operational logging is useful, but it must never turn into an availability risk.",
+      "statement": "Operational logging is useful, but it must never turn into an availability risk. The system schedules logging as a background task and degrades gracefully on DB errors. This is an explicit reliability decision.",
       "pinnedCapabilities": [
         "capability:privacy-observability-interaction-logging"
       ],
@@ -234,7 +234,7 @@
     },
     {
       "sourceId": null,
-      "sourceRef": "docs/DECISIONS.md#7-multi-category-routing-per-category-retrieval-is-flag-gated-and-budgeted-deterministically",
+      "sourceRef": "docs/DECISIONS.md:59",
       "statement": "Routing is computed from the **original** user question (not the rewritten question).",
       "pinnedCapabilities": [
         "capability:grounded-rag-question-routing-rewrite"
