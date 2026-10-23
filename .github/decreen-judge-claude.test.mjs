@@ -475,3 +475,96 @@ test('full-diff fallback keeps scope metadata without duplicating readable patch
     assert.equal(JSON.parse(fs.readFileSync(env.DECREEN_JUDGE_BUNDLE, 'utf8')).relevantDiff.files[0].patch, readable);
   });
 });
+
+test('one proof correction can repair format or honestly return uncertainty without host approval', () => {
+  for (const uncertain of [false, true]) fixture(env => {
+    const timeouts = [];
+    let calls = 0;
+    runClaudeJudge({ env, readSource: () => 'candidate source\n'.repeat(20),
+      run: (_command, _args, options) => {
+        calls++;
+        timeouts.push(options.timeout);
+        assert.equal(fs.existsSync(env.DECREEN_JUDGE_VERDICTS), false);
+        if (calls === 1) return { status: 0, stdout: JSON.stringify({ subtype: 'success', structured_output: { verdicts: [
+          { ...verdict('LAW-1'), classification: 'KNOWN-CONFORM', result: 'touched', evidence: ['backend/app/main.py:12'], inspectedFiles: ['backend/app/main.py'] },
+          verdict('LAW-2'),
+        ] } }) };
+        assert.equal(calls, 2);
+        assert.ok(options.input.includes('Host validation rejected your previous answer'));
+        assert.ok(options.input.includes('no-recognized-head-citation'));
+        assert.ok(options.input.includes('Recheck EVERY KNOWN-CONFORM'));
+        assert.ok(options.input.includes('MODEL-GAP/cannot-judge'));
+        return { status: 0, stdout: JSON.stringify({ subtype: 'success', structured_output: { verdicts: [
+          uncertain ? verdict('LAW-1') : { ...verdict('LAW-1'), classification: 'KNOWN-CONFORM', result: 'touched',
+            evidence: ['head:backend/app/main.py:12'], inspectedFiles: ['backend/app/main.py'] },
+          verdict('LAW-2'),
+        ] } }) };
+      },
+    });
+    assert.equal(calls, 2);
+    assert.ok(timeouts[1] <= timeouts[0]);
+    const result = JSON.parse(fs.readFileSync(env.DECREEN_JUDGE_VERDICTS, 'utf8'));
+    assert.equal(result.metadata.validationCorrections, 1);
+    assert.equal(result.verdicts[0].classification, uncertain ? 'MODEL-GAP' : 'KNOWN-CONFORM');
+  });
+});
+
+test('a repeated proof rejection fails after two attempts and logs a redacted diagnostic', t => {
+  const errors = [];
+  t.mock.method(console, 'error', (...args) => errors.push(args.join(' ')));
+  fixture(env => {
+    let calls = 0;
+    assert.throws(() => runClaudeJudge({ env, run: () => {
+      calls++;
+      return { status: 0, stdout: JSON.stringify({ subtype: 'success', structured_output: { verdicts: [
+        { ...verdict('LAW-1'), classification: 'KNOWN-CONFORM', result: 'touched',
+          evidence: ['Unverified ' + env.DECREEN_JUDGE_AGENT_TOKEN], inspectedFiles: ['backend/app/main.py'] },
+        verdict('LAW-2'),
+      ] } }) };
+    } }), /explicit head: prefix/);
+    assert.equal(calls, 2);
+    assert.equal(fs.existsSync(env.DECREEN_JUDGE_VERDICTS), false);
+    assert.equal(errors.length, 2);
+    assert.ok(errors.every(line => line.includes('no-recognized-head-citation') && line.includes('allowedFiles')));
+    assert.ok(errors.every(line => !line.includes(env.DECREEN_JUDGE_AGENT_TOKEN)));
+    assert.ok(errors.some(line => line.includes('[REDACTED]')));
+  });
+});
+
+test('process errors and malformed responses are not retried as proof corrections', () => {
+  for (const response of [
+    { status: 1, stdout: '' },
+    { status: 0, stdout: 'not JSON' },
+    { status: 0, stdout: JSON.stringify({ subtype: 'success', structured_output: { verdicts: [verdict('LAW-1')] } }) },
+    ...[null, verdict('LAW-1'), verdict('UNKNOWN'), { ...verdict('LAW-2'), evidence: 'invalid' }].map(invalid => ({
+      status: 0, stdout: JSON.stringify({ subtype: 'success', structured_output: { verdicts: [
+        { ...verdict('LAW-1'), classification: 'KNOWN-CONFORM', result: 'touched', evidence: ['unqualified proof'], inspectedFiles: ['backend/app/main.py'] },
+        invalid,
+      ] } }),
+    })),
+  ]) fixture(env => {
+    let calls = 0;
+    assert.throws(() => runClaudeJudge({ env, run: () => { calls++; return response; } }), /no verdicts written/);
+    assert.equal(calls, 1);
+    assert.equal(fs.existsSync(env.DECREEN_JUDGE_VERDICTS), false);
+  });
+});
+
+test('proof correction retains input and execution budgets', () => {
+  fixture(env => {
+    let calls = 0;
+    const run = () => {
+      calls++;
+      return { status: 0, stdout: JSON.stringify({ subtype: 'success', structured_output: { verdicts: [
+        { ...verdict('LAW-1'), rationale: 'x'.repeat(751000), classification: 'KNOWN-CONFORM', result: 'touched',
+          evidence: ['unqualified proof'], inspectedFiles: ['backend/app/main.py'] },
+        verdict('LAW-2'),
+      ] } }) };
+    };
+    assert.throws(() => runClaudeJudge({ env, run }), /750000-character limit/);
+    assert.equal(calls, 1);
+    assert.equal(fs.existsSync(env.DECREEN_JUDGE_VERDICTS), false);
+    assert.throws(() => runClaudeJudge({ env, run, deadline: Date.now() - 1 }), /time budget exhausted/);
+    assert.equal(calls, 1);
+  });
+});
