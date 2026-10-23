@@ -134,6 +134,7 @@ jobs:
 
       - name: Build Judge agent prompt
         if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true'
+        id: bundle
         shell: bash
         run: |
           node - <<'NODE'
@@ -144,6 +145,15 @@ jobs:
           const verdictsPath = process.env.DECREEN_JUDGE_VERDICTS;
           const bundle = JSON.parse(fs.readFileSync(bundlePath, 'utf8'));
           const laws = Array.isArray(bundle.laws) ? bundle.laws : [];
+          if (bundle.authorityDiagnostics?.length) {
+            console.log('::warning title=Decreen Judge incomplete authority::' + bundle.authorityDiagnostics.length + ' routed candidates were excluded because source authority could not be verified. See the Judge summary.');
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'has_laws=' + (laws.length > 0) + '\n');
+          if (laws.length === 0) {
+            const reason = 'No laws were routed. Check baseline authority and routing before treating this PR as assessed.';
+            fs.writeFileSync(verdictsPath, JSON.stringify({ verdicts: [], metadata: { mode: 'no-routed-laws', reason } }, null, 2));
+            console.log('::warning title=Decreen Judge analysis skipped::' + reason + ' The agent was not invoked.');
+          }
           const lines = [
             '# Decreen Judge PR Task',
             '',
@@ -157,6 +167,11 @@ jobs:
             'Return exactly one verdict per bundle.laws[] entry.',
             'Prefer MODEL-GAP/cannot-judge when evidence is insufficient.',
             'Do not return KNOWN-CONFORM without affirmative evidence.',
+            'Read bundle.relevantDiff.files for whole-file patches and relevantDiff.lawCoverage for each law. diffExcerpt is only a compatibility preview; omittedFiles are not inspected files.',
+            'Complete relevantDiff.lawCoverage is sufficient patch coverage within the routed scope of that law even if diffCoverage marks the global preview incomplete. If relevantDiff coverage for a law is incomplete or absent, inspect the full git diff base...head using bundle.pr refs, including missing relevant files and required source context; only explicitly complete diffCoverage permits using diffExcerpt as a full-diff substitute. If missing coverage for a law cannot be inspected, you MUST return MODEL-GAP/cannot-judge for that law, never KNOWN-CONFORM or an unsupported substantive verdict.',
+            'KNOWN-CONFORM requires nonempty evidence and inspectedFiles arrays containing nonblank strings. At least one citation must use exactly head:<repo-relative-path>:<positive-line> (optionally backticked) for candidate implementation evidence, matching a raw inspectedFiles path and an actual changed file in the per-law relevantDiff.lawCoverage.relevantFiles scope when supplied. Baseline and unqualified citations are supplemental only, never candidate implementation proof. Source law documents alone do not prove conformity unless genuinely changed/routed targets.',
+            'inspectedFiles may include paths genuinely inspected in either exact bundle.pr.base or bundle.pr.head revision, including old paths for rename/deletion comparisons. Every listed path must exist in at least one revision. Qualifying head: citations must resolve to the cited line in HEAD only; baseline existence never satisfies candidate proof.',
+            'Imported-source excerpts are not newly ratified doctrine. Respect their original subject and scope; do not turn biography, examples, or historical project descriptions into application obligations. Use MODEL-GAP/cannot-judge when normative status or applicability is unclear.',
             '',
             'Routed laws:',
             ...laws.map((law) => '- ' + law.sourceId + ': ' + (law.sourceRef || '')),
@@ -166,23 +181,23 @@ jobs:
           NODE
 
       - name: Run configured Judge agent setup
-        if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND == 'true' && env.HAS_DECREEN_JUDGE_AGENT_SETUP_COMMAND == 'true'
+        if: steps.bundle.outputs.has_laws == 'true' && steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND == 'true' && env.HAS_DECREEN_JUDGE_AGENT_SETUP_COMMAND == 'true'
         shell: bash
         env:
           DECREEN_JUDGE_AGENT_TOKEN: ${{ secrets.DECREEN_JUDGE_AGENT_TOKEN }}
         run: |
-          bash -lc "$DECREEN_JUDGE_AGENT_SETUP_COMMAND"
+          bash -lc "$(printf '%s' "$DECREEN_JUDGE_AGENT_SETUP_COMMAND" | tr -d '\r')"
 
       - name: Run configured Judge agent
-        if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND == 'true'
+        if: steps.bundle.outputs.has_laws == 'true' && steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND == 'true'
         shell: bash
         env:
           DECREEN_JUDGE_AGENT_TOKEN: ${{ secrets.DECREEN_JUDGE_AGENT_TOKEN }}
         run: |
-          bash -lc "$DECREEN_JUDGE_AGENT_COMMAND"
+          bash -lc "$(printf '%s' "$DECREEN_JUDGE_AGENT_COMMAND" | tr -d '\r')"
 
       - name: Write smoke verdicts
-        if: steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND != 'true'
+        if: steps.bundle.outputs.has_laws == 'true' && steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND != 'true'
         shell: bash
         run: |
           echo "Using smoke verdicts: ${{ steps.mode.outputs.reason }}"
@@ -201,7 +216,7 @@ jobs:
           NODE
 
       - name: Note Judge agent not configured
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND != 'true'
+        if: steps.bundle.outputs.has_laws == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.mode.outputs.trusted == 'true' && env.HAS_NPM_TOKEN == 'true' && env.HAS_DECREEN_JUDGE_AGENT_COMMAND != 'true'
         shell: bash
         run: |
           echo "::warning title=Decreen Judge agent not configured::Real agent verdicts were skipped because DECREEN_JUDGE_AGENT_COMMAND is missing. This run produced smoke MODEL-GAP/cannot-judge verdicts only. Configure DECREEN_JUDGE_AGENT_COMMAND and any agent-specific secret/setup needed by that command to enable real Judge analysis."
@@ -217,14 +232,69 @@ jobs:
           const expectedIds = new Set((bundle.laws || []).map((law) => law.sourceId));
           const seen = new Set();
           const errors = [];
+          const runGit = (args) => require('child_process').execFileSync('git', args, { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+          const safePath = (value) => typeof value === 'string' && value.length > 0 && !/[\\:\x00-\x1f\x7f]/.test(value) && !value.startsWith('/') && !value.split('/').some((part) => !part || part === '.' || part === '..');
+          const sources = new Map();
+          let candidate;
+          const readSource = (file, revision = candidate.head) => {
+            const key = revision + ':' + file;
+            if (!sources.has(key)) {
+              try {
+                const text = runGit(['show', key]);
+                sources.set(key, text.includes('\0') ? null : text);
+              }
+              catch { sources.set(key, null); }
+            }
+            return sources.get(key);
+          };
           for (const [index, verdict] of verdicts.entries()) {
             const id = verdict.sourceId || verdict.invariantId;
             if (!id) errors.push('verdict[' + index + '] missing sourceId');
             if (id && seen.has(id)) errors.push('duplicate verdict for ' + id);
             if (id) seen.add(id);
             if (id && expectedIds.size > 0 && !expectedIds.has(id)) errors.push('unknown sourceId ' + id);
-            if (!['violated','touched','not-applicable','cannot-judge','orphan'].includes(verdict.result)) errors.push('invalid result for ' + (id || index));
+            const result = typeof verdict.result === 'string' ? verdict.result.trim().toLowerCase() : '';
+            const classification = typeof verdict.classification === 'string' ? verdict.classification.trim().toUpperCase() : '';
+            if (!['violated','touched','not-applicable','cannot-judge','orphan'].includes(result)) errors.push('invalid result for ' + (id || index));
+            if (classification && !['KNOWN-CONFORM','VIOLATION','NEW-DECISION','MODEL-GAP'].includes(classification)) errors.push('invalid classification for ' + (id || index));
             if (typeof verdict.rationale !== 'string' || verdict.rationale.trim() === '') errors.push('missing rationale for ' + (id || index));
+            if (classification === 'KNOWN-CONFORM') {
+              for (const field of ['evidence', 'inspectedFiles']) {
+                if (!Array.isArray(verdict[field]) || verdict[field].length === 0 || verdict[field].some((item) => typeof item !== 'string' || item.trim() === '')) errors.push('KNOWN-CONFORM requires nonblank ' + field + ' for ' + (id || index));
+              }
+              try {
+                if (!candidate) {
+                  const resolve = (ref) => runGit(['rev-parse', '--verify', '--end-of-options', ref + '^{commit}']).trim();
+                  const base = resolve(bundle.pr?.base || 'HEAD^');
+                  const head = resolve(bundle.pr?.head || 'HEAD');
+                  candidate = { base, head, changed: new Set(runGit(['diff', '--name-only', '-z', base + '...' + head, '--']).split('\0').filter(Boolean)) };
+                }
+                const declarations = Array.isArray(bundle.relevantDiff?.lawCoverage) ? bundle.relevantDiff.lawCoverage.filter((law) => law?.sourceId === id) : [];
+                const paths = declarations.length === 1 ? declarations[0].relevantFiles : null;
+                const scope = bundle.relevantDiff === undefined ? candidate.changed : new Set(Array.isArray(paths) && paths.every(safePath) ? paths : []);
+                const inspected = new Set(Array.isArray(verdict.inspectedFiles) ? verdict.inspectedFiles.filter(safePath) : []);
+                if ([...inspected].length !== verdict.inspectedFiles?.length || [...inspected].some((file) => readSource(file) === null && readSource(file, candidate.base) === null)) errors.push('KNOWN-CONFORM requires actual repo-relative inspectedFiles in base or HEAD for ' + (id || index));
+                const citations = [...inspected].flatMap((file) => (Array.isArray(verdict.evidence) ? verdict.evidence : []).flatMap((item) => {
+                  if (typeof item !== 'string') return [];
+                  const marker = 'head:' + file + ':';
+                  const matches = [];
+                  let at = item.indexOf(marker);
+                  while (at !== -1) {
+                    const before = at === 0 ? ' ' : item[at - 1];
+                    const line = item.slice(at + marker.length).match(/^([1-9]\d*)\b/);
+                    if (/[\s`"'(\[]/.test(before) && line) matches.push([file, line[1]]);
+                    at = item.indexOf(marker, at + marker.length);
+                  }
+                  return matches;
+                }));
+                const proven = citations.some(([file, line]) => {
+                  if (!safePath(file) || !inspected.has(file) || !candidate.changed.has(file) || !scope.has(file)) return false;
+                  const source = readSource(file);
+                  return source !== null && source.length > 0 && Number(line) <= source.split('\n').length - (source.endsWith('\n') ? 1 : 0);
+                });
+                if (!proven) errors.push('KNOWN-CONFORM requires file:line evidence in inspected candidate HEAD changed/routed scope for ' + (id || index));
+              } catch { errors.push('KNOWN-CONFORM cannot verify candidate HEAD evidence for ' + (id || index)); }
+            }
           }
           for (const expectedId of expectedIds) if (!seen.has(expectedId)) errors.push('missing verdict for ' + expectedId);
           if (errors.length) { console.error(errors.map((e) => '- ' + e).join('\n')); process.exit(1); }
@@ -234,35 +304,59 @@ jobs:
       - name: Show Judge summary
         shell: bash
         run: |
-          node - <<'NODE' | tee "$GITHUB_STEP_SUMMARY"
+          node - <<'NODE'
           const fs = require('fs');
           const payload = JSON.parse(fs.readFileSync(process.env.DECREEN_JUDGE_VERDICTS, 'utf8'));
           const verdicts = Array.isArray(payload.verdicts) ? payload.verdicts : [];
           const counts = new Map();
+          const bundle = JSON.parse(fs.readFileSync(process.env.DECREEN_JUDGE_BUNDLE, 'utf8'));
+          const diagnostics = Array.isArray(bundle.authorityDiagnostics) ? bundle.authorityDiagnostics : [];
           const mode = payload.metadata?.mode;
           const smoke = mode === 'smoke-no-decreen-package' || mode === 'smoke-no-agent';
+          const skipped = smoke || mode === 'no-routed-laws';
+          const summaryLimit = 1024 * 1024 - 1;
+          const summary = [];
+          let summaryBytes = 0;
+          let omittedVerdicts = 0;
+          let omittedDiagnostics = 0;
+          // Reserve space for counts, skipped status and the final omission notice.
+          const emit = (line, kind) => {
+            console.log(line);
+            const bytes = Buffer.byteLength(line + '\n', 'utf8');
+            if (summaryBytes + bytes <= summaryLimit - 16384) { summary.push(line); summaryBytes += bytes; }
+            else if (kind === 'verdict') omittedVerdicts++;
+            else if (kind === 'diagnostic') omittedDiagnostics++;
+          };
           for (const verdict of verdicts) {
-            const key = verdict.classification || verdict.result || 'unknown';
+            const key = String(verdict.classification || verdict.result || 'unknown').trim().toUpperCase();
             counts.set(key, (counts.get(key) || 0) + 1);
           }
-          const actionable = verdicts.filter((verdict) => ['VIOLATION','NEW-DECISION','MODEL-GAP'].includes(verdict.classification) || ['violated','cannot-judge','orphan'].includes(verdict.result));
-          console.log('## Decreen Judge PR Run\n');
-          if (smoke) {
-            console.log('Mode: ' + mode);
-            console.log('PR not analyzed. This successful smoke check validates workflow execution only; it is not a Judge approval.');
-            console.log('Reason: ' + (payload.metadata?.reason || (mode === 'smoke-no-agent' ? 'No Judge agent was configured.' : 'Decreen package access is unavailable.')));
+          emit('## Decreen Judge PR Run\n');
+          emit('Total verdicts: ' + verdicts.length + '. Total authority diagnostics: ' + diagnostics.length + '.');
+          if (diagnostics.length) {
+            emit('Incomplete coverage: ' + diagnostics.length + ' routed candidates were excluded because source authority could not be verified.');
           }
-          console.log('### Verdict Counts\n');
-          for (const [key, value] of [...counts.entries()].sort()) console.log('- ' + key + ': ' + value);
-          console.log('\n### Actionable Findings\n');
-          if (smoke) console.log('- not analyzed');
-          else if (actionable.length === 0) console.log('- none');
-          else {
-            console.log('| Source | Classification | Result | Rationale |');
-            console.log('| --- | --- | --- | --- |');
-            for (const verdict of actionable.slice(0, 20)) {
-              const rationale = String(verdict.rationale || '').replace(/\s+/g, ' ').replace(/\|/g, '\\|');
-              console.log('| ' + (verdict.sourceId || verdict.invariantId || 'unknown') + ' | ' + (verdict.classification || 'unknown') + ' | ' + (verdict.result || 'unknown') + ' | ' + rationale.slice(0, 500) + ' |');
+          if (skipped) {
+            emit('Mode: ' + mode);
+            emit('PR not analyzed. This successful workflow run is not a Judge approval.');
+            emit('Reason: ' + (payload.metadata?.reason || (mode === 'smoke-no-agent' ? 'No Judge agent was configured.' : 'Decreen package access is unavailable.')));
+          }
+          emit('### Verdict Counts\n');
+          for (const [key, value] of [...counts.entries()].sort()) emit('- ' + key + ': ' + value);
+          for (const diagnostic of diagnostics) emit('- ' + JSON.stringify({ sourceId: diagnostic.sourceId, reason: diagnostic.reason }), 'diagnostic');
+          emit('\n### All Verdicts\n');
+          if (skipped) emit('- not analyzed');
+          if (verdicts.length === 0 && !skipped) emit('- none');
+          if (verdicts.length > 0) {
+            const cell = (value) => String(value ?? '').replace(/\s+/g, ' ').replace(/\|/g, '\\|').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const items = (value) => Array.isArray(value) && value.length ? value.map((item) => cell(typeof item === 'string' ? item : JSON.stringify(item))).join('<br>') : '(none)';
+            emit('| Source | Classification | Result | Rationale | Evidence | Inspected Files |');
+            emit('| --- | --- | --- | --- | --- | --- |');
+            for (const verdict of verdicts) {
+              emit('| ' + cell(verdict.sourceId || verdict.invariantId || 'unknown') + ' | ' + cell(verdict.classification || 'unknown') + ' | ' + cell(verdict.result || 'unknown') + ' | ' + cell(verdict.rationale) + ' | ' + items(verdict.evidence) + ' | ' + items(verdict.inspectedFiles) + ' |', 'verdict');
             }
           }
+          const notice = '\nSummary omissions: ' + omittedVerdicts + ' of ' + verdicts.length + ' verdicts; ' + omittedDiagnostics + ' of ' + diagnostics.length + ' authority diagnostics. Complete audit output (all verdicts, rationale, evidence and inspected files) is available in the Show Judge summary step logs.\n';
+          console.log(notice);
+          fs.writeFileSync(process.env.GITHUB_STEP_SUMMARY, summary.join('\n') + '\n' + notice);
           NODE

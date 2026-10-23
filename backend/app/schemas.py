@@ -58,6 +58,13 @@ class RoutingCategoryAllocation(BaseModel):
 
 class RoutingDebug(BaseModel):
     routing_categories: list[RoutingCategoryAllocation]
+    # Diagnostics for follow-up rewrite + routing input.
+    # Optional so existing clients don't break.
+    routing_input_question: str | None = None
+    standalone_question: str | None = None
+    rewrite_input: dict | None = None
+    rewrite_was_followup: bool | None = None
+    rewrite_used_history: bool | None = None
 
 
 class ConversationContext(BaseModel):

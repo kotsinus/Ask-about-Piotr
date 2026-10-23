@@ -79,7 +79,15 @@ def test_rewrite_question_uses_openai_when_key_present(
 
     def _create_impl(*, kind: str, **kwargs):
         assert kind == "chat"
-        return _chat_response(json.dumps({"standalone_question": "Standalone?"}))
+        # Return something plausibly standalone and specific enough to pass
+        # language-agnostic ambiguity validation.
+        return _chat_response(
+            json.dumps(
+                # Must not introduce new content tokens not present in
+                # (original question ∪ history).
+                {"standalone_question": "What about embeddings?"}
+            )
+        )
 
     monkeypatch.setattr("app.openai_client._client", None)
     monkeypatch.setattr(
@@ -91,7 +99,8 @@ def test_rewrite_question_uses_openai_when_key_present(
         "What about that?",
         messages=[{"role": "user", "content": "We discussed embeddings."}],
     )
-    assert out == "Standalone?"
+    assert "embedding" in out.lower()
+    assert "?" in out
 
 
 def test_rewrite_question_handles_non_json_response(
@@ -109,6 +118,128 @@ def test_rewrite_question_handles_non_json_response(
     )
 
     assert rewrite_question("Q", messages=[{"role": "user", "content": "x"}]) == "Q"
+
+
+def test_rewrite_question_retries_on_ambiguous_or_unchanged_short_followup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Smoke: Q1 then Q2='what are they?' should be rewritten into an explicit standalone question."""
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    calls: list[int] = []
+
+    def _create_impl(*, kind: str, **kwargs):
+        assert kind == "chat"
+        calls.append(1)
+        # First attempt: unchanged + ambiguous (should trigger retry).
+        if len(calls) == 1:
+            return _chat_response(json.dumps({"standalone_question": "what are they?"}))
+        # Second attempt: explicit and standalone.
+        return _chat_response(
+            json.dumps(
+                {
+                    # Must not introduce new content tokens not present in
+                    # (original question ∪ history).
+                    "standalone_question": "Which publications best represent your research focus?"
+                }
+            )
+        )
+
+    monkeypatch.setattr("app.openai_client._client", None)
+    monkeypatch.setattr(
+        "app.openai_client.OpenAI",
+        lambda api_key: _FakeOpenAI(api_key=api_key, create_impl=_create_impl),
+    )
+
+    out = rewrite_question(
+        "what are they?",
+        messages=[
+            {
+                "role": "user",
+                "content": "Which publications best represent your research focus?",
+            }
+        ],
+    )
+
+    assert "publication" in out.lower()
+    assert "?" in out
+    assert len(calls) >= 2
+
+
+def test_rewrite_question_trimmed_history_standalone_does_not_add_new_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: when history is trimmed/small, do not rewrite standalone short questions into new facts/tokens."""
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    calls: list[int] = []
+
+    def _create_impl(*, kind: str, **kwargs):
+        assert kind == "chat"
+        calls.append(1)
+        # First attempt: model injects meta tokens that were not in original/history.
+        if len(calls) == 1:
+            return _chat_response(
+                json.dumps(
+                    {
+                        "standalone_question": "What is your name as an AI language model?"
+                    }
+                )
+            )
+        # Second attempt: return unchanged original (allowed).
+        return _chat_response(json.dumps({"standalone_question": "What is your name?"}))
+
+    monkeypatch.setattr("app.openai_client._client", None)
+    monkeypatch.setattr(
+        "app.openai_client.OpenAI",
+        lambda api_key: _FakeOpenAI(api_key=api_key, create_impl=_create_impl),
+    )
+
+    out = rewrite_question(
+        "what is your name?",
+        messages=[{"role": "user", "content": "hello"}],
+    )
+
+    assert out.strip().lower() == "what is your name?"
+    assert "language" not in out.lower()
+    assert "model" not in out.lower()
+    assert len(calls) >= 2
+
+
+def test_rewrite_question_allows_derived_disambiguation_tokens_from_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: allow benign disambiguation words derived from recent context.
+
+    Example: history contains "program" and the rewrite adds "programming" to
+    disambiguate "What languages?".
+    """
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    def _create_impl(*, kind: str, **kwargs):
+        assert kind == "chat"
+        return _chat_response(
+            json.dumps(
+                {
+                    "standalone_question": "What programming languages can you program in?"
+                }
+            )
+        )
+
+    monkeypatch.setattr("app.openai_client._client", None)
+    monkeypatch.setattr(
+        "app.openai_client.OpenAI",
+        lambda api_key: _FakeOpenAI(api_key=api_key, create_impl=_create_impl),
+    )
+
+    out = rewrite_question(
+        "What languages?",
+        messages=[{"role": "user", "content": "Can you program?"}],
+    )
+    assert out == "What programming languages can you program in?"
 
 
 def test_route_category_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:

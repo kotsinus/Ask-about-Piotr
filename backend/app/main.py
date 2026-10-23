@@ -38,7 +38,6 @@ from app.interaction_logging import InteractionLog, write_interaction_log
 from app.llm import (
     RoutedCategory,
     RoutingResult,
-    SynthesisResult,
     clean_why,
     rewrite_question,
     route_categories,
@@ -88,6 +87,30 @@ _WEB_SETTINGS = get_web_settings()
 
 SESSION_COOKIE_NAME = "ask_piotr_session_id"
 SESSION_ID_HEADER = "x-session-id"
+
+
+def _router_category_settings_key(category_label: str) -> str:
+    """Map a human routing label to the settings JSON key.
+
+    Runtime routing uses [`RoutingCategory.<...>.value`](backend/app/routing_category.py:23)
+    (human-readable strings).
+
+    Env-configured dictionaries (pinning rules, section weights, quality rules)
+    historically used snake_case enum member names.
+
+    NOTE: After config normalization, settings should use canonical human labels
+    (`RoutingCategory.<...>.value`). This helper is kept only as a defensive
+    fallback for any remaining legacy/typoed keys.
+    """
+
+    label = (category_label or "").strip()
+    if not label:
+        return ""
+    label_norm = " ".join(label.lower().split())
+    for cat in RoutingCategory:
+        if label_norm == " ".join(str(cat.value).lower().split()):
+            return str(cat.name)
+    return label
 
 
 def _truncate_text(value: str, max_chars: int) -> str:
@@ -512,6 +535,106 @@ def format_answer(
     )
 
 
+def _extract_distinctive_tokens(text: str) -> set[str]:
+    """Extract distinctive fact tokens from text.
+
+    Distinctive tokens are language-agnostic indicators of specific facts:
+    - Numbers with suffixes (e.g., "20+", "10+")
+    - Years (4-digit numbers between 1990-2030)
+    - Capitalized named entities (multi-word sequences)
+
+    Returns a set of normalized tokens for comparison.
+    """
+    tokens: set[str] = set()
+
+    if not text:
+        return tokens
+
+    # Extract numbers with suffixes like "20+", "10+"
+    # Note: \b after + doesn't work since + is not a word character
+    for match in re.finditer(r"\b(\d+)\+(?=\s|$|[,.])", text):
+        tokens.add(match.group(0).lower())
+
+    # Extract years (4-digit numbers in reasonable range)
+    for match in re.finditer(r"\b(19[89]\d|20[0-2]\d)\b", text):
+        tokens.add(match.group(0))
+
+    # Extract capitalized multi-word sequences (named entities)
+    # This is language-agnostic: looks for 2+ consecutive capitalized words
+    for match in re.finditer(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b", text):
+        tokens.add(match.group(1).lower())
+
+    # Extract common abbreviations / dotted acronyms (e.g., "M.Sc.", "Ph.D.").
+    for match in re.finditer(r"\b([A-Za-z]{1,4}\.(?:[A-Za-z]{1,4}\.)+)\b", text):
+        tokens.add(match.group(1).lower())
+
+    # Extract all-caps acronyms (e.g., "RAG", "LLM", "SQL").
+    for match in re.finditer(r"\b([A-Z]{2,})\b", text):
+        tokens.add(match.group(1).lower())
+
+    # Extract camelCase / PascalCase identifiers (e.g., "OpenAIClient", "pgVector").
+    for match in re.finditer(r"\b([A-Za-z]+[A-Z][A-Za-z0-9]*)\b", text):
+        tokens.add(match.group(1).lower())
+
+    # Extract hyphenated technical tokens (e.g., "text-embedding-3-small").
+    for match in re.finditer(r"\b([A-Za-z0-9]+(?:-[A-Za-z0-9]+)+)\b", text):
+        tokens.add(match.group(1).lower())
+
+    # Lightweight degree/certification markers (helps education coverage).
+    for match in re.finditer(
+        r"\b(phd|msc|m\.sc|bsc|b\.sc|mba|xmba)\b", text, flags=re.IGNORECASE
+    ):
+        tokens.add(match.group(1).lower())
+
+    return tokens
+
+
+def _check_semantic_coverage(
+    answer: str,
+    chunks: list,
+    used_chunk_indices: list[int],
+    routed_categories: list[str],
+) -> dict[str, bool]:
+    """Check semantic coverage for each routed category.
+
+    For each routed category, checks if the answer contains at least one
+    distinctive fact token drawn from a used chunk whose origin matches that category.
+
+    Returns a dict mapping category -> coverage status (True if covered).
+    """
+    coverage: dict[str, bool] = {cat: False for cat in routed_categories}
+
+    if not used_chunk_indices or not chunks:
+        return coverage
+
+    # Extract tokens from answer
+    answer_tokens = _extract_distinctive_tokens(answer)
+
+    if not answer_tokens:
+        return coverage
+
+    # For each used chunk, check if its distinctive tokens appear in the answer
+    for idx in used_chunk_indices:
+        if not isinstance(idx, int) or idx < 0 or idx >= len(chunks):
+            continue
+
+        chunk = chunks[idx]
+        chunk_tokens = _extract_distinctive_tokens(chunk.content)
+
+        # Check if any chunk token appears in answer
+        if chunk_tokens and answer_tokens.intersection(chunk_tokens):
+            # Mark coverage for all origin categories of this chunk
+            origins = set(chunk.origin_routing_categories or [])
+            if chunk.origin_routing_category:
+                origins.add(chunk.origin_routing_category)
+
+            for origin in origins:
+                if origin in coverage:
+                    coverage[origin] = True
+
+    return coverage
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(
     http_request: Request,
@@ -519,34 +642,113 @@ def chat(
     background_tasks: BackgroundTasks,
     debug_retrieval: bool = False,
 ) -> ChatResponse:
-    def _should_use_conversation_topic(question: str, messages_count: int) -> bool:
-        """Heuristic: use topic only for follow-ups when we have history."""
+    def _normalize_ws(text: str) -> str:
+        return re.sub(r"\s+", " ", (text or "").strip())
 
-        if messages_count <= 0:
+    def content_tokens(text: str) -> set[str]:
+        """Extract language-agnostic "content" tokens for overlap checks.
+
+        Keep the same heuristic as [`_content_tokens()`](backend/app/llm.py:64)
+        without importing private helpers.
+
+        Rules:
+        - Tokenize on Unicode word characters ("\\w+").
+        - Lowercase.
+        - Keep tokens with len >= 3 OR containing any digit.
+        """
+
+        if not text:
+            return set()
+        raw = re.findall(r"\w+", text, flags=re.UNICODE)
+        out: set[str] = set()
+        for tok in raw:
+            t = (tok or "").strip().lower()
+            if not t:
+                continue
+            if len(t) >= 3 or any(ch.isdigit() for ch in t):
+                out.add(t)
+        return out
+
+    def _token_jaccard(a: set[str], b: set[str]) -> float:
+        if not a and not b:
+            return 1.0
+        union = a | b
+        if not union:
+            return 0.0
+        return len(a & b) / len(union)
+
+    def _rewrite_drifted_from_short_followup(
+        original_question: str,
+        rewritten_question: str,
+        history_questions: list[str],
+    ) -> bool:
+        """Language-agnostic guardrail for short follow-up rewrite drift.
+
+        Reject rewrites that:
+        - strongly diverge from the original short question, and
+        - mostly introduce tokens from previous turns (topic drift).
+        """
+
+        orig_tokens = content_tokens(original_question)
+        rewritten_tokens = content_tokens(rewritten_question)
+        history_tokens: set[str] = set()
+        for q in history_questions:
+            history_tokens |= content_tokens(q)
+
+        if not rewritten_tokens:
             return False
 
-        q = " ".join(question.strip().lower().split())
-        if not q:
-            return False
-
-        followup_starts = (
-            "and ",
-            "also ",
-            "what about",
-            "how about",
+        original_is_short = (
+            len(_normalize_ws(original_question)) <= 80 or len(orig_tokens) <= 4
         )
-        if any(q.startswith(prefix) for prefix in followup_starts):
-            return True
+        if not original_is_short:
+            return False
 
-        # Ambiguity markers: third-person pronouns / deictic references.
-        if re.search(r"\b(it|that|this|they|them|those|these)\b", q):
-            return True
+        overlap_with_original = _token_jaccard(orig_tokens, rewritten_tokens)
+        new_tokens = rewritten_tokens - orig_tokens
+        if not new_tokens:
+            return False
 
-        # Very short questions without a clear addressee are often follow-ups.
-        if len(q) <= 25 and not re.search(r"\b(you|your|piotr)\b", q):
-            return True
+        # Added context lowers Jaccard similarity even when no original intent
+        # tokens are lost. Do not mistake a history-grounded expansion for drift.
+        if (
+            orig_tokens
+            and orig_tokens <= rewritten_tokens
+            and new_tokens & history_tokens
+        ):
+            return False
 
-        return False
+        # Referential follow-ups can replace every original token. Require a
+        # close match to one actual history question, not pooled topic fragments.
+        if re.fullmatch(
+            r"(?:what|which|who)\s+(?:are|is)\s+(?:they|those|these|it)\??",
+            _normalize_ws(original_question).lower(),
+        ) and any(
+            _token_jaccard(content_tokens(q), rewritten_tokens) >= 0.5
+            for q in history_questions
+        ):
+            return False
+
+        # Strong language-agnostic divergence signal for extremely short prompts:
+        # if the rewrite is much longer and shares almost nothing with original,
+        # treat it as likely intent drift.
+        if len(orig_tokens) <= 2 and len(rewritten_tokens) >= 6:
+            if overlap_with_original < 0.15:
+                return True
+
+        if not history_tokens:
+            return False
+
+        introduced_from_history_count = len(new_tokens & history_tokens)
+        introduced_from_history_ratio = introduced_from_history_count / len(new_tokens)
+        rewrite_expands_scope = len(rewritten_tokens) >= (len(orig_tokens) + 3)
+
+        return (
+            overlap_with_original < 0.35
+            and rewrite_expands_scope
+            and introduced_from_history_count >= 1
+            and (introduced_from_history_ratio >= 0.2 or len(orig_tokens) <= 2)
+        )
 
     settings = get_settings()
     request_at = datetime.now(UTC)
@@ -565,24 +767,6 @@ def chat(
 
     messages_count = len(request.messages) if request.messages else 0
     incoming_last_topic = request.context.last_topic if request.context else None
-    use_topic_for_retrieval = bool(
-        incoming_last_topic
-    ) and _should_use_conversation_topic(
-        question=request.question,
-        messages_count=messages_count,
-    )
-    conversation_topic = incoming_last_topic if use_topic_for_retrieval else None
-
-    logger.info(
-        "chat_start",
-        extra={
-            "session_id": session_id,
-            "conversation_id": conversation_id,
-            "messages_count": messages_count,
-            "incoming_last_topic": incoming_last_topic,
-            "topic_used_for_retrieval": use_topic_for_retrieval,
-        },
-    )
 
     # Stage timing logs (diagnostics): helps pinpoint hangs/timeouts without
     # logging raw user text.
@@ -595,11 +779,122 @@ def chat(
             "messages_count": messages_count,
         },
     )
-    standalone_question = rewrite_question(
-        request.question,
+
+    # Rewrite inputs are derived from request.messages, but we defensively avoid
+    # passing the current question as "history" (self-in-history) because some
+    # clients include it as the last user message.
+    conversation_messages_payload = (
         [message.model_dump() for message in request.messages]
         if request.messages
-        else None,
+        else None
+    )
+    rewrite_messages_payload = conversation_messages_payload
+    rewrite_self_in_history_omitted = False
+    if rewrite_messages_payload:
+        last = rewrite_messages_payload[-1]
+        if (
+            isinstance(last, dict)
+            and str(last.get("role", "")).strip().lower() == "user"
+            and _normalize_ws(str(last.get("content", ""))).lower()
+            == _normalize_ws(request.question).lower()
+        ):
+            rewrite_messages_payload = rewrite_messages_payload[:-1]
+            rewrite_self_in_history_omitted = True
+
+    rewrite_history_count = (
+        len(rewrite_messages_payload) if rewrite_messages_payload else 0
+    )
+
+    # Rewrite input (diagnostics): last 2–4 user questions + original question.
+    # Truncate for bounded logs.
+    last_user_questions: list[str] = []
+    if rewrite_messages_payload:
+        for message in rewrite_messages_payload:
+            if str(message.get("role", "")).strip().lower() != "user":
+                continue
+            content = str(message.get("content", "") or "").strip()
+            if content:
+                last_user_questions.append(content)
+    last_user_questions = last_user_questions[-4:]
+
+    rewrite_input: dict = {
+        "original_question": _truncate_text(request.question, 500),
+        "last_user_questions": [
+            _truncate_text(q, 500) for q in last_user_questions[-4:]
+        ],
+    }
+
+    rewritten_question = rewrite_question(
+        request.question,
+        rewrite_messages_payload if rewrite_messages_payload else None,
+    )
+    standalone_question = rewritten_question
+
+    # Language-agnostic guardrail: reject large rewrite drift for short follow-ups
+    # when the rewrite mostly pulls in previous-topic tokens.
+    if _rewrite_drifted_from_short_followup(
+        request.question,
+        rewritten_question,
+        last_user_questions,
+    ):
+        standalone_question = request.question
+        logger.info(
+            "chat_rewrite_guardrail_intent_preserved",
+            extra={
+                "original_question": _truncate_text(request.question, 200),
+                "rewritten_question": _truncate_text(rewritten_question, 200),
+            },
+        )
+
+    rewrite_changed = (
+        _normalize_ws(standalone_question).lower()
+        != _normalize_ws(request.question).lower()
+    )
+    rewrite_was_followup = bool(rewrite_changed)
+
+    # Root fix: superficial rewrites must NOT enable topic bias.
+    # We only append `Conversation topic: ...` to the retrieval query when the
+    # rewrite meaningfully USED history.
+    #
+    # Signal definition:
+    # - new_tokens = standalone_tokens - orig_tokens
+    # - rewrite_used_history = bool(new_tokens ∩ history_tokens)
+    orig_tokens = content_tokens(request.question)
+    standalone_tokens = content_tokens(standalone_question)
+    history_tokens: set[str] = set()
+    for q in last_user_questions:
+        history_tokens |= content_tokens(q)
+    new_tokens = standalone_tokens - orig_tokens
+    rewrite_used_history = bool(new_tokens & history_tokens)
+
+    use_topic_for_retrieval = bool(
+        incoming_last_topic and messages_count > 0 and rewrite_used_history
+    )
+    conversation_topic = incoming_last_topic if use_topic_for_retrieval else None
+
+    logger.info(
+        "chat_start",
+        extra={
+            "session_id": session_id,
+            "conversation_id": conversation_id,
+            "messages_count": messages_count,
+            "incoming_last_topic": incoming_last_topic,
+            "topic_used_for_retrieval": use_topic_for_retrieval,
+            "rewrite_used_history": bool(rewrite_used_history),
+        },
+    )
+
+    logger.info(
+        "chat_rewrite",
+        extra={
+            "rewrite_input": rewrite_input,
+            "rewrite_was_followup": bool(rewrite_was_followup),
+            "rewrite_changed": bool(rewrite_changed),
+            "rewrite_used_history": bool(rewrite_used_history),
+            "rewrite_history_count": int(rewrite_history_count),
+            "rewrite_self_in_history_omitted": bool(rewrite_self_in_history_omitted),
+            "standalone_question": _truncate_text(standalone_question or "", 500),
+        },
     )
     logger.info(
         "chat_stage",
@@ -629,8 +924,8 @@ def chat(
     retry_attempted: bool = False
 
     if use_multi_category:
-        # IMPORTANT: route on the original user question (not rewritten).
-        routing_question = request.question
+        # IMPORTANT: route strictly on the standalone question.
+        routing_question = standalone_question
         try:
             routing = route_categories(routing_question)
         except Exception:
@@ -719,6 +1014,9 @@ def chat(
         logger.info(
             "chat_routing",
             extra={
+                "routing_input_question": _truncate_text(
+                    standalone_question or "", 500
+                ),
                 "routing_categories": [
                     {
                         "routing_category": str(item.routing_category.value),
@@ -751,14 +1049,30 @@ def chat(
         all_section_weights = (
             getattr(settings, "multi_category_section_weights", {}) or {}
         )
+        # Get all card conditioning from settings
+        all_card_conditioning = (
+            getattr(settings, "multi_category_card_conditioning", {}) or {}
+        )
 
         for item in routing.routing_categories:
             budget = int(item.budget or 1)
             category_label = str(item.routing_category.value)
+            category_settings_key = _router_category_settings_key(category_label)
             t_cat = time.perf_counter()
 
             # Get category-specific section weights (if any)
-            category_section_weights = all_section_weights.get(category_label)
+            category_section_weights = all_section_weights.get(category_label) or (
+                all_section_weights.get(category_settings_key)
+                if category_settings_key
+                else None
+            )
+
+            # Get category-specific card conditioning (if any)
+            category_card_conditioning = all_card_conditioning.get(category_label) or (
+                all_card_conditioning.get(category_settings_key)
+                if category_settings_key
+                else None
+            )
 
             selected = retrieve_for_category(
                 standalone_question,
@@ -766,7 +1080,9 @@ def chat(
                 budget=budget,
                 conversation_topic=conversation_topic,
                 section_weights=category_section_weights,
+                card_conditioning=category_card_conditioning,
             )
+
             chunks_by_category[category_label] = selected
             logger.info(
                 "chat_retrieve_category",
@@ -779,10 +1095,12 @@ def chat(
                     ),
                     "duration_ms": round((time.perf_counter() - t_cat) * 1000, 2),
                     "section_weighting_enabled": bool(category_section_weights),
+                    "card_conditioning_enabled": bool(category_card_conditioning),
                 },
             )
 
         merged, dedup_collisions = merge_dedup_preserve_provenance(chunks_by_category)
+        post_merge_count = len(merged)
 
         # Apply pinning: ensure required cards are included for routed categories.
         # Pipeline: retrieve per category → merge → pin → re-dedup → cap → synthesis
@@ -793,26 +1111,21 @@ def chat(
         max_total = int(getattr(settings, "multi_category_max_total_chunks", 5) or 5)
         max_total = max(1, max_total)
 
-        # Get section weights for the first routed category (primary category for pinning).
-        # This ensures pinned cards select the most relevant sections, not just low-distance
-        # low-signal sections like "Category".
-        primary_category_section_weights = (
-            all_section_weights.get(routed_category_names[0])
-            if routed_category_names
-            else None
-        )
-
         # Create a retrieval function for pinning that captures the current context.
-        def _retrieve_for_pinning(card_id: str, limit: int):
+        def _retrieve_for_pinning(card_id: str, limit: int, pin_for_category: str):
+            # IMPORTANT: the pinned chunk must carry provenance for the category
+            # it is pinned FOR, not always the primary routed category.
+            key = _router_category_settings_key(pin_for_category)
+            section_weights_for_pin = all_section_weights.get(
+                pin_for_category
+            ) or all_section_weights.get(key)
             return retrieve_for_card(
                 standalone_question,
                 card_id=card_id,
                 limit=limit,
-                origin_routing_category=routed_category_names[0]
-                if routed_category_names
-                else "",
+                origin_routing_category=pin_for_category,
                 conversation_topic=conversation_topic,
-                section_weights=primary_category_section_weights,
+                section_weights=section_weights_for_pin,
             )
 
         merged, pinned_card_ids = apply_pinning(
@@ -822,12 +1135,15 @@ def chat(
             retrieve_for_card_fn=_retrieve_for_pinning,
             max_total_chunks=max_total,
         )
+        post_pin_count = len(merged)
 
         # Re-dedup after pinning: pinned chunks may duplicate existing chunks.
         # Use a wrapper dict to reuse the merge_dedup_preserve_provenance function.
         if pinned_card_ids:
             merged_after_pin, _ = merge_dedup_preserve_provenance({"_pinned": merged})
             merged = merged_after_pin
+
+        post_rededup_count = len(merged)
 
         # Log pinning event if any cards were pinned.
         if pinned_card_ids:
@@ -849,7 +1165,9 @@ def chat(
             "chat_retrieve_merge",
             extra={
                 "pre_dedup_count": sum(len(v) for v in chunks_by_category.values()),
-                "post_dedup_count": len(merged),
+                "post_merge_count": post_merge_count,
+                "post_pin_count": post_pin_count,
+                "post_rededup_count": post_rededup_count,
                 "dedup_collisions": dedup_collisions,
                 "final_chunk_count": len(chunks),
                 "pinned_card_ids": pinned_card_ids,
@@ -874,14 +1192,16 @@ def chat(
             "retrieval_chunk_count": len(chunks),
         },
     )
+    # NOTE: We intentionally do NOT pass conversation_messages to synthesis.
+    # The question has already been rewritten to standalone form by rewrite_question().
+    # Including previous answers in synthesis context can cause the LLM to "continue"
+    # from the previous answer instead of answering the new question independently.
     synthesis = synthesize_answer(
         standalone_question,
         chunks,
         routing_category,
         conversation_topic=conversation_topic,
-        conversation_messages=[message.model_dump() for message in request.messages]
-        if request.messages
-        else None,
+        conversation_messages=None,
         routing=routing if use_multi_category else None,
     )
 
@@ -914,20 +1234,37 @@ def chat(
                 if expected and not expected.issubset(used_origins):
                     failure_reasons.append("missing_category_coverage")
 
+            # Semantic coverage: check that answer contains distinctive facts from each category.
+            if len(routing.routing_categories) > 1 and synthesis.used_chunk_indices:
+                routed_category_names = [
+                    str(i.routing_category.value) for i in routing.routing_categories
+                ]
+                semantic_coverage = _check_semantic_coverage(
+                    answer=synthesis.answer or "",
+                    chunks=chunks,
+                    used_chunk_indices=synthesis.used_chunk_indices,
+                    routed_categories=routed_category_names,
+                )
+                uncovered_categories = [
+                    cat for cat, covered in semantic_coverage.items() if not covered
+                ]
+                if uncovered_categories:
+                    failure_reasons.append(
+                        f"missing_semantic_coverage:{','.join(uncovered_categories)}"
+                    )
+
         passed = not failure_reasons
         retry_attempted = False
         if not passed:
             retry_attempted = True
+            # NOTE: Same as primary synthesis - no conversation_messages to avoid
+            # the LLM "continuing" from previous answers.
             synthesis_retry = synthesize_answer(
                 standalone_question,
                 chunks,
                 routing_category,
                 conversation_topic=conversation_topic,
-                conversation_messages=[
-                    message.model_dump() for message in request.messages
-                ]
-                if request.messages
-                else None,
+                conversation_messages=None,
                 routing=routing if use_multi_category else None,
                 temperature_override=0,
                 strict_facts_first=True,
@@ -944,9 +1281,9 @@ def chat(
             },
         )
 
-        # Hard post-condition: enforce multi-category coverage after retry.
         # If synthesis still doesn't use chunks from all routed categories,
-        # force inclusion of at least one chunk from each missing category.
+        # run one more synthesis with a HARD requirement to incorporate concrete
+        # facts from representative chunks of each missing category.
         if len(routing.routing_categories) > 1 and synthesis.used_chunk_indices:
             used = [
                 chunks[idx]
@@ -965,36 +1302,36 @@ def chat(
             missing_categories = expected - used_origins
 
             if missing_categories:
-                # Find one chunk from each missing category and force inclusion.
                 forced_indices: list[int] = []
                 for missing_cat in missing_categories:
                     for idx, ch in enumerate(chunks):
                         ch_origins = set(ch.origin_routing_categories or [])
                         if ch.origin_routing_category:
                             ch_origins.add(ch.origin_routing_category)
-                        if (
-                            missing_cat in ch_origins
-                            and idx not in synthesis.used_chunk_indices
-                        ):
+                        if missing_cat in ch_origins:
                             forced_indices.append(idx)
                             break
 
                 if forced_indices:
-                    # Merge forced indices with existing ones.
-                    new_indices = list(synthesis.used_chunk_indices) + forced_indices
-                    synthesis = SynthesisResult(
-                        answer=synthesis.answer,
-                        why_this_matters=synthesis.why_this_matters,
-                        confidence=synthesis.confidence,
-                        confidence_reason=synthesis.confidence_reason,
-                        used_chunk_indices=new_indices,
+                    synthesis = synthesize_answer(
+                        standalone_question,
+                        chunks,
+                        routing_category,
+                        conversation_topic=conversation_topic,
+                        conversation_messages=None,
+                        routing=routing,
+                        temperature_override=0,
+                        strict_facts_first=True,
+                        force_use_chunk_indices=forced_indices,
                     )
                     logger.info(
-                        "chat_multi_category_forced_coverage",
+                        "chat_multi_category_forced_synthesis",
                         extra={
                             "missing_categories": list(missing_categories),
                             "forced_indices": forced_indices,
-                            "final_used_chunk_indices_count": len(new_indices),
+                            "used_chunk_indices_count": len(
+                                synthesis.used_chunk_indices or []
+                            ),
                         },
                     )
 
@@ -1005,9 +1342,14 @@ def chat(
             category_validation_failures: list[dict] = []
             for item in routing.routing_categories:
                 category_label = str(item.routing_category.value)
+                category_key = (
+                    category_label
+                    if category_label in quality_rules
+                    else _router_category_settings_key(category_label)
+                )
                 result = validate_answer_quality(
                     answer=synthesis.answer or "",
-                    routing_category=category_label,
+                    routing_category=category_key,
                     quality_rules=quality_rules,
                 )
                 if not result.passed:
@@ -1066,7 +1408,10 @@ def chat(
         SourceRef(card_id=chunk.card_id, section=chunk.section) for chunk in used_chunks
     ]
 
-    resolved_topic = chunks[0].card_id if chunks else conversation_topic
+    # Topic propagation: advance the topic only when evidence was actually used.
+    # If there was a refusal / no used evidence, keep the incoming topic.
+    base_topic = incoming_last_topic or conversation_topic
+    resolved_topic = used_chunks[0].card_id if used_chunks else base_topic
 
     response = ChatResponse(
         routing_category=routing_category,
@@ -1094,7 +1439,12 @@ def chat(
                     budget=int(item.budget or 0),
                 )
                 for item in (routing.routing_categories if routing else [])
-            ]
+            ],
+            routing_input_question=standalone_question,
+            standalone_question=standalone_question,
+            rewrite_input=rewrite_input,
+            rewrite_was_followup=bool(rewrite_was_followup),
+            rewrite_used_history=bool(rewrite_used_history),
         )
         if (debug_retrieval and use_multi_category and routing is not None)
         else None,
@@ -1125,6 +1475,8 @@ def chat(
         client_ip = extract_client_ip(http_request, settings)
         user_agent = http_request.headers.get("user-agent")
 
+        # NOTE: interaction logging stores the raw client-provided messages window.
+        # The rewrite path may use a sanitized subset (`rewrite_messages_payload`).
         conversation_messages_payload = (
             [message.model_dump() for message in request.messages]
             if request.messages
@@ -1143,6 +1495,9 @@ def chat(
 
         if use_multi_category and routing is not None:
             routing_dict = {
+                "rewrite_input": rewrite_input,
+                "rewrite_was_followup": bool(rewrite_was_followup),
+                "routing_input_question": standalone_question,
                 "routing_categories": [
                     {
                         "routing_category": str(item.routing_category.value),
